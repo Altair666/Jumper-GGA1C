@@ -5,3 +5,8 @@ publish/
 *.db-shm
 *.db-wal
 .vs/
+
+# Локальная копия Grist-виджета — только для отладки, живёт в своём репозитории
+# (https://github.com/Altair666/widget_report_grist) и в сборке основного Grist.
+# Создаётся скриптом tools/update-widget.bat
+wwwroot/widget/
