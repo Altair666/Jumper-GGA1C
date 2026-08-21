@@ -80,6 +80,9 @@ public class LabelRecord
 {
     public int      Id          { get; set; }
     public string   ExternalId  { get; set; } = "";   // ID строки в Grist — ключ для upsert/delete
+    public string   Date        { get; set; } = "";   // "август 2026" — из виджета Grist
+    public string   ProductCode { get; set; } = "";   // Products.product_code
+    public string   ModeCode    { get; set; } = "";   // Modifications.mode_code
     public string   Article     { get; set; } = "";
     public string   Name        { get; set; } = "";
     public string   Manufacturer{ get; set; } = "";

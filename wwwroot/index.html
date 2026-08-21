@@ -423,7 +423,7 @@
 <aside class="sidebar">
   <div class="sidebar-logo">
     <div class="title">ALTIUM ↔ 1С</div>
-    <div class="sub">Sync Service v0.36</div>
+    <div class="sub">Sync Service v0.37</div>
   </div>
   <nav class="nav">
     <div class="nav-item active" data-page="dashboard" onclick="goto('dashboard')">
@@ -704,27 +704,35 @@
       <div class="settings-section" style="margin-bottom:20px">
         <div class="section-title" style="margin-bottom:12px">Как подключить Grist (запись)</div>
         <div class="muted" style="font-size:12px;line-height:1.6">
-          Grist нативно не умеет ходить по произвольным HTTP API из коробки, поэтому используй
-          <b>Webhook</b> (Grist → Document Settings → Webhooks) на изменение таблицы, либо
-          кастомный виджет / скрипт, который на каждое изменение строки шлёт запрос:
+          Штатный путь — кастомный виджет <span class="mono">widget_report_grist</span>: кнопка
+          «Синхронизация» шлёт выбранные изделия сюда. В настройках виджета (⚙) укажи
+          <b>Server URL</b> = <span class="mono">http://&lt;этот-сервер&gt;:5000</span>,
+          <b>API Key</b> = ключ выше, <b>Endpoint</b> =
+          <span class="mono">/api/grist/labels/replace-all</span>.
+          Альтернатива без виджета — Webhook (Grist → Document Settings → Webhooks).
         </div>
         <pre class="mono" style="background:var(--bg3);padding:10px;border-radius:5px;
-          font-size:11px;overflow-x:auto;margin-top:8px">POST http://&lt;этот-сервер&gt;:5000/api/grist/labels/upsert
-X-Api-Key: &lt;ключ выше&gt;
+          font-size:11px;overflow-x:auto;margin-top:8px">POST http://&lt;этот-сервер&gt;:5000/api/grist/labels/replace-all
+Authorization: Bearer &lt;ключ выше&gt;
 Content-Type: application/json
 
 {
-  "externalId": "grist-row-42",
-  "article": "R_0603_10K",
-  "name": "Резистор 10к 0603",
-  "manufacturer": "YAGEO",
-  "barcode": "4670012345678",
-  "qty": "1"
+  "items": [
+    { "date": "август 2026", "product_code": "0532260409", "mode_code": "01" },
+    { "date": "август 2026", "product_code": "0532260410", "mode_code": "01" }
+  ]
 }</pre>
         <div class="muted" style="font-size:11px;margin-top:6px">
-          Для полной перезаписи таблицы: <span class="mono">POST /api/grist/labels/replace-all</span>
-          с массивом записей. Для удаления одной: <span class="mono">DELETE /api/grist/labels/{'{'}externalId{'}'}</span>.
-          Поле <span class="mono">externalId</span> обязательно везде — это ключ строки Grist.
+          <b>replace-all</b> заменяет таблицу целиком — после синхронизации в ней ровно то, что
+          выбрано в виджете. Накопительный режим — <span class="mono">POST /api/grist/labels/upsert</span>,
+          удаление одной строки — <span class="mono">DELETE /api/grist/labels/{'{'}externalId{'}'}</span>.
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:6px">
+          Ключ принимается и как <span class="mono">Authorization: Bearer</span>, и как
+          <span class="mono">X-Api-Key</span>. Тело — голый массив, одиночный объект или
+          обёртка <span class="mono">{'{'}"items":[...]{'}'}</span>. Если
+          <span class="mono">externalId</span> не прислан, он собирается из
+          <span class="mono">product_code|mode_code</span>.
         </div>
       </div>
 
@@ -739,7 +747,10 @@ Content-Type: application/json
           <li>В настройках DSN включи галку <b>Read Only</b> — GoLabel2 не сможет ничего изменить,
             только читать таблицу <span class="mono">labels</span>.</li>
           <li>В GoLabel2: Database → ODBC → выбрать созданный DSN → таблица
-            <span class="mono">labels</span>, поля article/name/manufacturer/barcode/qty/extra1-3.</li>
+            <span class="mono">labels</span>. Для этикетки ГКВ-3 нужны поля
+            <span class="mono">date</span>, <span class="mono">product_code</span>,
+            <span class="mono">mode_code</span>; остальные (article/name/manufacturer/barcode/qty/extra1-3)
+            оставлены под другие сценарии и приходят пустыми.</li>
         </ol>
       </div>
 
@@ -751,7 +762,8 @@ Content-Type: application/json
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>External ID</th><th>Артикул</th><th>Наименование</th><th>Производитель</th>
+            <th>External ID</th><th>Дата</th><th>Код изделия</th><th>Код исполнения</th>
+            <th>Артикул</th><th>Наименование</th><th>Производитель</th>
             <th>Штрихкод</th><th>Кол-во</th><th>Обновлено</th><th></th>
           </tr></thead>
           <tbody id="labelsTable"></tbody>
@@ -993,6 +1005,9 @@ async function loadLabels() {
     document.getElementById('labelsTable').innerHTML = rows.map(r => `
       <tr>
         <td class="mono" style="font-size:11px">${esc(r.externalId)}</td>
+        <td style="font-size:12px">${esc(r.date)}</td>
+        <td class="mono" style="font-size:12px">${esc(r.productCode)}</td>
+        <td class="mono" style="font-size:12px">${esc(r.modeCode)}</td>
         <td class="mono" style="font-size:12px">${esc(r.article)}</td>
         <td style="font-size:12px">${esc(r.name)}</td>
         <td class="muted" style="font-size:12px">${esc(r.manufacturer)}</td>
@@ -1001,7 +1016,7 @@ async function loadLabels() {
         <td class="muted mono" style="font-size:11px">${fmtDate(r.updatedAt)}</td>
         <td><button class="btn btn-warn" style="padding:3px 10px;font-size:11px"
           onclick="deleteLabelRow('${r.externalId.replace(/'/g,"\\'")}')">✕</button></td>
-      </tr>`).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;padding:20px">Записей нет — Grist ещё ничего не прислал</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="11" class="muted" style="text-align:center;padding:20px">Записей нет — Grist ещё ничего не прислал</td></tr>';
   } catch(e) { toast('Ошибка: ' + e.message, 'err'); }
 }
 

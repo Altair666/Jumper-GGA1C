@@ -45,7 +45,7 @@ AltiumSync/
 └── deploy.bat              — стоп процесса на порту 5000 → dotnet publish → запуск
 ```
 
-Текущая версия в UI: **v0.36** (см. `<div class="sub">Sync Service v0.XX</div>` в index.html — **всегда увеличивать на +0.01 после каждого изменения**, это правило соблюдалось весь проект).
+Текущая версия в UI: **v0.37** (см. `<div class="sub">Sync Service v0.XX</div>` в index.html — **всегда увеличивать на +0.01 после каждого изменения**, это правило соблюдалось весь проект).
 
 ## Обнаруженный API Altium (реверс-инжиниринг через DevTools, НЕ документирован)
 
@@ -113,29 +113,53 @@ ZX430i через GoLabel2.
 
 **Схема таблицы `labels`** (см. `LabelsDatabase.cs`):
 ```
-id, external_id (UNIQUE, = Grist row id), article, name, manufacturer,
-barcode, qty, extra1, extra2, extra3, updated_at
+id, external_id (UNIQUE), date, product_code, mode_code,
+article, name, manufacturer, barcode, qty, extra1, extra2, extra3, updated_at
 ```
+`date` / `product_code` / `mode_code` — то, что реально печатается на этикетке ГКВ-3 и что
+шлёт виджет. Остальные поля — generic-набор под другие сценарии, приходят пустыми.
+Старые `labels.db` мигрируются автоматически (`ALTER TABLE ADD COLUMN` в `InitSchema`).
 
-**⚠️ НЕСООТВЕТСТВИЕ ПОЛЕЙ (требует решения):** реальный Grist-виджет уже существующий (отдельно
-от нашего API) использует другие названия колонок в самой Grist-таблице:
-```
-date          → JS: formatRuDate(state.selectedDate)   — дата в формате "август 2026"
-product_code  → JS: product.productCode                — Products.product_code (Text)
-mode_code     → JS: modMap.get(product.modeId)?.code   — Modifications.mode_code (Text)
-```
-Наша схема `LabelRecord`/`labels` таблицы (article/name/manufacturer/barcode/qty) была
-придумана заранее как generic-набор и **не факт что соответствует** реальным нуждам этого
-конкретного виджета/этикетки. **Нужно уточнить у пользователя** маппинг: либо переименовать
-поля в `LabelRecord` под `date`/`product_code`/`mode_code` напрямую, либо добавить эти три
-как отдельные колонки (сохранив generic-поля для других сценариев), либо использовать
-`extra1`/`extra2`/`extra3` как есть для этих трёх значений. **Уточнить перед правкой,
-не переделывать наугад.**
+**Контракт с виджетом (решено 2026-08-21, поле-в-поле сверено с кодом виджета):**
+- Ключ принимается и как `Authorization: Bearer KEY`, и как `X-Api-Key: KEY` — виджет шлёт
+  первый вариант, изначальный дизайн API предполагал второй.
+- Тело принимается в трёх формах: голый массив, одиночный объект и обёртка
+  `{"items":[...]}` / `{"records":[...]}` — виджет шлёт `{"items":[...]}`.
+- `externalId` больше НЕ обязателен: если не прислан, собирается как
+  `product_code|mode_code`, дубли внутри пачки разводятся суффиксом `#2`.
+- Семантика синхронизации — **replace-all**: каждое нажатие «Синхронизация» заменяет
+  таблицу целиком, в ней ровно то, что выбрано в виджете сейчас. Поэтому в настройках
+  виджета Endpoint = `/api/grist/labels/replace-all` (а не `/upsert`, который стоит по
+  умолчанию в самом виджете — см. промт на правки виджета ниже).
 
-Сам Custom Widget для Grist (JS-файл, который реально шлёт `POST /api/grist/labels/upsert`
-на каждое изменение строки, используя `grist.onRecords()`) **ещё не написан** — было только
-обсуждение какие поля нужны на панели настроек виджета (Server URL, API Key, Endpoint,
-маппинг колонок). Если продолжать — это следующий кусок работы.
+**Виджет.** Живёт в отдельном репозитории https://github.com/Altair666/widget_report_grist
+(текущая версия v0.49.0, деплой на GitHub Pages). Кнопка «Синхронизация» и панель настроек
+(⚙: Server URL / API Key / Endpoint) там уже есть, `syncLabels()` шлёт
+`{items:[{date, product_code, mode_code}]}`.
+
+Копия виджета лежит и у нас — `wwwroot/widget/index.html`, байт-в-байт из его репозитория.
+Она нужна **только для локальной отладки**: Pages отдаёт виджет по https, AltiumSync слушает
+http://…:5000, и браузер режет такой запрос как mixed content. Копия с того же origin, что и
+API, этой проблемы не имеет. Правки виджета делаются в ЕГО репозитории, копия обновляется
+`copy C:\widget_report_grist\index.html C:\gg1ac\wwwroot\widget\index.html`.
+
+## Отладочный стенд (2026-08-21)
+
+- **Grist** — docker в WSL (Ubuntu-24.04), контейнер `grist-local`, http://localhost:8484.
+  Данные в именованном томе `grist-data` → `/persist` (`/persist/docs/*.grist`,
+  `/persist/home.sqlite3`). Переживают restart контейнера, WSL и перезагрузку сервера
+  (`--restart unless-stopped`, systemd+docker enabled). Потерять данные можно только запустив
+  контейнер без `-v grist-data:/persist` или удалив том. Поэтому поднимать только через
+  `/opt/grist/grist-up.sh`; снапшот тома — `/opt/grist/grist-backup.sh`.
+- **Документ** — «LMP ЕСКД», импортирован из облака (docs.getgrist.com, org `lmp-test-dec`,
+  id `5GtDphApyrjGhtvAvJRZsv`) целиком, вместе со страницами, шаблонами этикеток и данными.
+  Локальный id — `bAfvnQAFcaMeUBEWgPTUfS`, workspace Home, пользователь ajitaup@gmail.com.
+  Импорт делался через `POST /dw/self/v/unknown/uploads` → `POST /api/workspaces/2/import`
+  (просто `/uploads` отдаёт 404 — нужен self-prefix воркера из `GET /api/worker/uploads`).
+- **Виджет в этом документе** уже перенастроен на стенд: URL
+  `http://192.168.88.238:5000/widget/`, опции `syncServerUrl` / `syncApiKey` / `syncEndpoint`
+  проставлены. Если панель ⚙ окажется пустой — вбить руками, Grist мог не подхватить
+  предзаполненные опции.
 
 ## Правила которые соблюдались весь проект (сохранить в CLI-сессии)
 
