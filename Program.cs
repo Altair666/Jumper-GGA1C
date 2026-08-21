@@ -32,6 +32,13 @@ if (!string.IsNullOrEmpty(saved.AltiumServerUrl))
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+// UseRouting обязательно ПОСЛЕ статики: иначе catch-all из MapFallbackToFile выбирает
+// endpoint раньше, StaticFileMiddleware видит уже выбранный endpoint и пропускает запрос.
+// Из-за этого папки без имени файла (/widget/) отдавали index.html приложения вместо
+// своего содержимого, а /widget/index.html работал (fallback не матчит пути с расширением).
+app.UseRouting();
+
 app.UseMiddleware<AltiumSync.Services.RequestLoggerMiddleware>();
 app.MapControllers();
 app.MapFallbackToFile("index.html");
