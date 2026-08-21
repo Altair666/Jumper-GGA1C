@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- This is the EDA configuration for the altiumLibrary application. -->
+
+<EDAClientDef xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:noNamespaceSchemaLocation="EDAClientDef.xsd"
+        application="altiumLibrary"
+        family="altium"
+        enableVariants="true"
+        enableOpenRelatedDatasets="true"
+        preserveSession="true"
+        className="com.teamcenter.edabase.lib.DefaultLibraryFactory"
+        supportsBaseBom="true"
+        allowUnsavedVariants="true"
+        enableDoNotKeep="true"
+        enableEDAUIDs="true"
+        USASCIIRequired="false"
+        licenseKey="ecad_gateway_all">
+
+  <CallbackDefs>
+   <callback type="java" operation="preExportLibrary" command="com.altium.eis.teamcenter.eda.callback.PreExportLibraryCallback:findExistingItems"/>
+  </CallbackDefs>
+
+  <LibraryDef 
+    SelectLibraryPathInImport="true"
+    SyncLibrary="false"
+    SyncDatabase="false"
+    SyncFile="true"
+  />
+  
+</EDAClientDef>

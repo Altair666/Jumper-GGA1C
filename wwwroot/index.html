@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Altium ↔ 1С Sync</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:        #0d0f14;
+    --bg2:       #141720;
+    --bg3:       #1c2030;
+    --border:    #252a3a;
+    --accent:    #3d7eff;
+    --accent2:   #00d4aa;
+    --warn:      #f5a623;
+    --error:     #ff4d6d;
+    --ok:        #00d4aa;
+    --text:      #e2e6f0;
+    --muted:     #5a6480;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ─────────────────────────────────────────── */
+  .sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+  }
+
+  .sidebar-logo {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-logo .title {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  .sidebar-logo .sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-family: var(--mono);
+  }
+
+  .nav { padding: 12px 0; flex: 1; }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 20px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    transition: all .15s;
+    border-left: 3px solid transparent;
+  }
+  .nav-item:hover { color: var(--text); background: var(--bg3); }
+  .nav-item.active {
+    color: var(--accent);
+    background: rgba(61,126,255,.07);
+    border-left-color: var(--accent);
+  }
+  .nav-item .icon { width: 16px; text-align: center; font-size: 15px; }
+
+  .sync-btn {
+    margin: 12px 16px 20px;
+    padding: 10px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    cursor: pointer;
+    transition: opacity .15s;
+    text-transform: uppercase;
+  }
+  .sync-btn:hover { opacity: .85; }
+  .sync-btn:disabled { opacity: .4; cursor: default; }
+
+  /* ── Main ───────────────────────────────────────────── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .topbar {
+    height: 52px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 16px;
+    background: var(--bg2);
+    flex-shrink: 0;
+  }
+  .topbar h1 { font-size: 15px; font-weight: 600; flex: 1; }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .status-dot.ok  { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .status-dot.err { background: var(--error); }
+  .status-label { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px;
+  }
+
+  /* ── Pages ──────────────────────────────────────────── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── Dashboard cards ─────────────────────────────────── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 20px 16px;
+  }
+  .card .label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    font-family: var(--mono);
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-size: 32px;
+    font-weight: 700;
+    font-family: var(--mono);
+    color: var(--text);
+    line-height: 1;
+  }
+  .card .value.accent { color: var(--accent); }
+  .card .value.ok     { color: var(--ok); }
+  .card .value.warn   { color: var(--warn); }
+  .card .value.error  { color: var(--error); }
+
+  /* ── Section ─────────────────────────────────────────── */
+  .section-title {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    margin-bottom: 12px;
+    margin-top: 4px;
+  }
+
+  /* ── Table ───────────────────────────────────────────── */
+  .table-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { background: var(--bg3); }
+  th {
+    text-align: left;
+    padding: 10px 16px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* ── Badges ──────────────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: var(--mono);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .badge-synced   { background: rgba(0,212,170,.12); color: var(--ok); }
+  .badge-imported { background: rgba(61,126,255,.12); color: var(--accent); }
+  .badge-pending  { background: rgba(245,166,35,.12); color: var(--warn); }
+  .badge-error    { background: rgba(255,77,109,.12); color: var(--error); }
+  .badge-skipped  { background: rgba(90,100,128,.15); color: var(--muted); }
+  .badge-new      { background: rgba(61,126,255,.12); color: var(--accent); }
+  .badge-update   { background: rgba(0,212,170,.12); color: var(--ok); }
+
+  /* ── Select ──────────────────────────────────────────── */
+  select {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+
+  /* ── Button ──────────────────────────────────────────── */
+  .btn {
+    padding: 6px 14px;
+    border-radius: 5px;
+    border: none;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .8; }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-ok      { background: rgba(0,212,170,.15); color: var(--ok); border: 1px solid rgba(0,212,170,.3); }
+  .btn-warn    { background: rgba(245,166,35,.15); color: var(--warn); border: 1px solid rgba(245,166,35,.3); }
+
+  /* ── Settings form ───────────────────────────────────── */
+  .settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .settings-section {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 22px;
+  }
+  .settings-section h3 {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    margin-bottom: 5px;
+  }
+  .field input, .field select {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+    transition: border-color .15s;
+  }
+  .field input:focus { outline: none; border-color: var(--accent); }
+  .field input[type="password"] { letter-spacing: .1em; }
+
+  .field-row { display: flex; gap: 8px; align-items: flex-end; }
+  .field-row .field { flex: 1; margin-bottom: 0; }
+
+  .test-result {
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 5px;
+    display: none;
+  }
+  .test-result.ok  { background: rgba(0,212,170,.1); color: var(--ok); display: block; }
+  .test-result.err { background: rgba(255,77,109,.1); color: var(--error); display: block; }
+
+  /* ── Log ─────────────────────────────────────────────── */
+  .log-filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    align-items: center;
+  }
+  .log-filters select { width: auto; }
+
+  .log-msg {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    max-width: 360px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Folder mapping ──────────────────────────────────── */
+  .folder-grid {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr;
+    gap: 0;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .folder-col { padding: 16px; }
+  .folder-col h4 {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 12px;
+  }
+  .folder-divider {
+    background: var(--border);
+    width: 1px;
+    margin: 16px 0;
+  }
+  .folder-item {
+    padding: 7px 10px;
+    font-size: 13px;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background .1s;
+  }
+  .folder-item:hover { background: var(--bg3); color: var(--text); }
+  .folder-item.mapped { color: var(--ok); }
+
+  /* ── Toast ───────────────────────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 18px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    opacity: 0;
+    transform: translateY(12px);
+    transition: all .25s;
+    pointer-events: none;
+    z-index: 100;
+    max-width: 320px;
+  }
+  .toast.show { opacity: 1; transform: none; }
+  .toast.ok   { border-color: var(--ok); color: var(--ok); }
+  .toast.err  { border-color: var(--error); color: var(--error); }
+
+  /* ── Scrollbar ───────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .mono { font-family: var(--mono); }
+  .muted { color: var(--muted); }
+  .mt16 { margin-top: 16px; }
+  .mt24 { margin-top: 24px; }
+  .flex-gap { display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="title">ALTIUM ↔ 1С</div>
+    <div class="sub">Sync Service v0.36</div>
+  </div>
+  <nav class="nav">
+    <div class="nav-item active" data-page="dashboard" onclick="goto('dashboard')">
+      <span class="icon">◈</span> Дашборд
+    </div>
+    <div class="nav-item" data-page="components" onclick="goto('components')">
+      <span class="icon">⬡</span> Компоненты
+    </div>
+    <div class="nav-item" data-page="projects" onclick="goto('projects')">
+      <span class="icon">⬢</span> Проекты / BOM
+    </div>
+    <div class="nav-item" data-page="folders" onclick="goto('folders')">
+      <span class="icon">⊞</span> Маппинг папок
+    </div>
+    <div class="nav-item" data-page="requests" onclick="goto('requests')">
+      <span class="icon">⇄</span> Запросы AES
+    </div>
+    <div class="nav-item" data-page="logs" onclick="goto('logs')">
+      <span class="icon">≡</span> Журнал
+    </div>
+    <div class="nav-item" data-page="diag" onclick="goto('diag')">
+      <span class="icon">⚕</span> Диагностика
+    </div>
+    <div class="nav-item" data-page="labels" onclick="goto('labels')">
+      <span class="icon">🏷</span> Grist → GoLabel2
+    </div>
+    <div class="nav-item" data-page="settings" onclick="goto('settings')">
+      <span class="icon">⚙</span> Настройки
+    </div>
+  </nav>
+  <button class="sync-btn" id="globalSyncBtn" onclick="runFullSync()">
+    ▶ Синхронизировать
+  </button>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <h1 id="pageTitle">Дашборд</h1>
+    <span style="font-family:var(--mono);font-size:11px;padding:3px 10px;
+      border-radius:4px;background:rgba(245,166,35,.12);color:var(--warn);
+      border:1px solid rgba(245,166,35,.25);letter-spacing:.05em"
+      title="Запись в 1С отключена. Только чтение из Altium.">
+      READ-ONLY
+    </span>
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-label" id="statusLabel">—</span>
+  </div>
+
+  <div class="content">
+
+    <!-- ── Dashboard ─────────────────────────────────── -->
+    <div class="page active" id="page-dashboard">
+      <div class="cards" id="statsCards">
+        <div class="card"><div class="label">Компонентов</div><div class="value accent" id="s-total">—</div></div>
+        <div class="card"><div class="label">Синхронизировано</div><div class="value ok" id="s-synced">—</div></div>
+        <div class="card"><div class="label">Ожидают</div><div class="value warn" id="s-pending">—</div></div>
+        <div class="card"><div class="label">Ошибок</div><div class="value error" id="s-errors">—</div></div>
+        <div class="card"><div class="label">Проектов</div><div class="value accent" id="s-projects">—</div></div>
+        <div class="card"><div class="label">Папок</div><div class="value" id="s-folders">—</div></div>
+      </div>
+
+      <div class="section-title">Последняя синхронизация</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Время</th><th>Тип</th><th>Объект</th><th>Действие</th><th>Статус</th><th>Сообщение</th>
+          </tr></thead>
+          <tbody id="dashLogs"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Components ────────────────────────────────── -->
+    <div class="page" id="page-components">
+      <div class="flex-gap" style="margin-bottom:16px">
+        <select id="compFilter" onchange="loadComponents()">
+          <option value="">Все статусы</option>
+          <option value="Synced">Синхронизировано</option>
+          <option value="Pending">Ожидают</option>
+          <option value="Error">Ошибки</option>
+          <option value="Skipped">Пропущены</option>
+        </select>
+        <button class="btn btn-primary" onclick="syncComponents()">▶ Синхронизировать</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Артикул (Comment)</th><th>Описание</th><th>Производитель</th><th>Наименование 1С</th><th>Тег (папка)</th><th>Статус</th><th>Дата</th>
+          </tr></thead>
+          <tbody id="compTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Projects ──────────────────────────────────── -->
+    <div class="page" id="page-projects">
+      <div class="flex-gap" style="margin-bottom:16px">
+        <select id="projFilter" onchange="loadProjects()">
+          <option value="">Все</option>
+          <option value="Pending">Ожидают</option>
+          <option value="Synced">Синхронизировано</option>
+          <option value="Error">Ошибки</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Проект</th><th>Ревизия</th><th>Действие</th><th>Статус</th><th>Дата</th><th></th>
+          </tr></thead>
+          <tbody id="projTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Folder Mapping ─────────────────────────────── -->
+    <div class="page" id="page-folders">
+      <div class="flex-gap" style="margin-bottom:16px">
+        <button class="btn btn-primary" onclick="syncFolders()">▶ Синхронизировать папки</button>
+        <span class="muted mono" style="font-size:12px">Автоматически создаёт группы 1С из папок Altium</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Папка Altium</th><th>Группа 1С</th><th>Авто</th>
+          </tr></thead>
+          <tbody id="foldersTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Diagnostics ───────────────────────────────────── -->
+    <div class="page" id="page-diag">
+
+      <div class="section-title" style="margin-bottom:12px">Тест с куками браузера</div>
+      <div style="margin-bottom:8px;font-size:11px;color:var(--muted);font-family:var(--mono)">
+        Вставь куки из браузера (строка Cookie из DevTools) и проверим работает ли фильтрация
+      </div>
+      <textarea id="rawCookies" rows="3" style="width:100%;background:var(--bg3);border:1px solid
+        var(--border);color:var(--text);padding:8px;border-radius:5px;font-family:var(--mono);
+        font-size:11px;resize:vertical;margin-bottom:8px"
+        placeholder="IsUnsupportedBrowser=0; ASP.NET_SessionId=...; .AFSAUTH=..."></textarea>
+      <div style="display:flex;gap:8px;margin-bottom:20px">
+        <button class="btn btn-primary" onclick="testRawAudio()">▶ Тест Audio (3 шт)</button>
+        <button class="btn btn-primary" onclick="testRawIC()">▶ Тест IC start=50</button>
+        <button class="btn btn-warn" onclick="testRawAudio50()">▶ Audio + start=50</button>
+      </div>
+
+      <div class="section-title" style="margin-bottom:12px">Тест пагинации компонентов</div>
+      <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center">
+        <button class="btn btn-primary" onclick="testPagination()">
+          ▶ Тест пагинации
+        </button>
+        <span class="muted mono" style="font-size:11px">
+          Проверяет сколько компонентов возвращает разный limit
+        </span>
+      </div>
+
+      <div class="section-title" style="margin-bottom:12px">Отладка авторизации</div>
+      <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center">
+        <button class="btn btn-warn" onclick="debugLoginPage()">
+          Показать HTML страницы логина
+        </button>
+        <button class="btn btn-warn" onclick="showCookies()">
+          Показать куки сессии
+        </button>
+      </div>
+
+      <div class="section-title" style="margin-bottom:12px">Кандидаты для API путей</div>
+      <div class="table-wrap" style="margin-bottom:20px">
+        <table>
+          <thead><tr><th>Путь</th><th>Описание</th><th></th></tr></thead>
+          <tbody id="diagCandidates"></tbody>
+        </table>
+      </div>
+
+      <div class="section-title" style="margin-bottom:12px">Ручной запрос к Altium</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <input id="diagPath" type="text"
+          style="flex:1;background:var(--bg3);border:1px solid var(--border);
+                 color:var(--text);padding:8px 12px;border-radius:6px;
+                 font-family:var(--mono);font-size:13px"
+          placeholder="/api/v1/component-service/components"
+          onkeydown="if(event.key==='Enter')probe()">
+        <button class="btn btn-primary" onclick="probe()">▶ Запрос</button>
+      </div>
+
+      <div id="diagStatus" style="margin-bottom:8px;font-family:var(--mono);font-size:12px"></div>
+
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+        padding:16px;font-family:var(--mono);font-size:12px;color:var(--text);
+        white-space:pre-wrap;word-break:break-all;max-height:460px;overflow-y:auto;
+        min-height:80px;line-height:1.6" id="diagResult">
+        <span style="color:var(--muted)">Нажмите ▶ у пути выше или введите путь вручную</span>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+        <span class="muted mono" style="font-size:12px">Применить последний путь как:</span>
+        <button class="btn btn-ok" onclick="applyPath('components')">Компоненты</button>
+        <button class="btn btn-ok" onclick="applyPath('folders')">Папки</button>
+        <button class="btn btn-ok" onclick="applyPath('projects')">Проекты</button>
+      </div>
+
+    </div>
+
+    <!-- ── Requests Inspector ────────────────────────────── -->
+    <div class="page" id="page-requests">
+      <div class="flex-gap" style="margin-bottom:14px">
+        <select id="reqSource" onchange="loadRequests()" style="width:auto">
+          <option value="">Все запросы</option>
+          <option value="[AES]">Только AES</option>
+          <option value="[Browser]">Только браузер</option>
+        </select>
+        <input id="reqPath" type="text" placeholder="фильтр пути, напр. /tc"
+          style="background:var(--bg3);border:1px solid var(--border);color:var(--text);
+                 padding:6px 10px;border-radius:5px;font-family:var(--mono);font-size:13px;width:200px"
+          onkeydown="if(event.key==='Enter')loadRequests()">
+        <button class="btn btn-warn" onclick="loadRequests()">↺ Обновить</button>
+        <button class="btn btn-ok" onclick="clearRequests()">✕ Очистить</button>
+        <span class="muted mono" style="font-size:11px">
+          Настрой AES → PLM Integration → URL: http://192.168.55.109:5000/tc
+        </span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Время</th><th>Источник</th><th>Метод</th><th>Путь</th><th>Заголовки</th><th>Тело</th>
+          </tr></thead>
+          <tbody id="requestsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Logs ───────────────────────────────────────── -->
+    <div class="page" id="page-logs">
+      <div class="log-filters">
+        <select id="logType" onchange="loadLogs()">
+          <option value="">Все типы</option>
+          <option value="Component">Компоненты</option>
+          <option value="Project">Проекты</option>
+          <option value="Folder">Папки</option>
+        </select>
+        <select id="logStatus" onchange="loadLogs()">
+          <option value="">Все статусы</option>
+          <option value="OK">OK</option>
+          <option value="Error">Ошибки</option>
+        </select>
+        <button class="btn btn-warn" onclick="loadLogs()">↺ Обновить</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Время</th><th>Тип</th><th>Объект</th><th>Действие</th><th>Статус</th><th>Сообщение</th>
+          </tr></thead>
+          <tbody id="logsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Grist → GoLabel2 ──────────────────────────────── -->
+    <div class="page" id="page-labels">
+
+      <div class="settings-section" style="margin-bottom:20px">
+        <div class="section-title" style="margin-bottom:12px">API-ключ для Grist</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <input id="gristApiKey" type="text" readonly
+            style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);
+                   padding:6px 10px;border-radius:5px;font-family:var(--mono);font-size:12px">
+          <button class="btn btn-ok" onclick="copyGristKey()">Копировать</button>
+          <button class="btn btn-warn" onclick="regenerateGristKey()">↺ Перевыпустить</button>
+        </div>
+        <div class="muted" style="font-size:11px">
+          Заголовок <span class="mono">X-Api-Key</span> с этим значением дает Grist право
+          добавлять / изменять / удалять / полностью перезаписывать таблицу этикеток.
+        </div>
+      </div>
+
+      <div class="settings-section" style="margin-bottom:20px">
+        <div class="section-title" style="margin-bottom:12px">Как подключить Grist (запись)</div>
+        <div class="muted" style="font-size:12px;line-height:1.6">
+          Grist нативно не умеет ходить по произвольным HTTP API из коробки, поэтому используй
+          <b>Webhook</b> (Grist → Document Settings → Webhooks) на изменение таблицы, либо
+          кастомный виджет / скрипт, который на каждое изменение строки шлёт запрос:
+        </div>
+        <pre class="mono" style="background:var(--bg3);padding:10px;border-radius:5px;
+          font-size:11px;overflow-x:auto;margin-top:8px">POST http://&lt;этот-сервер&gt;:5000/api/grist/labels/upsert
+X-Api-Key: &lt;ключ выше&gt;
+Content-Type: application/json
+
+{
+  "externalId": "grist-row-42",
+  "article": "R_0603_10K",
+  "name": "Резистор 10к 0603",
+  "manufacturer": "YAGEO",
+  "barcode": "4670012345678",
+  "qty": "1"
+}</pre>
+        <div class="muted" style="font-size:11px;margin-top:6px">
+          Для полной перезаписи таблицы: <span class="mono">POST /api/grist/labels/replace-all</span>
+          с массивом записей. Для удаления одной: <span class="mono">DELETE /api/grist/labels/{'{'}externalId{'}'}</span>.
+          Поле <span class="mono">externalId</span> обязательно везде — это ключ строки Grist.
+        </div>
+      </div>
+
+      <div class="settings-section" style="margin-bottom:20px">
+        <div class="section-title" style="margin-bottom:12px">Как подключить GoLabel2 (только чтение)</div>
+        <ol class="muted" style="font-size:12px;line-height:1.8;padding-left:18px">
+          <li>Установи <b>SQLite ODBC Driver</b> (ch-werner sqliteodbc) на машине с GoLabel2.</li>
+          <li>Панель управления → ODBC Data Sources → добавить System DSN, драйвер SQLite3.</li>
+          <li>Database Name: путь к файлу
+            <span class="mono">C:\AltiumSync\labels.db</span> (лежит рядом с sync.db на сервере,
+            общий сетевой доступ к папке нужно открыть отдельно).</li>
+          <li>В настройках DSN включи галку <b>Read Only</b> — GoLabel2 не сможет ничего изменить,
+            только читать таблицу <span class="mono">labels</span>.</li>
+          <li>В GoLabel2: Database → ODBC → выбрать созданный DSN → таблица
+            <span class="mono">labels</span>, поля article/name/manufacturer/barcode/qty/extra1-3.</li>
+        </ol>
+      </div>
+
+      <div class="flex-gap" style="margin-bottom:14px">
+        <button class="btn btn-warn" onclick="loadLabels()">↺ Обновить</button>
+        <button class="btn btn-ok" onclick="clearAllLabels()">✕ Очистить всю таблицу</button>
+        <span id="labelsCount" class="muted mono" style="font-size:12px"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>External ID</th><th>Артикул</th><th>Наименование</th><th>Производитель</th>
+            <th>Штрихкод</th><th>Кол-во</th><th>Обновлено</th><th></th>
+          </tr></thead>
+          <tbody id="labelsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Settings ───────────────────────────────────── -->
+    <div class="page" id="page-settings">
+      <div class="settings-grid">
+
+        <div class="settings-section">
+          <h3>Altium Enterprise Server</h3>
+          <div class="field">
+            <label>URL сервера</label>
+            <input id="altiumUrl" type="text" placeholder="http://192.168.55.109:9780">
+          </div>
+          <div class="field">
+            <label>Пользователь</label>
+            <input id="altiumUser" type="text" placeholder="admin">
+          </div>
+          <div class="field">
+            <label>Пароль</label>
+            <input id="altiumPass" type="password">
+          </div>
+          <div class="field">
+            <label>Куки браузера (если фильтрация не работает)</label>
+            <textarea id="altiumBrowserCookies" rows="2" style="width:100%;
+              background:var(--bg3);border:1px solid var(--border);color:var(--text);
+              padding:6px 8px;border-radius:5px;font-family:var(--mono);font-size:11px;
+              resize:vertical" placeholder="IsUnsupportedBrowser=0; ASP.NET_SessionId=...; .AFSAUTH=..."></textarea>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px;font-family:var(--mono)">
+              Скопируй из DevTools → Network → Cookie заголовок. Обновляй раз в ~24ч.
+              Если задан — используется вместо логин/пароль для запросов компонентов.
+            </div>
+          </div>
+          <div class="field-row">
+            <div style="flex:1"></div>
+            <button class="btn btn-ok" onclick="testAltium()">Проверить</button>
+          </div>
+          <div class="test-result" id="altiumTestResult"></div>
+        </div>
+
+        <div class="settings-section">
+          <h3>1С Бухгалтерия 8.3</h3>
+          <div class="field">
+            <label>URL сервера</label>
+            <input id="onecUrl" type="text" placeholder="http://1c-server">
+          </div>
+          <div class="field">
+            <label>Имя базы</label>
+            <input id="onecBase" type="text" placeholder="Buhgalteriya">
+          </div>
+          <div class="field">
+            <label>Пользователь</label>
+            <input id="onecUser" type="text" placeholder="sync_user">
+          </div>
+          <div class="field">
+            <label>Пароль</label>
+            <input id="onecPass" type="password">
+          </div>
+          <div class="field-row">
+            <div style="flex:1"></div>
+            <button class="btn btn-ok" onclick="testOneC()">Проверить</button>
+          </div>
+          <div class="test-result" id="onecTestResult"></div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Синхронизация</h3>
+          <div class="field">
+            <label>Интервал автосинхронизации (мин)</label>
+            <input id="syncInterval" type="number" value="60" min="5">
+          </div>
+          <div class="field">
+            <label>Автосинхронизация</label>
+            <select id="autoSync">
+              <option value="false">Выключена</option>
+              <option value="true">Включена</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Фильтр по Lifecycle State</label>
+            <input id="lifecycleFilter" type="text" placeholder="Released (пусто = все)">
+          </div>
+          <div class="field">
+            <label>Действие по умолчанию для проектов</label>
+            <select id="defaultAction">
+              <option value="Skip">Skip — не синхронизировать</option>
+              <option value="Update">Update — обновить специю</option>
+              <option value="New">New — создать номенклатуру</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-section" style="grid-column:1/-1">
+          <h3>API пути Altium (уточняются через страницу Диагностика)</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+            <div class="field" style="margin:0">
+              <label>Компоненты</label>
+              <input id="apiComponents" type="text">
+            </div>
+            <div class="field" style="margin:0">
+              <label>Папки</label>
+              <input id="apiFolders" type="text">
+            </div>
+            <div class="field" style="margin:0">
+              <label>Проекты</label>
+              <input id="apiProjects" type="text">
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div style="margin-top:24px">
+        <button class="btn btn-primary" onclick="saveSettings()">Сохранить настройки</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Navigation ────────────────────────────────────────────────────────────────
+const titles = {
+  dashboard:  'Дашборд',
+  components: 'Компоненты',
+  projects:   'Проекты / BOM',
+  folders:    'Маппинг папок',
+  requests:   'Запросы AES',
+  logs:       'Журнал',
+  labels:     'Grist → GoLabel2',
+  diag:       'Диагностика',
+  settings:   'Настройки',
+};
+
+function goto(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.classList.toggle('active', n.dataset.page === page);
+  });
+  document.getElementById('page-' + page).classList.add('active');
+  document.getElementById('pageTitle').textContent = titles[page] || page;
+  loaders[page]?.();
+}
+
+const loaders = {
+  dashboard:  loadDashboard,
+  components: loadComponents,
+  projects:   loadProjects,
+  folders:    loadFolders,
+  logs:       loadLogs,
+  requests:   loadRequests,
+  labels:     loadLabels,
+  diag:       loadDiag,
+  settings:   loadSettings,
+};
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch('/api' + path, opts);
+  const text = await r.text();
+  if (!r.ok) throw new Error(text);
+  try {
+    return JSON.parse(text);
+  } catch(e) {
+    // Сервер вернул не JSON (HTML ошибка, редирект и т.д.)
+    throw new Error('Server returned non-JSON: ' + text.slice(0, 200));
+  }
+}
+const get   = path      => api('GET',    path);
+const post  = (path, b) => api('POST',   path, b);
+const patch = (path, b) => api('PATCH',  path, b);
+const del   = path      => api('DELETE', path);
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+function setStatus(ok, label) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot ' + (ok ? 'ok' : 'err');
+  document.getElementById('statusLabel').textContent = label;
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+async function loadRequests() {
+  const source = document.getElementById('reqSource').value;
+  const path   = document.getElementById('reqPath').value.trim();
+  let url = '/diag/requests?limit=200';
+  if (source) url += `&source=${encodeURIComponent(source)}`;
+  if (path)   url += `&pathFilter=${encodeURIComponent(path)}`;
+  try {
+    const list = await get(url);
+    document.getElementById('requestsTable').innerHTML = list.map(r => `
+      <tr>
+        <td class="mono muted" style="font-size:11px;white-space:nowrap">${fmtDate(r.timestamp)}</td>
+        <td><span class="badge ${r.source === '[AES]' ? 'badge-update' : 'badge-skipped'}"
+          style="font-size:10px">${esc(r.source)}</span></td>
+        <td class="mono" style="font-size:12px;color:var(--accent)">${esc(r.method)}</td>
+        <td class="mono" style="font-size:11px;max-width:260px;overflow:hidden;
+          text-overflow:ellipsis;white-space:nowrap" title="${esc(r.path)}">${esc(r.path)}</td>
+        <td style="font-size:10px;color:var(--muted);font-family:var(--mono);
+          max-width:200px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"
+          title="${esc(r.headers)}">${esc(r.headers.split('\n')[0])}</td>
+        <td style="font-size:11px;font-family:var(--mono);max-width:200px;
+          overflow:hidden;white-space:nowrap;text-overflow:ellipsis"
+          title="${esc(r.body)}">${esc(r.body.slice(0, 80))}</td>
+      </tr>`).join('') || '<tr><td colspan="6" class="muted" style="text-align:center;padding:20px">Запросов нет — настрой PLM Integration в AES</td></tr>';
+  } catch(e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+async function clearRequests() {
+  try {
+    await api('DELETE', '/diag/requests');
+    toast('Очищено');
+    loadRequests();
+  } catch(e) { toast('Ошибка', 'err'); }
+}
+
+
+async function loadLabels() {
+  try {
+    const [rows, settings] = await Promise.all([get('/labels'), get('/settings')]);
+    document.getElementById('gristApiKey').value = settings.gristApiKey || '';
+    document.getElementById('labelsCount').textContent = `Записей: ${rows.length}`;
+    document.getElementById('labelsTable').innerHTML = rows.map(r => `
+      <tr>
+        <td class="mono" style="font-size:11px">${esc(r.externalId)}</td>
+        <td class="mono" style="font-size:12px">${esc(r.article)}</td>
+        <td style="font-size:12px">${esc(r.name)}</td>
+        <td class="muted" style="font-size:12px">${esc(r.manufacturer)}</td>
+        <td class="mono" style="font-size:11px">${esc(r.barcode)}</td>
+        <td class="mono" style="font-size:12px">${esc(r.qty)}</td>
+        <td class="muted mono" style="font-size:11px">${fmtDate(r.updatedAt)}</td>
+        <td><button class="btn btn-warn" style="padding:3px 10px;font-size:11px"
+          onclick="deleteLabelRow('${r.externalId.replace(/'/g,"\\'")}')">✕</button></td>
+      </tr>`).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;padding:20px">Записей нет — Grist ещё ничего не прислал</td></tr>';
+  } catch(e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+async function copyGristKey() {
+  const el = document.getElementById('gristApiKey');
+  el.select();
+  try { await navigator.clipboard.writeText(el.value); toast('Скопировано'); }
+  catch { document.execCommand('copy'); toast('Скопировано'); }
+}
+
+async function regenerateGristKey() {
+  if (!confirm('Старый ключ перестанет работать — обнови его в настройках Grist. Продолжить?')) return;
+  try {
+    const r = await post('/labels/regenerate-key');
+    document.getElementById('gristApiKey').value = r.apiKey;
+    toast('Новый ключ выпущен');
+  } catch(e) { toast('Ошибка', 'err'); }
+}
+
+async function deleteLabelRow(externalId) {
+  try { await del('/labels/' + encodeURIComponent(externalId)); toast('Удалено'); loadLabels(); }
+  catch(e) { toast('Ошибка', 'err'); }
+}
+
+async function clearAllLabels() {
+  if (!confirm('Удалить ВСЕ записи из таблицы этикеток?')) return;
+  try { await del('/labels'); toast('Таблица очищена'); loadLabels(); }
+  catch(e) { toast('Ошибка', 'err'); }
+}
+
+async function loadDiag() {
+  const tbody = document.getElementById('diagCandidates');
+  if (!tbody) return;
+  tbody.innerHTML = _diagCandidates.map(([path, desc]) => `
+    <tr>
+      <td class="mono" style="font-size:12px">${esc(path)}</td>
+      <td class="muted" style="font-size:12px">${esc(desc)}</td>
+      <td><button class="btn btn-warn" style="padding:3px 10px;font-size:11px"
+        onclick="probeQuick('${path.replace(/'/g,"\\'")}')">▶</button></td>
+    </tr>`).join('');
+}
+
+async function loadDashboard() {
+  try {
+    const s = await get('/stats');
+    document.getElementById('s-total').textContent    = s.totalComponents;
+    document.getElementById('s-synced').textContent   = s.syncedComponents;
+    document.getElementById('s-pending').textContent  = s.pendingComponents;
+    document.getElementById('s-errors').textContent   = s.errorComponents;
+    document.getElementById('s-projects').textContent = s.totalProjects;
+    document.getElementById('s-folders').textContent  = s.totalFolders;
+    if (s.lastSync) setStatus(true, 'Последняя: ' + fmtDate(s.lastSync));
+    const logs = await get('/logs?limit=10');
+    document.getElementById('dashLogs').innerHTML = logs.map(logRow).join('');
+  } catch(e) {
+    setStatus(false, 'Ошибка загрузки');
+  }
+}
+
+// ── Components ────────────────────────────────────────────────────────────────
+async function loadComponents() {
+  const f   = document.getElementById('compFilter').value;
+  const url = f ? `/components?status=${f}` : '/components';
+  try {
+    const list = await get(url);
+    document.getElementById('compTable').innerHTML = list.map(c => `
+      <tr>
+        <td class="mono" style="font-size:12px">${esc(c.altiumName || c.article)}</td>
+        <td style="font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+            title="${esc(c.description)}">${esc(c.description)}</td>
+        <td class="muted" style="font-size:12px">${esc(c.manufacturer)}</td>
+        <td class="mono" style="font-size:12px;color:var(--accent)">${esc(c.name1C)}</td>
+        <td class="muted" style="font-size:11px">${esc(c.altiumPath)}</td>
+        <td>${badgeStatus(c.syncStatus)}</td>
+        <td class="muted mono" style="font-size:11px">${c.syncedAt ? fmtDate(c.syncedAt) : '—'}</td>
+      </tr>`).join('');
+  } catch(e) { toast('Ошибка загрузки компонентов', 'err'); }
+}
+
+async function syncComponents() {
+  try {
+    document.getElementById('globalSyncBtn').disabled = true;
+    await post('/components/sync');
+    toast('Компоненты синхронизированы');
+    loadComponents();
+    loadDashboard();
+  } catch(e) {
+    toast('Ошибка: ' + e.message, 'err');
+  } finally {
+    document.getElementById('globalSyncBtn').disabled = false;
+  }
+}
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+async function loadProjects() {
+  const f   = document.getElementById('projFilter').value;
+  const url = f ? `/projects?status=${f}` : '/projects';
+  try {
+    const list = await get(url);
+    document.getElementById('projTable').innerHTML = list.map(p => `
+      <tr>
+        <td class="mono">${esc(p.altiumProjectName)}</td>
+        <td class="mono muted">${esc(p.altiumRevision)}</td>
+        <td>
+          <select onchange="setAction(${p.id}, this.value)">
+            ${['Skip','Update','New'].map(a =>
+              `<option value="${a}" ${p.syncAction===a?'selected':''}>${a}</option>`
+            ).join('')}
+          </select>
+        </td>
+        <td>${badgeStatus(p.syncStatus)}</td>
+        <td class="mono muted" style="font-size:11px">${p.syncedAt ? fmtDate(p.syncedAt) : '—'}</td>
+        <td>
+          <button class="btn btn-primary" onclick="syncProject(${p.id})"
+            ${p.syncAction==='Skip'?'disabled':''}>▶</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { toast('Ошибка загрузки проектов', 'err'); }
+}
+
+async function setAction(id, action) {
+  try {
+    await patch(`/projects/${id}/action`, { action });
+    loadProjects();
+  } catch(e) { toast('Ошибка', 'err'); }
+}
+
+async function syncProject(id) {
+  try {
+    await post(`/projects/${id}/sync`);
+    toast('Проект синхронизирован');
+    loadProjects();
+    loadDashboard();
+  } catch(e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+// ── Folders ───────────────────────────────────────────────────────────────────
+async function loadFolders() {
+  try {
+    const list = await get('/folders');
+    document.getElementById('foldersTable').innerHTML = list.map(f => `
+      <tr>
+        <td class="mono">${esc(f.altiumFolderPath)}</td>
+        <td class="mono">${esc(f.onecGroupPath)}</td>
+        <td>${f.autoCreated ? '<span class="badge badge-new">авто</span>' : '<span class="muted">ручной</span>'}</td>
+      </tr>`).join('');
+  } catch(e) { toast('Ошибка загрузки папок', 'err'); }
+}
+
+async function syncFolders() {
+  try {
+    await post('/folders/sync');
+    toast('Папки синхронизированы');
+    loadFolders();
+  } catch(e) { toast('Ошибка: ' + e.message, 'err'); }
+}
+
+// ── Logs ──────────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const type   = document.getElementById('logType')?.value   || '';
+  const status = document.getElementById('logStatus')?.value || '';
+  let url = '/logs?limit=200';
+  if (type)   url += `&entityType=${type}`;
+  if (status) url += `&status=${status}`;
+  try {
+    const list = await get(url);
+    document.getElementById('logsTable').innerHTML = list.map(logRow).join('');
+  } catch(e) { toast('Ошибка загрузки журнала', 'err'); }
+}
+
+function logRow(l) {
+  return `<tr>
+    <td class="mono muted" style="font-size:11px;white-space:nowrap">${fmtDate(l.timestamp)}</td>
+    <td><span class="badge badge-${l.entityType.toLowerCase()==='component'?'new':l.entityType.toLowerCase()==='project'?'update':'skipped'}">${l.entityType}</span></td>
+    <td class="mono" style="font-size:12px">${esc(l.entityName)}</td>
+    <td class="mono muted" style="font-size:12px">${esc(l.action)}</td>
+    <td>${l.status==='OK'
+      ? '<span class="badge badge-synced">OK</span>'
+      : '<span class="badge badge-error">ERR</span>'}</td>
+    <td class="log-msg">${esc(l.message||'')}</td>
+  </tr>`;
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const s = await get('/settings');
+    document.getElementById('altiumUrl').value       = s.altiumServerUrl        || '';
+    document.getElementById('altiumUser').value      = s.altiumUser             || '';
+    document.getElementById('altiumPass').value      = s.altiumPassword         || '';
+    document.getElementById('altiumBrowserCookies').value = s.altiumBrowserCookies || '';
+    document.getElementById('onecUrl').value         = s.onecServerUrl          || '';
+    document.getElementById('onecBase').value        = s.onecBaseName           || '';
+    document.getElementById('onecUser').value        = s.onecUser               || '';
+    document.getElementById('onecPass').value        = s.onecPassword           || '';
+    document.getElementById('syncInterval').value    = s.syncIntervalMin        || 60;
+    document.getElementById('autoSync').value        = s.autoSyncEnabled ? 'true' : 'false';
+    document.getElementById('lifecycleFilter').value = s.altiumLifecycleFilter  || '';
+    document.getElementById('defaultAction').value   = s.defaultSyncAction      || 'Skip';
+    document.getElementById('apiComponents').value   = s.altiumApiComponents    || '';
+    document.getElementById('apiFolders').value      = s.altiumApiFolders       || '';
+    document.getElementById('apiProjects').value     = s.altiumApiProjects      || '';
+  } catch(e) { toast('Ошибка загрузки настроек', 'err'); }
+}
+
+async function saveSettings() {
+  const s = {
+    altiumServerUrl:       document.getElementById('altiumUrl').value,
+    altiumUser:            document.getElementById('altiumUser').value,
+    altiumPassword:        document.getElementById('altiumPass').value,
+    altiumBrowserCookies:  (document.getElementById('altiumBrowserCookies')?.value || '').trim(),
+    altiumApiComponents:   document.getElementById('apiComponents').value,
+    altiumApiFolders:      document.getElementById('apiFolders').value,
+    altiumApiProjects:     document.getElementById('apiProjects').value,
+    altiumLifecycleFilter: document.getElementById('lifecycleFilter').value,
+    onecServerUrl:         document.getElementById('onecUrl').value,
+    onecBaseName:          document.getElementById('onecBase').value,
+    onecUser:              document.getElementById('onecUser').value,
+    onecPassword:          document.getElementById('onecPass').value,
+    syncIntervalMin:       parseInt(document.getElementById('syncInterval').value) || 60,
+    autoSyncEnabled:       document.getElementById('autoSync').value === 'true',
+    defaultSyncAction:     document.getElementById('defaultAction').value,
+  };
+  try {
+    await post('/settings', s);
+    toast('Настройки сохранены');
+  } catch(e) { toast('Ошибка сохранения', 'err'); }
+}
+
+async function testAltium() {
+  const s = collectSettings();
+  const el = document.getElementById('altiumTestResult');
+  el.className = 'test-result';
+  try {
+    const r = await post('/settings/test-altium', s);
+    el.className = 'test-result ' + (r.ok ? 'ok' : 'err');
+    el.textContent = r.message;
+  } catch(e) {
+    el.className = 'test-result err';
+    el.textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+async function testOneC() {
+  const s = collectSettings();
+  const el = document.getElementById('onecTestResult');
+  el.className = 'test-result';
+  try {
+    const r = await post('/settings/test-onec', s);
+    el.className = 'test-result ' + (r.ok ? 'ok' : 'err');
+    el.textContent = r.message;
+  } catch(e) {
+    el.className = 'test-result err';
+    el.textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+function collectSettings() {
+  return {
+    altiumServerUrl:       document.getElementById('altiumUrl').value,
+    altiumUser:            document.getElementById('altiumUser').value,
+    altiumPassword:        document.getElementById('altiumPass').value,
+    altiumApiComponents:   document.getElementById('apiComponents')?.value  || '',
+    altiumApiFolders:      document.getElementById('apiFolders')?.value     || '',
+    altiumApiProjects:     document.getElementById('apiProjects')?.value    || '',
+    altiumLifecycleFilter: document.getElementById('lifecycleFilter')?.value || '',
+    onecServerUrl:         document.getElementById('onecUrl').value,
+    onecBaseName:          document.getElementById('onecBase').value,
+    onecUser:              document.getElementById('onecUser').value,
+    onecPassword:          document.getElementById('onecPass').value,
+    syncIntervalMin: 60, autoSyncEnabled: false, defaultSyncAction: 'Skip',
+  };
+}
+
+// ── Diagnostics ───────────────────────────────────────────────────────────────
+let _lastProbedPath = '';
+
+const _diagCandidates = [
+  // ── Подтверждено ─────────────────────────────────────────────────────────
+  ['/components/api/tags',                                                      '✓ Теги/папки (подтверждено)'],
+  // ── Компоненты — UI API ──────────────────────────────────────────────────
+  ['/components/api/components',                                                'Компоненты UI (вариант 1)'],
+  ['/components/api/components?limit=3',                                        'Компоненты limit=3'],
+  ['/components/api/items',                                                     'Компоненты items'],
+  ['/components/api/search',                                                    'Компоненты search'],
+  ['/components/api/components?tagGuid=5670FFA6-6F08-4305-9CE5-8B0DE7C0FA5F', 'Компоненты тега Audio'],
+  ['/components/api/items?tagGuid=5670FFA6-6F08-4305-9CE5-8B0DE7C0FA5F',      'Items тега Audio'],
+  // ── DM Integration API (из XSD схемы) ───────────────────────────────────
+  ['/dm/api/configuration',                                                     'DM: конфигурация'],
+  ['/dm/api/entities',                                                          'DM: entities'],
+  ['/dm/api/components',                                                        'DM: компоненты'],
+  ['/integration/api/components',                                               'Integration API компоненты'],
+  ['/integration/api/configuration',                                            'Integration API конфигурация'],
+  ['/api/v1/dm/components',                                                     'API v1 DM компоненты'],
+  // ── Прочее ───────────────────────────────────────────────────────────────
+  ['/components/api/health',                                                    'Health check'],
+  ['/api/v1/userinfo',                                                          'Инфо о пользователе'],
+];
+
+async function testRawAudio() {
+  await doRawRequest(
+    '/components/api/components?fields%5B%5D=Id&fields%5B%5D=Comment&text=&tag=5670FFA6-6F08-4305-9CE5-8B0DE7C0FA5F&start=0&limit=50',
+    'Audio (3 шт) start=0');
+}
+async function testRawAudio50() {
+  await doRawRequest(
+    '/components/api/components?fields%5B%5D=Id&fields%5B%5D=Comment&text=&tag=5670FFA6-6F08-4305-9CE5-8B0DE7C0FA5F&start=50&limit=50',
+    'Audio start=50');
+}
+async function testRawIC() {
+  await doRawRequest(
+    '/components/api/components?fields%5B%5D=Id&fields%5B%5D=Comment&text=&tag=6EBE8F4E-156C-4F0F-9001-258398410752&start=50&limit=50',
+    'IC start=50 (другие 50 из 283)');
+}
+async function doRawRequest(path, label) {
+  const cookies = document.getElementById('rawCookies').value.trim();
+  if (!cookies) { toast('Вставь куки браузера', 'err'); return; }
+  const statusEl = document.getElementById('diagStatus');
+  const resultEl = document.getElementById('diagResult');
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = `⏳ ${label}...`;
+  try {
+    const r = await post('/diag/raw-request', { path, cookies });
+    statusEl.style.color = r.error ? 'var(--error)' : 'var(--ok)';
+    statusEl.textContent = r.error
+      ? '✗ ' + r.error
+      : `${label}: HTTP ${r.status} | count=${r.count} | ids=[${r.firstIds}]`;
+    resultEl.textContent = r.bodyPreview || r.error || '';
+  } catch(e) {
+    statusEl.style.color = 'var(--error)';
+    statusEl.textContent = '✗ ' + e.message;
+  }
+}
+
+async function testPagination() {
+  const statusEl = document.getElementById('diagStatus');
+  const resultEl = document.getElementById('diagResult');
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = '⏳ Тест пагинации...';
+  resultEl.textContent = '';
+  try {
+    const r = await get('/diag/pagination-test');
+    statusEl.style.color = 'var(--ok)';
+    statusEl.textContent = '✓ Готово';
+    resultEl.textContent = r.map(row =>
+      `${row.query.slice(0,55).padEnd(55)} → HTTP ${row.httpStatus} | count=${row.count}${row.hasTotal ? ' | total='+row.total : ''}${row.firstIds ? ' | ids=['+row.firstIds+']' : ''}${row.error ? ' | ERR:'+row.error : ''}`
+    ).join('\n');
+  } catch(e) {
+    statusEl.style.color = 'var(--error)';
+    statusEl.textContent = '✗ ' + e.message;
+  }
+}
+
+async function showCookies() {
+  const statusEl = document.getElementById('diagStatus');
+  const resultEl = document.getElementById('diagResult');
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = '⏳ Загружаем куки...';
+  try {
+    const r = await get('/diag/cookies');
+    statusEl.style.color = r.count > 0 ? 'var(--ok)' : 'var(--warn)';
+    statusEl.textContent = `Найдено кук: ${r.count}`;
+    resultEl.textContent = r.cookies.map(c =>
+      `${c.name.padEnd(40)} = ${c.value}${c.httpOnly ? ' [httpOnly]' : ''}`
+    ).join('\n') || 'Кук нет — авторизация не прошла';
+  } catch(e) {
+    statusEl.style.color = 'var(--error)';
+    statusEl.textContent = '✗ ' + e.message;
+  }
+}
+
+async function debugLoginPage() {
+  const statusEl = document.getElementById('diagStatus');
+  const resultEl = document.getElementById('diagResult');
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = '⏳ Загружаем страницу логина...';
+  resultEl.textContent = '';
+  try {
+    const r = await get('/diag/login-page');
+    statusEl.style.color = r.error ? 'var(--error)' : 'var(--ok)';
+    statusEl.textContent = r.error
+      ? '✗ Ошибка: ' + r.error
+      : `HTTP ${r.statusCode} — HTML ${r.htmlLength} байт`;
+
+    if (r.inputTags?.length) {
+      resultEl.textContent =
+        '=== INPUT ТЕГИ (важно!) ===\n' +
+        r.inputTags.join('\n') +
+        '\n\n=== HTML (первые 3000 символов) ===\n' +
+        (r.htmlPreview || '');
+    } else {
+      resultEl.textContent = r.htmlPreview || r.error || JSON.stringify(r, null, 2);
+    }
+  } catch(e) {
+    statusEl.style.color = 'var(--error)';
+    statusEl.textContent = '✗ ' + e.message;
+    resultEl.textContent = e.message;
+  }
+}
+
+async function probeQuick(path) {
+  document.getElementById('diagPath').value = path;
+  await probe();
+}
+
+async function probe() {
+  const path = document.getElementById('diagPath').value.trim();
+  if (!path) { toast('Введите путь', 'err'); return; }
+  _lastProbedPath = path;
+  const statusEl = document.getElementById('diagStatus');
+  const resultEl = document.getElementById('diagResult');
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = '⏳ Запрос...';
+  resultEl.textContent = '';
+  try {
+    const r = await get(`/diag/probe?path=${encodeURIComponent(path)}`);
+    statusEl.style.color = r.ok ? 'var(--ok)' : 'var(--error)';
+    statusEl.textContent = `HTTP ${r.status} ${r.ok ? '✓ Успешно' : '✗ Ошибка'}`;
+    resultEl.textContent = r.body;
+  } catch(e) {
+    statusEl.style.color = 'var(--error)';
+    statusEl.textContent = 'Ошибка: ' + e.message;
+    resultEl.textContent = e.message;
+  }
+}
+
+async function applyPath(type) {
+  if (!_lastProbedPath) { toast('Сначала сделайте запрос', 'err'); return; }
+  const cleanPath = _lastProbedPath.split('?')[0];
+  const map = { components: 'apiComponents', folders: 'apiFolders', projects: 'apiProjects' };
+  document.getElementById(map[type]).value = cleanPath;
+  toast(`Путь сохранён для "${type}". Не забудьте нажать Сохранить настройки`);
+  goto('settings');
+}
+
+
+
+// ── Full sync ─────────────────────────────────────────────────────────────────
+async function runFullSync() {
+  const btn = document.getElementById('globalSyncBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Синхронизация...';
+  try {
+    await post('/folders/sync');
+    await post('/components/sync');
+    toast('Синхронизация завершена');
+    loadDashboard();
+  } catch(e) {
+    toast('Ошибка: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Синхронизировать';
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fmtDate(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  return d.toLocaleDateString('ru') + ' ' + d.toLocaleTimeString('ru', {hour:'2-digit',minute:'2-digit'});
+}
+
+function badgeStatus(s) {
+  const map = {
+    Synced:   'badge-synced',
+    Imported: 'badge-imported',
+    Pending:  'badge-pending',
+    Error:    'badge-error',
+    Skipped:  'badge-skipped',
+  };
+  return `<span class="badge ${map[s] || 'badge-skipped'}">${s}</span>`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadDashboard();
+</script>
+</body>
+</html>
