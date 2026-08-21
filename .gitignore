@@ -10,3 +10,6 @@ publish/
 # (https://github.com/Altair666/widget_report_grist) и в сборке основного Grist.
 # Создаётся скриптом tools/update-widget.bat
 wwwroot/widget/
+
+# Локальные вспомогательные скрипты стенда (в репозиторий не входят)
+.local-tools/

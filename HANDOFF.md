@@ -137,35 +137,18 @@ article, name, manufacturer, barcode, qty, extra1, extra2, extra3, updated_at
 (⚙: Server URL / API Key / Endpoint) там уже есть, `syncLabels()` шлёт
 `{items:[{date, product_code, mode_code}]}`.
 
-Копия виджета может лежать и у нас — , байт-в-байт из его
+Копия виджета может лежать и у нас — `wwwroot/widget/index.html`, байт-в-байт из его
 репозитория. **В этот репозиторий она НЕ коммитится** (в .gitignore): виджет живёт в своём
-репозитории и в сборке основного Grist. Копия нужна только для локальной отладки на этом
-стенде: GitHub Pages отдаёт виджет по https, AltiumSync слушает http://…:5000, и браузер
-режет такой запрос как mixed content — кнопка «Синхронизация» молча падает в
-, до сервера не доходит ничего. Копия с того же origin, что и API, этой
-проблемы не имеет. В бою вопрос не встаёт: там виджет отдаётся самим Grist (db.mp-lab.ru),
-то есть тем же https-origin, что и страница.
+репозитории и в сборке основного Grist. Копия нужна только для локальной отладки стенда:
+GitHub Pages отдаёт виджет по https, AltiumSync слушает http://…:5000, и браузер режет
+такой запрос как mixed content — кнопка «Синхронизация» молча падает в `Failed to fetch`,
+до сервера не доходит ничего (в логе запросов пусто — ни POST, ни OPTIONS). Копия с того же
+origin, что и API, этой проблемы не имеет. В бою вопрос не встаёт: там виджет отдаётся самим
+Grist (db.mp-lab.ru), то есть с того же https-origin, что и страница.
 
-Создать/обновить копию —  (git pull в репозитории виджета +
-copy index.html), затем .
-
-## Отладочный стенд (2026-08-21)
-
-- **Grist** — docker в WSL (Ubuntu-24.04), контейнер `grist-local`, http://localhost:8484.
-  Данные в именованном томе `grist-data` → `/persist` (`/persist/docs/*.grist`,
-  `/persist/home.sqlite3`). Переживают restart контейнера, WSL и перезагрузку сервера
-  (`--restart unless-stopped`, systemd+docker enabled). Потерять данные можно только запустив
-  контейнер без `-v grist-data:/persist` или удалив том. Поэтому поднимать только через
-  `/opt/grist/grist-up.sh`; снапшот тома — `/opt/grist/grist-backup.sh`.
-- **Документ** — «LMP ЕСКД», импортирован из облака (docs.getgrist.com, org `lmp-test-dec`,
-  id `5GtDphApyrjGhtvAvJRZsv`) целиком, вместе со страницами, шаблонами этикеток и данными.
-  Локальный id — `bAfvnQAFcaMeUBEWgPTUfS`, workspace Home, пользователь ajitaup@gmail.com.
-  Импорт делался через `POST /dw/self/v/unknown/uploads` → `POST /api/workspaces/2/import`
-  (просто `/uploads` отдаёт 404 — нужен self-prefix воркера из `GET /api/worker/uploads`).
-- **Виджет в этом документе** уже перенастроен на стенд: URL
-  `http://192.168.88.238:5000/widget/`, опции `syncServerUrl` / `syncApiKey` / `syncEndpoint`
-  проставлены. Если панель ⚙ окажется пустой — вбить руками, Grist мог не подхватить
-  предзаполненные опции.
+Копия и скрипт её обновления в репозиторий не входят — здесь только сервис.
+Скрипт стенда лежит рядом, вне git: `.local-tools\update-widget.bat`
+(git pull в репозитории виджета + copy index.html), после него — `deploy.bat`.
 
 ## Правила которые соблюдались весь проект (сохранить в CLI-сессии)
 
