@@ -45,6 +45,17 @@ public class SyncMenuContributor : IMenuContributor
             )
         );
 
+        context.Menu.Items.Insert(
+            2,
+            new ApplicationMenuItem(
+                SyncMenus.Connections,
+                "Подключения",
+                "/connections",
+                icon: "fas fa-plug",
+                order: 2
+            )
+        );
+
         if (MultiTenancyConsts.IsEnabled)
         {
             administration.SetSubItemOrder(TenantManagementMenuNames.GroupName, 1);

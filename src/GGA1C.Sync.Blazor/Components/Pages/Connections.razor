@@ -1,0 +1,164 @@
+@page "/connections"
+@attribute [Authorize]
+@using GGA1C.Sync.Connections
+@inherits SyncComponentBase
+
+<MudText Typo="Typo.h5" Class="mb-4">Подключения</MudText>
+
+<MudCard>
+    <MudCardContent>
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4">
+
+            <MudTabPanel Text="Altium Enterprise Server" Icon="@Icons.Material.Filled.Memory">
+                <MudGrid>
+                    <MudItem xs="12" md="8">
+                        <MudTextField @bind-Value="Model.AltiumServerUrl" Label="Адрес сервера"
+                                      Placeholder="https://altium.example.local"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="Model.AltiumUser" Label="Пользователь"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="Model.AltiumPassword" Label="Пароль"
+                                      InputType="InputType.Password" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" T="string"
+                                      HelperText="@SecretHint(Model.HasAltiumPassword)" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="Model.AltiumLifecycleFilter" Label="Фильтр состояния жизненного цикла"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string"
+                                      HelperText="Пусто — брать все состояния" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="Model.AltiumBrowserCookies" Label="Куки браузера"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string"
+                                      Lines="3"
+                                      HelperText="@SecretHint(Model.HasAltiumBrowserCookies)" />
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2">
+                            Временный обход нерешённой проблемы: с собственной программной сессией
+                            Altium отдаёт первые 50 компонентов, игнорируя <code>tag</code> и
+                            <code>start</code>. С настоящими куками браузера те же запросы
+                            отвечают правильно. Копировать заголовок <code>Cookie</code> из DevTools;
+                            живёт примерно сутки, пока жива сессия на стороне Altium.
+                        </MudAlert>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="Model.AltiumApiComponents" Label="API компонентов"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="Model.AltiumApiFolders" Label="API папок (тегов)"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="Model.AltiumApiProjects" Label="API проектов"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Info"
+                                   StartIcon="@Icons.Material.Filled.NetworkCheck"
+                                   OnClick="TestAltiumAsync" Disabled="@Busy">
+                            Проверить связь с Altium
+                        </MudButton>
+                        @if (AltiumResult != null)
+                        {
+                            <MudAlert Class="mt-3"
+                                      Severity="@(AltiumResult.Ok ? Severity.Success : Severity.Error)"
+                                      Variant="Variant.Outlined">
+                                @AltiumResult.Message
+                            </MudAlert>
+                        }
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+            <MudTabPanel Text="1С" Icon="@Icons.Material.Filled.AccountBalance">
+                <MudGrid>
+                    <MudItem xs="12" md="8">
+                        <MudTextField @bind-Value="Model.OnecServerUrl" Label="Адрес сервера 1С"
+                                      Placeholder="http://1c.example.local"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="Model.OnecBaseName" Label="Имя базы"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="Model.OnecUser" Label="Пользователь"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" T="string" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="Model.OnecPassword" Label="Пароль"
+                                      InputType="InputType.Password" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" T="string"
+                                      HelperText="@SecretHint(Model.HasOnecPassword)" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Обмен идёт через автоматический REST-интерфейс OData, он должен быть
+                            опубликован на веб-сервере. Через OData недоступны отчёты,
+                            регламентные задания и журнал регистрации — для справочников и
+                            спецификаций этого достаточно.
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Info"
+                                   StartIcon="@Icons.Material.Filled.NetworkCheck"
+                                   OnClick="TestOneCAsync" Disabled="@Busy">
+                            Проверить связь с 1С
+                        </MudButton>
+                        @if (OnecResult != null)
+                        {
+                            <MudAlert Class="mt-3"
+                                      Severity="@(OnecResult.Ok ? Severity.Success : Severity.Error)"
+                                      Variant="Variant.Outlined">
+                                @OnecResult.Message
+                            </MudAlert>
+                        }
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Синхронизация" Icon="@Icons.Material.Filled.Sync">
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudSwitch @bind-Value="Model.AutoSyncEnabled" Color="Color.Primary" T="bool"
+                                   Label="Автоматическая синхронизация по расписанию" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudNumericField @bind-Value="Model.IntervalMinutes" Label="Интервал, минут"
+                                         Min="1" Max="1440" Variant="Variant.Outlined"
+                                         Margin="Margin.Dense" T="int" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudSelect @bind-Value="Model.DefaultSyncAction" Label="Действие по умолчанию"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" T="string">
+                            <MudSelectItem Value="@("Skip")">Skip — пропускать</MudSelectItem>
+                            <MudSelectItem Value="@("Update")">Update — обновлять</MudSelectItem>
+                            <MudSelectItem Value="@("New")">New — создавать новое</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                            Интервал перечитывается на каждом тике, поэтому новое расписание
+                            подхватывается без перезапуска сервиса. Если адреса Altium или 1С
+                            не заданы, тик пропускается с предупреждением в журнале.
+                        </MudAlert>
+                    </MudItem>
+                </MudGrid>
+            </MudTabPanel>
+
+        </MudTabs>
+
+        <MudDivider Class="my-4" />
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAsync" Disabled="@Busy">Сохранить</MudButton>
+    </MudCardContent>
+</MudCard>
