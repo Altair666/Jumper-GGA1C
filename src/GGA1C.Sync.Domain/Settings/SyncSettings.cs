@@ -4,6 +4,9 @@ public static class SyncSettings
 {
     private const string Prefix = "Sync";
 
-    //Add your own setting names here. Example:
-    //public const string MySetting1 = Prefix + ".MySetting1";
+    /// <summary>
+    /// Ключ, которым виджет Grist подписывает запросы к буферу этикеток.
+    /// Хранится шифрованным (см. SyncSettingDefinitionProvider) и клиентам не отдаётся.
+    /// </summary>
+    public const string GristApiKey = Prefix + ".GristApiKey";
 }
