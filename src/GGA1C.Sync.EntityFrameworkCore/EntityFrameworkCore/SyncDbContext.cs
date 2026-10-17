@@ -1,9 +1,11 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using GGA1C.Sync.Altium;
+using Microsoft.EntityFrameworkCore;
 using Volo.Abp.AuditLogging.EntityFrameworkCore;
 using Volo.Abp.BackgroundJobs.EntityFrameworkCore;
 using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.EntityFrameworkCore;
+using Volo.Abp.EntityFrameworkCore.Modeling;
 using Volo.Abp.FeatureManagement.EntityFrameworkCore;
 using Volo.Abp.Identity;
 using Volo.Abp.Identity.EntityFrameworkCore;
@@ -24,6 +26,11 @@ public class SyncDbContext :
     ITenantManagementDbContext
 {
     /* Add DbSet properties for your Aggregate Roots / Entities here. */
+
+    public DbSet<ComponentMap> ComponentMaps { get; set; }
+    public DbSet<FolderMap> FolderMaps { get; set; }
+    public DbSet<ProjectMap> ProjectMaps { get; set; }
+    public DbSet<SyncLogEntry> SyncLog { get; set; }
 
     #region Entities from the modules
 
@@ -76,11 +83,66 @@ public class SyncDbContext :
 
         /* Configure your own tables/entities inside here */
 
-        //builder.Entity<YourEntity>(b =>
-        //{
-        //    b.ToTable(SyncConsts.DbTablePrefix + "YourEntities", SyncConsts.DbSchema);
-        //    b.ConfigureByConvention(); //auto configure for the base class props
-        //    //...
-        //});
+        builder.Entity<ComponentMap>(b =>
+        {
+            b.ToTable(SyncConsts.DbTablePrefix + "ComponentMaps", SyncConsts.DbSchema);
+            b.ConfigureByConvention();
+
+            // Ключ сопоставления - AltiumId (вид R_...): именно по нему прежняя версия
+            // сервиса делала upsert, и именно он приходит во всех ответах API Altium.
+            // ItemGUID есть не всегда, поэтому он просто индексирован, а не уникален.
+            b.HasIndex(x => x.AltiumId).IsUnique();
+            b.HasIndex(x => x.AltiumItemGuid);
+            b.Property(x => x.AltiumId).HasMaxLength(128).IsRequired();
+            b.Property(x => x.AltiumItemGuid).HasMaxLength(64);
+            b.Property(x => x.AltiumName).HasMaxLength(256);
+            b.Property(x => x.AltiumPath).HasMaxLength(512);
+            b.Property(x => x.Article).HasMaxLength(256);
+            b.Property(x => x.Manufacturer).HasMaxLength(256);
+            b.Property(x => x.Name1C).HasMaxLength(512);
+            b.Property(x => x.OnecGuid).HasMaxLength(64);
+            b.Property(x => x.SyncStatus).HasMaxLength(32).IsRequired();
+        });
+
+        builder.Entity<FolderMap>(b =>
+        {
+            b.ToTable(SyncConsts.DbTablePrefix + "FolderMaps", SyncConsts.DbSchema);
+            b.ConfigureByConvention();
+
+            b.HasIndex(x => x.AltiumFolderId).IsUnique();
+            b.Property(x => x.AltiumFolderId).HasMaxLength(64).IsRequired();
+            b.Property(x => x.AltiumFolderPath).HasMaxLength(512);
+            b.Property(x => x.OnecGroupGuid).HasMaxLength(64);
+            b.Property(x => x.OnecGroupPath).HasMaxLength(512);
+        });
+
+        builder.Entity<ProjectMap>(b =>
+        {
+            b.ToTable(SyncConsts.DbTablePrefix + "ProjectMaps", SyncConsts.DbSchema);
+            b.ConfigureByConvention();
+
+            // Уникальна ПАРА проект+ревизия: у одного проекта живут несколько ревизий
+            // одновременно, и каждая синхронизируется отдельно.
+            b.HasIndex(x => new { x.AltiumProjectId, x.AltiumRevision }).IsUnique();
+            b.Property(x => x.AltiumProjectId).HasMaxLength(128).IsRequired();
+            b.Property(x => x.AltiumProjectName).HasMaxLength(256);
+            b.Property(x => x.AltiumRevision).HasMaxLength(64);
+            b.Property(x => x.SyncAction).HasMaxLength(32).IsRequired();
+            b.Property(x => x.SyncStatus).HasMaxLength(32).IsRequired();
+        });
+
+        builder.Entity<SyncLogEntry>(b =>
+        {
+            b.ToTable(SyncConsts.DbTablePrefix + "SyncLog", SyncConsts.DbSchema);
+            b.ConfigureByConvention();
+
+            // Журнал читается почти всегда «последние записи сверху»
+            b.HasIndex(x => x.Timestamp);
+            b.Property(x => x.EntityType).HasMaxLength(32).IsRequired();
+            b.Property(x => x.EntityId).HasMaxLength(128);
+            b.Property(x => x.EntityName).HasMaxLength(256);
+            b.Property(x => x.Action).HasMaxLength(32).IsRequired();
+            b.Property(x => x.Status).HasMaxLength(16).IsRequired();
+        });
     }
 }
