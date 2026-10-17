@@ -1,0 +1,99 @@
+@page "/labels"
+@attribute [Authorize]
+@using GGA1C.Sync.Labels
+@inherits SyncComponentBase
+
+<MudText Typo="Typo.h5" Class="mb-4">Grist → GoLabel2</MudText>
+
+<MudCard Class="mb-4">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-2">Ключ для виджета Grist</MudText>
+
+        <MudGrid Spacing="2" Class="align-center mb-2">
+            <MudItem xs="12" md="8">
+                <MudTextField Value="@ApiKey" ReadOnly="true" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Label="Sync.GristApiKey" T="string" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudButton Variant="Variant.Filled" Color="Color.Warning"
+                           StartIcon="@Icons.Material.Filled.Autorenew"
+                           OnClick="RegenerateKeyAsync">Перевыпустить</MudButton>
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            В настройках виджета (⚙) указать: <b>Server URL</b> — адрес этого сервера,
+            <b>API Key</b> — ключ выше, <b>Endpoint</b> —
+            <code>/api/grist/labels/replace-all</code>. Ключ принимается и как
+            <code>Authorization: Bearer</code>, и как <code>X-Api-Key</code>.
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
+            После перевыпуска старый ключ сразу перестаёт работать — его нужно обновить
+            в виджете, иначе синхронизация начнёт отвечать 401.
+        </MudText>
+    </MudCardContent>
+</MudCard>
+
+<MudCard>
+    <MudCardContent>
+        <MudGrid Spacing="2" Class="align-center mb-3">
+            <MudItem>
+                <MudText Typo="Typo.h6">Буфер этикеток</MudText>
+            </MudItem>
+            <MudItem>
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">
+                    записей: @Rows.Count
+                </MudChip>
+            </MudItem>
+            <MudSpacer />
+            <MudItem>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadAsync">Обновить</MudButton>
+            </MudItem>
+            <MudItem>
+                <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.DeleteSweep"
+                           OnClick="ClearAsync">Очистить</MudButton>
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Файл буфера: <code>@BufferPath</code> — отдельная база SQLite, её читает
+            GoLabel2 через ODBC. Каждая синхронизация из виджета заменяет содержимое целиком.
+        </MudText>
+
+        @if (Rows.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Буфер пуст — Grist ещё ничего не присылал, либо последняя синхронизация
+                отправила пустой набор.
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@Rows" Dense="true" Hover="true" Striped="true" T="LabelRecord">
+                <HeaderContent>
+                    <MudTh>Дата</MudTh>
+                    <MudTh>Код изделия</MudTh>
+                    <MudTh>Код исполнения</MudTh>
+                    <MudTh>External ID</MudTh>
+                    <MudTh>Обновлено</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Дата">@context.Date</MudTd>
+                    <MudTd DataLabel="Код изделия">@context.ProductCode</MudTd>
+                    <MudTd DataLabel="Код исполнения">@context.ModeCode</MudTd>
+                    <MudTd DataLabel="External ID">
+                        <MudText Typo="Typo.caption">@context.ExternalId</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Обновлено">
+                        <MudText Typo="Typo.caption">
+                            @context.UpdatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")
+                        </MudText>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudCardContent>
+</MudCard>

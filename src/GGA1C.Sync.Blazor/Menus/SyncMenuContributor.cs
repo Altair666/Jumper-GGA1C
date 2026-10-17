@@ -34,6 +34,17 @@ public class SyncMenuContributor : IMenuContributor
             )
         );
 
+        context.Menu.Items.Insert(
+            1,
+            new ApplicationMenuItem(
+                SyncMenus.Labels,
+                "Grist → GoLabel2",
+                "/labels",
+                icon: "fas fa-tags",
+                order: 1
+            )
+        );
+
         if (MultiTenancyConsts.IsEnabled)
         {
             administration.SetSubItemOrder(TenantManagementMenuNames.GroupName, 1);
