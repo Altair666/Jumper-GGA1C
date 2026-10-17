@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>GGA1C.Sync</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GGA1C.Sync.Domain\GGA1C.Sync.Domain.csproj" />
+    <ProjectReference Include="..\GGA1C.Sync.Application.Contracts\GGA1C.Sync.Application.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Volo.Abp.Account.Application" Version="10.7.0" />
+    <PackageReference Include="Volo.Abp.Identity.Application" Version="10.7.0" />
+    <PackageReference Include="Volo.Abp.PermissionManagement.Application" Version="10.7.0" />
+    <PackageReference Include="Volo.Abp.TenantManagement.Application" Version="10.7.0" />
+    <PackageReference Include="Volo.Abp.FeatureManagement.Application" Version="10.7.0" />
+    <PackageReference Include="Volo.Abp.SettingManagement.Application" Version="10.7.0" />
+  </ItemGroup>
+
+</Project>

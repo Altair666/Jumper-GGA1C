@@ -1,0 +1,35 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GGA1C.Sync.Application.Contracts/GGA1C.Sync.Application.Contracts.csproj" />
+    <Project Path="src/GGA1C.Sync.Application/GGA1C.Sync.Application.csproj" />
+    
+    
+    
+    <Project Path="src/GGA1C.Sync.Blazor/GGA1C.Sync.Blazor.csproj" />
+    
+    
+    
+    
+    
+    <Project Path="src/GGA1C.Sync.DbMigrator/GGA1C.Sync.DbMigrator.csproj" />
+    <Project Path="src/GGA1C.Sync.Domain.Shared/GGA1C.Sync.Domain.Shared.csproj" />
+    <Project Path="src/GGA1C.Sync.Domain/GGA1C.Sync.Domain.csproj" />
+    <Project Path="src/GGA1C.Sync.EntityFrameworkCore/GGA1C.Sync.EntityFrameworkCore.csproj" />
+    <Project Path="src/GGA1C.Sync.HttpApi.Client/GGA1C.Sync.HttpApi.Client.csproj" />
+    
+    
+    <Project Path="src/GGA1C.Sync.HttpApi/GGA1C.Sync.HttpApi.csproj" />
+    
+    
+    
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/GGA1C.Sync.Application.Tests/GGA1C.Sync.Application.Tests.csproj" />
+    <Project Path="test/GGA1C.Sync.Domain.Tests/GGA1C.Sync.Domain.Tests.csproj" />
+    <Project Path="test/GGA1C.Sync.EntityFrameworkCore.Tests/GGA1C.Sync.EntityFrameworkCore.Tests.csproj" />
+    <Project Path="test/GGA1C.Sync.HttpApi.Client.ConsoleTestApp/GGA1C.Sync.HttpApi.Client.ConsoleTestApp.csproj" />
+    
+    <Project Path="test/GGA1C.Sync.TestBase/GGA1C.Sync.TestBase.csproj" />
+    
+  </Folder>
+</Solution>

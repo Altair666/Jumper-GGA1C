@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>GGA1C.Sync</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GGA1C.Sync.Domain\GGA1C.Sync.Domain.csproj" />
+    <ProjectReference Include="..\GGA1C.Sync.TestBase\GGA1C.Sync.TestBase.csproj" />
+  </ItemGroup>
+
+</Project>
