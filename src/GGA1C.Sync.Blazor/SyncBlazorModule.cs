@@ -32,6 +32,8 @@ using Volo.Abp.AspNetCore.Serilog;
 using Volo.Abp.Autofac;
 using Volo.Abp.Mapperly;
 using Volo.Abp.Identity.Blazor.MudBlazor.Server;
+using System.Threading.Tasks;
+using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Modularity;
 using Volo.Abp.Security.Claims;
 using Volo.Abp.SettingManagement.Blazor.MudBlazor.Server;
@@ -253,6 +255,10 @@ public class SyncBlazorModule : AbpModule
             app.UseMultiTenancy();
         }
         app.UseUnitOfWork();
+
+        // После UseUnitOfWork намеренно: прослойка пишет в базу, и ей нужна
+        // единица работы, которую заводит предыдущая строка.
+        app.UseMiddleware<GGA1C.Sync.Middleware.RequestLoggerMiddleware>();
         app.UseDynamicClaims();
         app.UseAuthorization();
         app.UseAntiforgery();
@@ -269,5 +275,12 @@ public class SyncBlazorModule : AbpModule
                 .AddInteractiveServerRenderMode()
                 .AddAdditionalAssemblies(builder.ServiceProvider.GetRequiredService<IOptions<AbpRouterOptions>>().Value.AdditionalAssemblies.ToArray());
         });
+    }
+    public override async Task OnPostApplicationInitializationAsync(
+        ApplicationInitializationContext context)
+    {
+        // Работник сам проверяет на каждом тике, включена ли автосинхронизация и заданы ли
+        // адреса, поэтому регистрируем его безусловно - настройка правится в интерфейсе.
+        await context.AddBackgroundWorkerAsync<GGA1C.Sync.Sync.AutoSyncWorker>();
     }
 }

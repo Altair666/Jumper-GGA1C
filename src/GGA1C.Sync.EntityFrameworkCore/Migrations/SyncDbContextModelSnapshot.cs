@@ -103,10 +103,10 @@ namespace GGA1C.Sync.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AltiumId");
-
-                    b.HasIndex("AltiumItemGuid")
+                    b.HasIndex("AltiumId")
                         .IsUnique();
+
+                    b.HasIndex("AltiumItemGuid");
 
                     b.ToTable("AppComponentMaps", (string)null);
                 });
@@ -227,7 +227,7 @@ namespace GGA1C.Sync.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AltiumProjectId")
+                    b.HasIndex("AltiumProjectId", "AltiumRevision")
                         .IsUnique();
 
                     b.ToTable("AppProjectMaps", (string)null);
@@ -275,6 +275,45 @@ namespace GGA1C.Sync.Migrations
                     b.HasIndex("Timestamp");
 
                     b.ToTable("AppSyncLog", (string)null);
+                });
+
+            modelBuilder.Entity("GGA1C.Sync.Diagnostics.RequestLogItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Headers")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Id");
+
+                    b.ToTable("AppRequestLog", (string)null);
                 });
 
             modelBuilder.Entity("Volo.Abp.AuditLogging.AuditLog", b =>

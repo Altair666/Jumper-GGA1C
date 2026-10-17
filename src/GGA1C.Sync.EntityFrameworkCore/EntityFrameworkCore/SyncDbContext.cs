@@ -1,4 +1,5 @@
 ﻿using GGA1C.Sync.Altium;
+using GGA1C.Sync.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Volo.Abp.AuditLogging.EntityFrameworkCore;
 using Volo.Abp.BackgroundJobs.EntityFrameworkCore;
@@ -31,6 +32,7 @@ public class SyncDbContext :
     public DbSet<FolderMap> FolderMaps { get; set; }
     public DbSet<ProjectMap> ProjectMaps { get; set; }
     public DbSet<SyncLogEntry> SyncLog { get; set; }
+    public DbSet<RequestLogItem> RequestLog { get; set; }
 
     #region Entities from the modules
 
@@ -129,6 +131,17 @@ public class SyncDbContext :
             b.Property(x => x.AltiumRevision).HasMaxLength(64);
             b.Property(x => x.SyncAction).HasMaxLength(32).IsRequired();
             b.Property(x => x.SyncStatus).HasMaxLength(32).IsRequired();
+        });
+
+        builder.Entity<RequestLogItem>(b =>
+        {
+            b.ToTable(SyncConsts.DbTablePrefix + "RequestLog", SyncConsts.DbSchema);
+            b.ConfigureByConvention();
+
+            b.HasIndex(x => x.Id);
+            b.Property(x => x.Source).HasMaxLength(32).IsRequired();
+            b.Property(x => x.Method).HasMaxLength(16).IsRequired();
+            b.Property(x => x.Path).HasMaxLength(2048).IsRequired();
         });
 
         builder.Entity<SyncLogEntry>(b =>
