@@ -48,10 +48,10 @@ public class SyncMenuContributor : IMenuContributor
         context.Menu.Items.Insert(
             2,
             new ApplicationMenuItem(
-                SyncMenus.Connections,
-                "Подключения",
-                "/connections",
-                icon: "fas fa-plug",
+                SyncMenus.Altium1C,
+                "Altium → 1С",
+                "/altium-1c",
+                icon: "fas fa-microchip",
                 order: 2
             )
         );

@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Components;
 // Components/Pages, иначе partial-класс не склеится с компонентом.
 namespace GGA1C.Sync.Blazor.Components.Pages;
 
-public partial class Connections
+public partial class Altium1C
 {
     [Inject] private IConnectionsAppService ConnectionsAppService { get; set; } = default!;
 
