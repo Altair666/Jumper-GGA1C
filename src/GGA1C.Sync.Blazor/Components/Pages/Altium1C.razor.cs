@@ -23,10 +23,14 @@ public partial class Altium1C
         Model = await ConnectionsAppService.GetAsync();
     }
 
-    private static string SecretHint(bool stored)
+    /// <summary>
+    /// Что показать под полем секрета. В поле ровно столько точек, сколько знаков в
+    /// сохранённом значении: оставить точки - не менять, стереть - удалить значение.
+    /// </summary>
+    private static string SecretHint(bool stored, string value)
     {
         return stored
-            ? "Значение сохранено. Пустое поле — оставить как есть"
+            ? $"Сохранено, знаков: {value.Length}. Сотрите точки, чтобы удалить"
             : "Не задано";
     }
 

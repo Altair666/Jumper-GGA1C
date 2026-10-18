@@ -61,4 +61,12 @@ public interface ILabelClientStore
     /// в открытом виде они не попадают ни в базу, ни обратно в интерфейс.
     /// </summary>
     Task SetCredentialsAsync(int id, AccountCredentials input);
+
+    /// <summary>
+    /// Учётные данные в открытом виде. Расшифровка живёт здесь, потому что ключ шифрования
+    /// есть только у хранилища. Слой приложения наружу отдаёт не эти значения, а маски их
+    /// длины; сами значения понадобятся потокам, которые ходят в Altium и PDM от имени
+    /// человека.
+    /// </summary>
+    Task<AccountCredentials> RevealCredentialsAsync(int id);
 }

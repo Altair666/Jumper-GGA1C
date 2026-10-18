@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using GGA1C.Sync.Altium;
 using GGA1C.Sync.OneC;
+using GGA1C.Sync.Secrets;
 using GGA1C.Sync.Settings;
 using GGA1C.Sync.Sync;
 using Microsoft.AspNetCore.Authorization;
@@ -37,9 +38,11 @@ public class ConnectionsAppService : ApplicationService, IConnectionsAppService
 
     public async Task<ConnectionSettingsDto> GetAsync()
     {
-        var altiumPassword = await Get(SyncSettings.Altium.Password);
-        var altiumCookies = await Get(SyncSettings.Altium.BrowserCookies);
-        var onecPassword = await Get(SyncSettings.OneC.Password);
+        // Секреты - через ISettingProvider: шифрованные настройки расшифровывает только он,
+        // а ISettingManager отдаёт их как лежат в базе, и маска получалась длиной шифротекста.
+        var altiumPassword = await GetSecret(SyncSettings.Altium.Password);
+        var altiumCookies = await GetSecret(SyncSettings.Altium.BrowserCookies);
+        var onecPassword = await GetSecret(SyncSettings.OneC.Password);
 
         return new ConnectionSettingsDto
         {
@@ -47,9 +50,11 @@ public class ConnectionsAppService : ApplicationService, IConnectionsAppService
             AltiumUser = await Get(SyncSettings.Altium.User),
 
             // Сами секреты наружу не отдаём - только факт, что они заданы
-            AltiumPassword = "",
+            // Вместо секрета - маска его длины: значение наружу не уходит, но видно, что
+            // оно есть, и поле можно выделить и стереть, чтобы удалить значение.
+            AltiumPassword = SecretMask.For(altiumPassword),
             HasAltiumPassword = !string.IsNullOrEmpty(altiumPassword),
-            AltiumBrowserCookies = "",
+            AltiumBrowserCookies = SecretMask.For(altiumCookies),
             HasAltiumBrowserCookies = !string.IsNullOrEmpty(altiumCookies),
 
             AltiumApiComponents = await Get(SyncSettings.Altium.ApiComponents),
@@ -60,7 +65,7 @@ public class ConnectionsAppService : ApplicationService, IConnectionsAppService
             OnecServerUrl = await Get(SyncSettings.OneC.ServerUrl),
             OnecBaseName = await Get(SyncSettings.OneC.BaseName),
             OnecUser = await Get(SyncSettings.OneC.User),
-            OnecPassword = "",
+            OnecPassword = SecretMask.For(onecPassword),
             HasOnecPassword = !string.IsNullOrEmpty(onecPassword),
 
             AutoSyncEnabled = await SettingProvider.GetAsync<bool>(SyncSettings.AutoSyncEnabled),
@@ -86,12 +91,11 @@ public class ConnectionsAppService : ApplicationService, IConnectionsAppService
         await Set(SyncSettings.IntervalMinutes, input.IntervalMinutes.ToString());
         await Set(SyncSettings.DefaultSyncAction, input.DefaultSyncAction);
 
-        // Секреты перезаписываем только если в поле что-то ввели: пустое поле означает
-        // «оставить прежнее значение», иначе каждое сохранение формы стирало бы пароли,
-        // которых в ней и не было.
-        await SetIfFilled(SyncSettings.Altium.Password, input.AltiumPassword);
-        await SetIfFilled(SyncSettings.Altium.BrowserCookies, input.AltiumBrowserCookies);
-        await SetIfFilled(SyncSettings.OneC.Password, input.OnecPassword);
+        // Секреты: одни точки - поле не трогали, значение остаётся прежним; пусто -
+        // человек стёр маску, значение удаляем; иное - новое значение.
+        await SetSecret(SyncSettings.Altium.Password, input.AltiumPassword);
+        await SetSecret(SyncSettings.Altium.BrowserCookies, input.AltiumBrowserCookies);
+        await SetSecret(SyncSettings.OneC.Password, input.OnecPassword);
 
         // Клиенты держат адреса у себя, поэтому после правки их надо переконфигурировать,
         // иначе проверка связи пойдёт по старому адресу.
@@ -137,16 +141,28 @@ public class ConnectionsAppService : ApplicationService, IConnectionsAppService
         return await _settingManager.GetOrNullGlobalAsync(name) ?? "";
     }
 
+    /// <summary>Шифрованная настройка: расшифровывает её только ISettingProvider.</summary>
+    private async Task<string> GetSecret(string name)
+    {
+        return await SettingProvider.GetOrNullAsync(name) ?? "";
+    }
+
     private async Task Set(string name, string value)
     {
         await _settingManager.SetGlobalAsync(name, value ?? "");
     }
 
-    private async Task SetIfFilled(string name, string value)
+    /// <summary>
+    /// Три исхода, см. <see cref="SecretMask"/>: одни точки — поле не трогали, оставляем
+    /// прежнее значение; пусто — стёрли маску, значение удаляем; иное — новое значение.
+    /// </summary>
+    private async Task SetSecret(string name, string value)
     {
-        if (!string.IsNullOrWhiteSpace(value))
+        if (SecretMask.IsMask(value))
         {
-            await _settingManager.SetGlobalAsync(name, value);
+            return;
         }
+
+        await _settingManager.SetGlobalAsync(name, value?.Trim() ?? "");
     }
 }

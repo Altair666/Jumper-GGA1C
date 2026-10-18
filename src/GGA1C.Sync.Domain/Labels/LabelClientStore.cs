@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Domain.Services;
+using GGA1C.Sync.Secrets;
 using Volo.Abp.Security.Encryption;
 
 namespace GGA1C.Sync.Labels;
@@ -198,22 +199,41 @@ public class LabelClientStore : DomainService, ILabelClientStore
         client.AltiumLogin = Trim(input.AltiumLogin);
         client.PdmLogin = Trim(input.PdmLogin);
 
-        // Пустое поле пароля - "оставить прежний": наружу пароль не отдаётся, поэтому
-        // форма приходит пустой, и очистка по пустоте стирала бы пароль при каждом
-        // сохранении. Стереть пароль можно, удалив учётку или задав новый.
-        if (!string.IsNullOrWhiteSpace(input.AltiumPassword))
-        {
-            client.AltiumPasswordEncrypted = _encryption.Encrypt(input.AltiumPassword.Trim());
-        }
-
-        if (!string.IsNullOrWhiteSpace(input.PdmPassword))
-        {
-            client.PdmPasswordEncrypted = _encryption.Encrypt(input.PdmPassword.Trim());
-        }
+        // Пароль приходит маской своей длины (одни точки) - значит поле не трогали и
+        // прежнее значение остаётся. Пусто - человек стёр точки, пароль нужно удалить.
+        // Иное - новое значение.
+        client.AltiumPasswordEncrypted = Apply(client.AltiumPasswordEncrypted, input.AltiumPassword);
+        client.PdmPasswordEncrypted = Apply(client.PdmPasswordEncrypted, input.PdmPassword);
 
         client.CredentialsUpdatedAt = DateTime.UtcNow;
 
         await _repo.UpdateAsync(client, autoSave: true);
+    }
+
+    private string? Apply(string? current, string? entered)
+    {
+        if (SecretMask.IsMask(entered))
+        {
+            return current;
+        }
+
+        return string.IsNullOrWhiteSpace(entered) ? null : _encryption.Encrypt(entered.Trim());
+    }
+
+    public async Task<AccountCredentials> RevealCredentialsAsync(int id)
+    {
+        var client = await _repo.GetAsync(id);
+
+        return new AccountCredentials(
+            client.AltiumLogin,
+            Decrypt(client.AltiumPasswordEncrypted),
+            client.PdmLogin,
+            Decrypt(client.PdmPasswordEncrypted));
+    }
+
+    private string? Decrypt(string? encrypted)
+    {
+        return string.IsNullOrEmpty(encrypted) ? null : _encryption.Decrypt(encrypted);
     }
 
     private static string? Trim(string? value)

@@ -5,11 +5,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using GGA1C.Sync.Connections;
 using GGA1C.Sync.Keycloak;
+using GGA1C.Sync.Secrets;
 using GGA1C.Sync.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
 using Volo.Abp.SettingManagement;
+using Volo.Abp.Settings;
 
 namespace GGA1C.Sync.Labels;
 
@@ -221,6 +223,9 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             ?? throw new BusinessException("GGA1C.Sync:ClientNotFound")
                 .WithData("message", "Учётная запись не найдена");
 
+        // Расшифровка нужна ровно для длины маски - дальше открытые значения не уходят.
+        var secrets = await _clients.RevealCredentialsAsync(id);
+
         return new AccountCredentialsDto
         {
             Id = client.Id,
@@ -228,9 +233,10 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             AltiumLogin = client.AltiumLogin ?? "",
             PdmLogin = client.PdmLogin ?? "",
 
-            // Пароли наружу не отдаём - только факт, что они заданы
-            AltiumPassword = "",
-            PdmPassword = "",
+            // Вместо паролей - маски той же длины: значения наружу не уходят, но длину
+            // видно, и поле можно стереть, чтобы удалить пароль.
+            AltiumPassword = SecretMask.For(secrets.AltiumPassword),
+            PdmPassword = SecretMask.For(secrets.PdmPassword),
             HasAltiumPassword = !string.IsNullOrEmpty(client.AltiumPasswordEncrypted),
             HasPdmPassword = !string.IsNullOrEmpty(client.PdmPasswordEncrypted),
             UpdatedAt = client.CredentialsUpdatedAt
@@ -252,7 +258,10 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
     public async Task<KeycloakSettingsDto> GetKeycloakSettingsAsync()
     {
-        var secret = await Get(SyncSettings.Keycloak.ClientSecret);
+        // Через ISettingProvider, а не ISettingManager: шифрованную настройку расшифровывает
+        // только он. ISettingManager отдаёт её как лежит в базе, и маска получалась длиной
+        // шифротекста - проверено, 128 точек вместо 86.
+        var secret = await SettingProvider.GetOrNullAsync(SyncSettings.Keycloak.ClientSecret) ?? "";
 
         return new KeycloakSettingsDto
         {
@@ -260,8 +269,9 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             Realm = await Get(SyncSettings.Keycloak.Realm),
             ClientId = await Get(SyncSettings.Keycloak.ClientId),
 
-            // Секрет наружу не отдаём - только факт, что он задан
-            ClientSecret = "",
+            // Вместо секрета - маска той же длины: значение наружу не уходит, но видно,
+            // что секрет есть и какой он длины, и поле можно выделить и стереть.
+            ClientSecret = SecretMask.For(secret),
             HasClientSecret = !string.IsNullOrEmpty(secret)
         };
     }
@@ -272,11 +282,11 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         await Set(SyncSettings.Keycloak.Realm, input.Realm ?? "");
         await Set(SyncSettings.Keycloak.ClientId, input.ClientId ?? "");
 
-        // Пустое поле означает "оставить прежний секрет", иначе каждое сохранение формы
-        // стирало бы секрет, которого в ней и не было.
-        if (!string.IsNullOrWhiteSpace(input.ClientSecret))
+        // Одни точки - поле не трогали, оставляем прежний секрет. Пусто - человек стёр
+        // маску, значит секрет нужно удалить. Иное - новое значение.
+        if (!SecretMask.IsMask(input.ClientSecret))
         {
-            await Set(SyncSettings.Keycloak.ClientSecret, input.ClientSecret);
+            await Set(SyncSettings.Keycloak.ClientSecret, input.ClientSecret?.Trim() ?? "");
         }
     }
 

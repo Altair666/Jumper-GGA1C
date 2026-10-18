@@ -1,9 +1,10 @@
 namespace GGA1C.Sync.Keycloak;
 
 /// <summary>
-/// Настройки подключения к Keycloak. Секрет клиента, как и прочие секреты, не отдаётся
-/// в интерфейс: при чтении приходит пустым, а вместо значения — флаг «сохранено».
-/// Пустое поле при сохранении означает «оставить как было».
+/// Настройки подключения к Keycloak. Секрет клиента наружу не отдаётся: вместо значения
+/// приходит маска той же длины (см. <see cref="GGA1C.Sync.Secrets.SecretMask"/>), поэтому
+/// видно, что секрет есть и какой он длины. При сохранении: одни точки — оставить как было,
+/// пусто — удалить, иное — новое значение.
 /// </summary>
 public class KeycloakSettingsDto
 {
@@ -18,6 +19,7 @@ public class KeycloakSettingsDto
     /// </summary>
     public string ClientId { get; set; } = "";
 
+    /// <summary>Маска сохранённого секрета при чтении; что ввели — при сохранении.</summary>
     public string ClientSecret { get; set; } = "";
 
     public bool HasClientSecret { get; set; }

@@ -31,8 +31,9 @@
             </MudStack>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
                 Чем хаб представляется во внешних системах от имени этого человека.
-                Пароли хранятся зашифрованными и обратно в интерфейс не отдаются —
-                пустое поле означает «оставить прежний».
+                Пароли хранятся зашифрованными и обратно в интерфейс не отдаются: в поле
+                приходит столько точек, сколько в пароле знаков. Оставить точки — не менять,
+                стереть их — удалить пароль.
             </MudText>
 
             <MudGrid Spacing="2">
@@ -45,10 +46,7 @@
                     <MudTextField @bind-Value="Creds.AltiumPassword" Label="Altium Designer — пароль"
                                   T="string" InputType="InputType.Password"
                                   Variant="Variant.Outlined" Margin="Margin.Dense"
-                                  Adornment="Adornment.End"
-                                  AdornmentIcon="@StateIcon(Creds.HasAltiumPassword)"
-                                  AdornmentColor="@StateColor(Creds.HasAltiumPassword)"
-                                  HelperText="@StateHint(Creds.HasAltiumPassword)" />
+                                  HelperText="@SecretHint(Creds.HasAltiumPassword, Creds.AltiumPassword)" />
                 </MudItem>
                 <MudItem xs="12" md="6">
                     <MudTextField @bind-Value="Creds.PdmLogin" Label="SOLIDWORKS PDM — логин"
@@ -59,10 +57,7 @@
                     <MudTextField @bind-Value="Creds.PdmPassword" Label="SOLIDWORKS PDM — пароль"
                                   T="string" InputType="InputType.Password"
                                   Variant="Variant.Outlined" Margin="Margin.Dense"
-                                  Adornment="Adornment.End"
-                                  AdornmentIcon="@StateIcon(Creds.HasPdmPassword)"
-                                  AdornmentColor="@StateColor(Creds.HasPdmPassword)"
-                                  HelperText="@StateHint(Creds.HasPdmPassword)" />
+                                  HelperText="@SecretHint(Creds.HasPdmPassword, Creds.PdmPassword)" />
                 </MudItem>
             </MudGrid>
 

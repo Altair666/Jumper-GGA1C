@@ -20,8 +20,15 @@ public partial class KeycloakPage
 
     private bool Busy { get; set; }
 
+    /// <summary>
+    /// Одинаковая ширина у всех трёх кнопок, иначе они разной длины и пляшут. Отступ
+    /// сверху — чтобы кнопка стояла вровень с полем ввода, а не сползала к подписи под
+    /// ним: подпись делает поле выше кнопки.
+    /// </summary>
+    private const string ButtonWidth = "min-width: 210px; margin-top: 1px;";
+
     private string SecretHint => Kc.HasClientSecret
-        ? "Сохранён. Пустое поле — оставить как есть"
+        ? $"Сохранён, знаков: {Kc.ClientSecret.Length}. Сотрите точки, чтобы удалить"
         : "Не задан";
 
     protected override async Task OnInitializedAsync()

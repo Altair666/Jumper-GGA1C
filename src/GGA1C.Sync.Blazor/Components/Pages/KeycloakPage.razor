@@ -8,61 +8,59 @@
 <MudCard Class="mb-4">
     <MudCardContent>
         <MudText Typo="Typo.h6" Class="mb-1">Подключение</MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
             Отсюда хаб берёт список сотрудников и заводит им учётки с ключами.
             Пароли людей для этого не нужны: хаб предъявляет свой секрет и умеет только
             читать список.
         </MudText>
 
-        <MudGrid Spacing="2">
-            <MudItem xs="12" md="5">
-                <MudTextField @bind-Value="Kc.BaseUrl" Label="Адрес Keycloak" T="string"
-                              Placeholder="http://192.168.88.238:8080"
-                              Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="Без /realms" />
-            </MudItem>
-            <MudItem xs="12" md="3">
+        <MudStack Spacing="3" Style="max-width: 820px;">
+            <MudTextField @bind-Value="Kc.BaseUrl" Label="Адрес Keycloak" T="string"
+                          Placeholder="http://192.168.88.238:8080"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          HelperText="Без /realms" />
+
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
                 <MudTextField @bind-Value="Kc.Realm" Label="Реалм" T="string"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="Пространство со своими людьми" />
-            </MudItem>
-            <MudItem xs="12" md="4">
+                              HelperText="Пространство со своими людьми"
+                              Class="flex-grow-1" />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                           Disabled="@Busy" StartIcon="@Icons.Material.Filled.NetworkCheck"
+                           Style="@ButtonWidth" OnClick="TestAsync">Проверить связь</MudButton>
+            </MudStack>
+
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
                 <MudTextField @bind-Value="Kc.ClientId" Label="Клиент" T="string"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="Программа, а не человек" />
-            </MudItem>
-            <MudItem xs="12" md="6">
+                              HelperText="Программа, а не человек"
+                              Class="flex-grow-1" />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                           Disabled="@Busy" StartIcon="@Icons.Material.Filled.Sync"
+                           Style="@ButtonWidth" OnClick="SyncAsync">Синхронизировать</MudButton>
+            </MudStack>
+
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
                 <MudTextField @bind-Value="Kc.ClientSecret" Label="Секрет клиента" T="string"
                               InputType="InputType.Password"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                              Adornment="Adornment.End"
-                              AdornmentIcon="@(Kc.HasClientSecret ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.ErrorOutline)"
-                              AdornmentColor="@(Kc.HasClientSecret ? Color.Success : Color.Warning)"
-                              HelperText="@SecretHint" />
-            </MudItem>
-        </MudGrid>
-
-        <MudStack Row="true" Spacing="2" Class="mt-3 flex-wrap">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium"
-                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Save"
-                       OnClick="SaveAsync">Сохранить</MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
-                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.NetworkCheck"
-                       OnClick="TestAsync">Проверить связь</MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
-                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Sync"
-                       OnClick="SyncAsync">Синхронизировать</MudButton>
+                              HelperText="@SecretHint"
+                              Class="flex-grow-1" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium"
+                           Disabled="@Busy" StartIcon="@Icons.Material.Filled.Save"
+                           Style="@ButtonWidth" OnClick="SaveAsync">Сохранить</MudButton>
+            </MudStack>
         </MudStack>
 
         @if (Test != null)
         {
-            <MudAlert Class="mt-3" Severity="@(Test.Ok ? Severity.Success : Severity.Error)"
+            <MudAlert Class="mt-4" Severity="@(Test.Ok ? Severity.Success : Severity.Error)"
                       Variant="Variant.Outlined">@Test.Message</MudAlert>
         }
 
         @if (Report != null)
         {
-            <MudAlert Class="mt-3" Severity="@(Report.Ok ? Severity.Success : Severity.Error)"
+            <MudAlert Class="mt-4" Severity="@(Report.Ok ? Severity.Success : Severity.Error)"
                       Variant="Variant.Outlined">
                 @if (!Report.Ok)
                 {
@@ -117,9 +115,9 @@
                     <td style="vertical-align: top;"><b>Секрет</b></td>
                     <td>
                         Пароль самой программы. Хранится в базе зашифрованным и наружу не
-                        отдаётся — поэтому поле всегда пустое, даже когда секрет задан; значок
-                        в поле показывает, задан он или нет. Пустое поле при сохранении
-                        означает «оставить прежний».
+                        отдаётся: в поле приходит столько точек, сколько в нём знаков. Точки
+                        можно выделить и стереть — тогда сохранение удалит секрет; оставленные
+                        как есть точки означают «не менять».
                     </td>
                 </tr>
                 <tr>

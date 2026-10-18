@@ -261,13 +261,16 @@ public class SyncBlazorModule : AbpModule
         //
         // Папка намеренно вне репозитория: виджет живёт в своём репозитории и в сборке
         // основного Grist, здесь только отладочная копия.
+        // Адрес намеренно повторяет имя репозитория виджета
+        // (/widget_report_grist/index.html): он прописан в настройках секции Grist, и по
+        // нему должно быть видно, что это именно тот виджет, а не какая-то наша страница.
         var widgetPath = appConfiguration["Widget:LocalPath"];
         if (!string.IsNullOrWhiteSpace(widgetPath) && Directory.Exists(widgetPath))
         {
             app.UseStaticFiles(new StaticFileOptions
             {
                 FileProvider = new PhysicalFileProvider(widgetPath),
-                RequestPath = "/widget"
+                RequestPath = "/widget_report_grist"
             });
         }
 

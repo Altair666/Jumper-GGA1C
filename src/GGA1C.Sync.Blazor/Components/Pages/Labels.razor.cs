@@ -258,14 +258,15 @@ public partial class Labels
 
     // ── Мелочи для разметки ───────────────────────────────────────────────────
 
-    private static string StateIcon(bool has) => has
-        ? Icons.Material.Filled.CheckCircle
-        : Icons.Material.Filled.ErrorOutline;
-
     private static Color StateColor(bool has) => has ? Color.Success : Color.Default;
 
-    private static string StateHint(bool has) => has
-        ? "Задан. Пустое поле — оставить как есть"
+    /// <summary>
+    /// Что показать под полем пароля. Точек в поле ровно столько, сколько знаков в
+    /// сохранённом пароле, поэтому подсказка говорит, что с ними можно сделать: оставить
+    /// как есть - не менять, стереть - удалить пароль.
+    /// </summary>
+    private static string SecretHint(bool has, string value) => has
+        ? $"Сохранён, знаков: {value.Length}. Сотрите точки, чтобы удалить"
         : "Не задан";
 
     private static string FormatWhen(DateTime? utc)

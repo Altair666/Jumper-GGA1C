@@ -24,7 +24,7 @@
                         <MudTextField @bind-Value="Model.AltiumPassword" Label="Пароль"
                                       InputType="InputType.Password" Variant="Variant.Outlined"
                                       Margin="Margin.Dense" T="string"
-                                      HelperText="@SecretHint(Model.HasAltiumPassword)" />
+                                      HelperText="@SecretHint(Model.HasAltiumPassword, Model.AltiumPassword)" />
                     </MudItem>
                     <MudItem xs="12" md="6">
                         <MudTextField @bind-Value="Model.AltiumLifecycleFilter" Label="Фильтр состояния жизненного цикла"
@@ -36,7 +36,7 @@
                         <MudTextField @bind-Value="Model.AltiumBrowserCookies" Label="Куки браузера"
                                       Variant="Variant.Outlined" Margin="Margin.Dense" T="string"
                                       Lines="3"
-                                      HelperText="@SecretHint(Model.HasAltiumBrowserCookies)" />
+                                      HelperText="@SecretHint(Model.HasAltiumBrowserCookies, Model.AltiumBrowserCookies)" />
                         <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2">
                             Временный обход нерешённой проблемы: с собственной программной сессией
                             Altium отдаёт первые 50 компонентов, игнорируя <code>tag</code> и
@@ -96,7 +96,7 @@
                         <MudTextField @bind-Value="Model.OnecPassword" Label="Пароль"
                                       InputType="InputType.Password" Variant="Variant.Outlined"
                                       Margin="Margin.Dense" T="string"
-                                      HelperText="@SecretHint(Model.HasOnecPassword)" />
+                                      HelperText="@SecretHint(Model.HasOnecPassword, Model.OnecPassword)" />
                     </MudItem>
                     <MudItem xs="12">
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
