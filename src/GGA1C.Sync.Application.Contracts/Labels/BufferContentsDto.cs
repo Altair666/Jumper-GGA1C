@@ -20,8 +20,14 @@ public class BufferContentsDto
 
     public string Slug { get; set; } = "";
 
-    /// <summary>Логин в MySQL, которым этот буфер читает GoLabel II.</summary>
+    /// <summary>Логин в MySQL, если буфер читают подключением к базе.</summary>
     public string PrintLogin { get; set; } = "";
+
+    /// <summary>
+    /// Файл, который читает GoLabel II. Путь прописывается в шаблоне один раз, дальше
+    /// человек просто печатает — файл обновляет хаб.
+    /// </summary>
+    public string FilePath { get; set; } = "";
 
     /// <summary>Когда в файл последний раз писали.</summary>
     public DateTime? UpdatedAt { get; set; }

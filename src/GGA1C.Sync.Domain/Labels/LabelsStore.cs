@@ -18,10 +18,12 @@ namespace GGA1C.Sync.Labels;
 public class LabelsStore : DomainService, ILabelsStore
 {
     private readonly IRepository<LabelRow, long> _rows;
+    private readonly LabelsCsvExport _csv;
 
-    public LabelsStore(IRepository<LabelRow, long> rows)
+    public LabelsStore(IRepository<LabelRow, long> rows, LabelsCsvExport csv)
     {
         _rows = rows;
+        _csv = csv;
     }
 
     public async Task<int> CountAsync(string slug)
@@ -68,7 +70,7 @@ public class LabelsStore : DomainService, ILabelsStore
             if (existing.TryGetValue(record.ExternalId, out var row))
             {
                 Fill(row, slug, record);
-                await _rows.UpdateAsync(row);
+                await _rows.UpdateAsync(row, autoSave: true);
             }
             else
             {
@@ -80,8 +82,10 @@ public class LabelsStore : DomainService, ILabelsStore
 
         if (toInsert.Count > 0)
         {
-            await _rows.InsertManyAsync(toInsert);
+            await _rows.InsertManyAsync(toInsert, autoSave: true);
         }
+
+        await ExportAsync(slug);
 
         return list.Count;
     }
@@ -99,10 +103,14 @@ public class LabelsStore : DomainService, ILabelsStore
             return row;
         }).ToList();
 
+        // autoSave обязателен: выгрузка в CSV читает те же строки из базы, а без
+        // сохранения они ещё висят в единице работы, и в файл попадал один заголовок.
         if (rows.Count > 0)
         {
-            await _rows.InsertManyAsync(rows);
+            await _rows.InsertManyAsync(rows, autoSave: true);
         }
+
+        await ExportAsync(slug);
 
         return rows.Count;
     }
@@ -116,7 +124,9 @@ public class LabelsStore : DomainService, ILabelsStore
             return false;
         }
 
-        await _rows.DeleteAsync(row);
+        await _rows.DeleteAsync(row, autoSave: true);
+        await ExportAsync(slug);
+
         return true;
     }
 
@@ -124,8 +134,18 @@ public class LabelsStore : DomainService, ILabelsStore
     {
         var count = await CountAsync(slug);
         await _rows.DeleteDirectAsync(x => x.Slug == slug);
+        await ExportAsync(slug);
 
         return count;
+    }
+
+    /// <summary>
+    /// Переписывает файл для GoLabel целиком. Делается после каждой правки буфера: человек
+    /// на рабочем месте не должен ничего обновлять руками - он просто печатает.
+    /// </summary>
+    private async Task ExportAsync(string slug)
+    {
+        _csv.Write(slug, await GetAllAsync(slug));
     }
 
     public async Task<List<LabelsBufferInfo>> GetBuffersAsync()

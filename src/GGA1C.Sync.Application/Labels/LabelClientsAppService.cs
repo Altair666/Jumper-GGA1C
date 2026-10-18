@@ -25,6 +25,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     private readonly ILabelClientStore _clients;
     private readonly ILabelsStore _labels;
     private readonly IPrintLoginService _printLogins;
+    private readonly LabelsCsvExport _csv;
     private readonly ISettingManager _settingManager;
     private readonly KeycloakClient _keycloak;
     private readonly KeycloakAccountSync _keycloakSync;
@@ -33,6 +34,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         ILabelClientStore clients,
         ILabelsStore labels,
         IPrintLoginService printLogins,
+        LabelsCsvExport csv,
         ISettingManager settingManager,
         KeycloakClient keycloak,
         KeycloakAccountSync keycloakSync)
@@ -40,6 +42,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         _clients = clients;
         _labels = labels;
         _printLogins = printLogins;
+        _csv = csv;
         _settingManager = settingManager;
         _keycloak = keycloak;
         _keycloakSync = keycloakSync;
@@ -126,10 +129,11 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
         var slug = client.Slug;
 
-        // Логин печати в MySQL и строки буфера уходят вместе с учёткой: иначе на сервере
-        // остаётся и доступ, и чужие данные.
+        // Строки и файл выгрузки уходят вместе с учёткой, чтобы не копить мусор и не
+        // оставлять чужие данные на сервере.
         await _printLogins.DropAsync(client.PrintLogin);
         await _labels.ClearAsync(slug);
+        _csv.Delete(slug);
 
         await _clients.DeleteAsync(id);
 
@@ -180,6 +184,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
                 Name = client.Name,
                 Slug = client.Slug,
                 PrintLogin = client.PrintLogin ?? "",
+                FilePath = _csv.PathFor(client.Slug),
                 RowCount = info?.RowCount ?? 0,
                 UpdatedAt = info?.UpdatedAt,
                 Rows = (info?.RowCount ?? 0) > 0
