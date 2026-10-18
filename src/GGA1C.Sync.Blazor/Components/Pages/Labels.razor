@@ -1,99 +1,127 @@
-@page "/labels"
+﻿@page "/labels"
 @attribute [Authorize]
 @using GGA1C.Sync.Labels
 @inherits SyncComponentBase
 
 <MudText Typo="Typo.h5" Class="mb-4">Grist → GoLabel2</MudText>
 
+@if (!string.IsNullOrEmpty(ShownKey))
+{
+    <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Class="mb-4"
+              ShowCloseIcon="true" CloseIconClicked="@(() => ShownKey = null)">
+        <MudText Typo="Typo.body1"><b>@ShownKeyFor</b></MudText>
+        <MudText Typo="Typo.body2" Class="mt-1" Style="font-family: monospace; font-size: 1.05em;">
+            @ShownKey
+        </MudText>
+        <MudText Typo="Typo.caption">
+            Вставить в настройках виджета (⚙) в поле API Key.
+        </MudText>
+    </MudAlert>
+}
+
 <MudCard Class="mb-4">
     <MudCardContent>
-        <MudText Typo="Typo.h6" Class="mb-2">Ключ для виджета Grist</MudText>
-
-        <MudGrid Spacing="2" Class="align-center mb-2">
-            <MudItem xs="12" md="8">
-                <MudTextField Value="@ApiKey" ReadOnly="true" Variant="Variant.Outlined"
-                              Margin="Margin.Dense" Label="Sync.GristApiKey" T="string" />
+        <MudText Typo="Typo.h6" Class="mb-3">Новая учётная запись</MudText>
+        <MudGrid Spacing="2" Class="align-center">
+            <MudItem xs="12" md="5">
+                <MudTextField @bind-Value="NewName" Label="Имя" T="string"
+                              Placeholder="Иванов, участок сборки"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12" md="4">
-                <MudButton Variant="Variant.Filled" Color="Color.Warning"
-                           StartIcon="@Icons.Material.Filled.Autorenew"
-                           OnClick="RegenerateKeyAsync">Перевыпустить</MudButton>
+                <MudTextField @bind-Value="NewSlug" Label="Папка буфера" T="string"
+                              Placeholder="ivanov"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Латиница, цифры, дефис, подчёркивание" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@Busy"
+                           StartIcon="@Icons.Material.Filled.PersonAdd"
+                           OnClick="CreateAsync">Создать и выдать ключ</MudButton>
             </MudItem>
         </MudGrid>
-
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-            В настройках виджета (⚙) указать: <b>Server URL</b> — адрес этого сервера,
-            <b>API Key</b> — ключ выше, <b>Endpoint</b> —
-            <code>/api/grist/labels/replace-all</code>. Ключ принимается и как
-            <code>Authorization: Bearer</code>, и как <code>X-Api-Key</code>.
-        </MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
-            После перевыпуска старый ключ сразу перестаёт работать — его нужно обновить
-            в виджете, иначе синхронизация начнёт отвечать 401.
-        </MudText>
     </MudCardContent>
 </MudCard>
 
 <MudCard>
     <MudCardContent>
         <MudGrid Spacing="2" Class="align-center mb-3">
-            <MudItem>
-                <MudText Typo="Typo.h6">Буфер этикеток</MudText>
-            </MudItem>
-            <MudItem>
-                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">
-                    записей: @Rows.Count
-                </MudChip>
-            </MudItem>
+            <MudItem><MudText Typo="Typo.h6">Учётные записи</MudText></MudItem>
             <MudSpacer />
             <MudItem>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy"
                            StartIcon="@Icons.Material.Filled.Refresh"
                            OnClick="LoadAsync">Обновить</MudButton>
-            </MudItem>
-            <MudItem>
-                <MudButton Variant="Variant.Outlined" Color="Color.Error"
-                           StartIcon="@Icons.Material.Filled.DeleteSweep"
-                           OnClick="ClearAsync">Очистить</MudButton>
             </MudItem>
         </MudGrid>
 
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-            Файл буфера: <code>@BufferPath</code> — отдельная база SQLite, её читает
-            GoLabel2 через ODBC. Каждая синхронизация из виджета заменяет содержимое целиком.
+            У каждой учётки свой ключ и свой файл буфера, поэтому синхронизация одного
+            оператора не затирает партию другого. Путь к файлу прописывается в источнике
+            ODBC на машине с GoLabel2.
         </MudText>
 
-        @if (Rows.Count == 0)
+        @if (Clients.Count == 0)
         {
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                Буфер пуст — Grist ещё ничего не присылал, либо последняя синхронизация
-                отправила пустой набор.
+                Учётных записей нет.
             </MudAlert>
         }
         else
         {
-            <MudTable Items="@Rows" Dense="true" Hover="true" Striped="true" T="LabelRecord">
+            <MudTable Items="@Clients" Dense="true" Hover="true" T="LabelClientDto">
                 <HeaderContent>
-                    <MudTh>Дата</MudTh>
-                    <MudTh>Код изделия</MudTh>
-                    <MudTh>Код исполнения</MudTh>
-                    <MudTh>External ID</MudTh>
-                    <MudTh>Обновлено</MudTh>
+                    <MudTh>Имя</MudTh>
+                    <MudTh>Папка</MudTh>
+                    <MudTh>Ключ</MudTh>
+                    <MudTh>Этикеток</MudTh>
+                    <MudTh>Файл буфера</MudTh>
+                    <MudTh>Использован</MudTh>
+                    <MudTh>Включена</MudTh>
+                    <MudTh></MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Дата">@context.Date</MudTd>
-                    <MudTd DataLabel="Код изделия">@context.ProductCode</MudTd>
-                    <MudTd DataLabel="Код исполнения">@context.ModeCode</MudTd>
-                    <MudTd DataLabel="External ID">
-                        <MudText Typo="Typo.caption">@context.ExternalId</MudText>
+                    <MudTd DataLabel="Имя">@context.Name</MudTd>
+                    <MudTd DataLabel="Папка"><code>@context.Slug</code></MudTd>
+                    <MudTd DataLabel="Ключ"><code>@context.KeyPrefix…</code></MudTd>
+                    <MudTd DataLabel="Этикеток">@context.RowCount</MudTd>
+                    <MudTd DataLabel="Файл буфера">
+                        <MudText Typo="Typo.caption">@context.BufferPath</MudText>
                     </MudTd>
-                    <MudTd DataLabel="Обновлено">
+                    <MudTd DataLabel="Использован">
                         <MudText Typo="Typo.caption">
-                            @context.UpdatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")
+                            @(context.LastUsedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")
                         </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Включена">
+                        <MudSwitch T="bool" Color="Color.Primary" Value="@context.IsEnabled"
+                                   ValueChanged="@(v => ToggleAsync(context, v))" />
+                    </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                                       Title="Показать ключ" Disabled="@Busy"
+                                       OnClick="@(() => RevealAsync(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Autorenew" Size="Size.Small"
+                                       Color="Color.Warning" Title="Перевыпустить ключ" Disabled="@Busy"
+                                       OnClick="@(() => RegenerateAsync(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.DeleteSweep" Size="Size.Small"
+                                       Title="Очистить буфер" Disabled="@Busy"
+                                       OnClick="@(() => ClearBufferAsync(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                       Color="Color.Error" Title="Удалить учётку" Disabled="@Busy"
+                                       OnClick="@(() => DeleteAsync(context))" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>
         }
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            В настройках виджета: <b>Server URL</b> — адрес этого сервера (тот же, с которого
+            открыт сам виджет, иначе браузер заблокирует запрос), <b>API Key</b> — ключ учётки,
+            <b>Endpoint</b> — <code>/api/grist/labels/replace-all</code>. Ключ принимается и
+            как <code>Authorization: Bearer</code>, и как <code>X-Api-Key</code>.
+        </MudText>
     </MudCardContent>
 </MudCard>

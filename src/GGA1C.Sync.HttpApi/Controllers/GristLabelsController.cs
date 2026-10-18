@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -10,16 +10,20 @@ using Volo.Abp.AspNetCore.Mvc;
 namespace GGA1C.Sync.Controllers;
 
 /// <summary>
-/// Приём данных из Grist в буфер этикеток. Перенесено из прежнего AltiumSync без изменения
-/// контракта: он проверен живым запросом от виджета widget_report_grist, менять его нельзя,
-/// иначе кнопка «Синхронизация» в виджете перестанет работать.
+/// Приём данных из Grist в буфер этикеток. Контракт перенесён из прежнего AltiumSync без
+/// изменений - он проверен живым запросом от виджета widget_report_grist, менять его нельзя,
+/// иначе кнопка "Синхронизация" перестанет работать.
 ///
-/// Авторизация — не по сессии, а по ключу, потому что запрос приходит из iframe виджета:
-///   Authorization: Bearer KEY   — так шлёт виджет
-///   X-Api-Key: KEY              — как задумывалось изначально, оставлено для совместимости
+/// Разделение по учётным записям идёт ПО КЛЮЧУ: ключ и есть удостоверение, по нему хаб
+/// находит учётку и пишет в её буфер. Иначе никак - Grist не отдаёт виджету личность
+/// пользователя (в plugin API нет getUser, сессионная кука HttpOnly и SameSite=Lax).
+///
+/// Ключ принимается в двух видах:
+///   Authorization: Bearer KEY   - так шлёт виджет
+///   X-Api-Key: KEY              - как задумывалось изначально, оставлено для совместимости
 ///
 /// Тело принимается в трёх формах: голый массив, одиночный объект и обёртка
-/// {"items":[...]} / {"records":[...]} — последнюю шлёт виджет.
+/// {"items":[...]} / {"records":[...]} - последнюю шлёт виджет.
 /// </summary>
 [ApiController]
 [AllowAnonymous]
@@ -47,58 +51,75 @@ public class GristLabelsController : AbpControllerBase
     [HttpPost("labels/upsert")]
     public async Task<IActionResult> Upsert([FromBody] JsonElement body)
     {
-        if (!await CheckKeyAsync())
+        var (client, error) = await ResolveAsync();
+        if (error != null)
         {
-            return Unauthorized(new { error = "Invalid or missing API key" });
+            return error;
         }
 
         var records = ParseBody(body);
-        var count = await _labels.UpsertManyAsync(records);
-        return Ok(new { ok = true, count });
+        var count = await _labels.UpsertManyAsync(client!.Slug, records);
+        await _labels.TouchAsync(client.Id);
+
+        return Ok(new { ok = true, count, client = client.Name });
     }
 
     /// <summary>
-    /// Полная перезамена буфера. Виджет работает именно так: одна синхронизация —
-    /// одна партия этикеток, в буфере остаётся ровно выбранное сейчас.
+    /// Полная перезамена буфера. Виджет работает именно так: одна синхронизация -
+    /// одна партия этикеток, в буфере остаётся ровно выбранное сейчас. Затрагивается
+    /// только буфер той учётки, чей ключ предъявлен.
     /// </summary>
     [HttpPost("labels/replace-all")]
     public async Task<IActionResult> ReplaceAll([FromBody] JsonElement body)
     {
-        if (!await CheckKeyAsync())
+        var (client, error) = await ResolveAsync();
+        if (error != null)
         {
-            return Unauthorized(new { error = "Invalid or missing API key" });
+            return error;
         }
 
         var records = ParseBody(body);
-        var count = await _labels.ReplaceAllAsync(records);
-        return Ok(new { ok = true, count });
+        var count = await _labels.ReplaceAllAsync(client!.Slug, records);
+        await _labels.TouchAsync(client.Id);
+
+        return Ok(new { ok = true, count, client = client.Name });
     }
 
     [HttpDelete("labels/{externalId}")]
     public async Task<IActionResult> Delete(string externalId)
     {
-        if (!await CheckKeyAsync())
+        var (client, error) = await ResolveAsync();
+        if (error != null)
         {
-            return Unauthorized(new { error = "Invalid or missing API key" });
+            return error;
         }
 
-        var deleted = await _labels.DeleteAsync(externalId);
+        var deleted = await _labels.DeleteAsync(client!.Slug, externalId);
+        await _labels.TouchAsync(client.Id);
+
         return Ok(new { ok = true, deleted });
     }
 
     [HttpDelete("labels")]
     public async Task<IActionResult> ClearAll()
     {
-        if (!await CheckKeyAsync())
+        var (client, error) = await ResolveAsync();
+        if (error != null)
         {
-            return Unauthorized(new { error = "Invalid or missing API key" });
+            return error;
         }
 
-        await _labels.ClearAllAsync();
+        await _labels.ClearAllAsync(client!.Slug);
+        await _labels.TouchAsync(client.Id);
+
         return Ok(new { ok = true });
     }
 
-    private async Task<bool> CheckKeyAsync()
+    /// <summary>
+    /// Опознаёт учётку по ключу. Отключённая учётка отличается в ответе от неизвестного
+    /// ключа: иначе отзыв доступа выглядел бы для оператора как "ключ потерялся".
+    /// </summary>
+    private async Task<(LabelClientDto? Client, IActionResult? Error)> ResolveAsync()
     {
         var provided = Request.Headers["X-Api-Key"].ToString();
 
@@ -111,12 +132,24 @@ public class GristLabelsController : AbpControllerBase
             }
         }
 
-        return await _labels.IsApiKeyValidAsync(provided);
+        var client = await _labels.ResolveClientAsync(provided);
+
+        if (client == null)
+        {
+            return (null, Unauthorized(new { error = "Ключ не известен" }));
+        }
+
+        if (!client.IsEnabled)
+        {
+            return (null, Unauthorized(new { error = $"Учётная запись \"{client.Name}\" отключена" }));
+        }
+
+        return (client, null);
     }
 
     /// <summary>
     /// Разворачивает тело запроса в список записей и гарантирует уникальный ExternalId:
-    /// виджет ключ не присылает, а он у нас UNIQUE в буфере.
+    /// виджет ключ строки не присылает, а он у нас UNIQUE в буфере.
     /// </summary>
     private static List<LabelRecord> ParseBody(JsonElement body)
     {

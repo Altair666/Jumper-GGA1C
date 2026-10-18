@@ -1,5 +1,6 @@
 ﻿using GGA1C.Sync.Altium;
 using GGA1C.Sync.Diagnostics;
+using GGA1C.Sync.Labels;
 using Microsoft.EntityFrameworkCore;
 using Volo.Abp.AuditLogging.EntityFrameworkCore;
 using Volo.Abp.BackgroundJobs.EntityFrameworkCore;
@@ -33,6 +34,7 @@ public class SyncDbContext :
     public DbSet<ProjectMap> ProjectMaps { get; set; }
     public DbSet<SyncLogEntry> SyncLog { get; set; }
     public DbSet<RequestLogItem> RequestLog { get; set; }
+    public DbSet<LabelClient> LabelClients { get; set; }
 
     #region Entities from the modules
 
@@ -131,6 +133,25 @@ public class SyncDbContext :
             b.Property(x => x.AltiumRevision).HasMaxLength(64);
             b.Property(x => x.SyncAction).HasMaxLength(32).IsRequired();
             b.Property(x => x.SyncStatus).HasMaxLength(32).IsRequired();
+        });
+
+        builder.Entity<LabelClient>(b =>
+        {
+            b.ToTable(SyncConsts.DbTablePrefix + "LabelClients", SyncConsts.DbSchema);
+            b.ConfigureByConvention();
+
+            // Поиск учётки идёт по хешу ключа на каждом запросе от виджета - индекс
+            // обязателен, и он же гарантирует, что два ключа не совпадут.
+            b.HasIndex(x => x.KeyHash).IsUnique();
+
+            // Slug - имя папки буфера на диске, двум учёткам один буфер отдавать нельзя.
+            b.HasIndex(x => x.Slug).IsUnique();
+
+            b.Property(x => x.Name).HasMaxLength(128).IsRequired();
+            b.Property(x => x.Slug).HasMaxLength(64).IsRequired();
+            b.Property(x => x.KeyHash).HasMaxLength(64).IsRequired();
+            b.Property(x => x.KeyPrefix).HasMaxLength(16).IsRequired();
+            b.Property(x => x.KeyEncrypted).HasMaxLength(512);
         });
 
         builder.Entity<RequestLogItem>(b =>

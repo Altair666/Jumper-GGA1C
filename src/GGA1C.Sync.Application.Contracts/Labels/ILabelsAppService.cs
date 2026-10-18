@@ -1,47 +1,44 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
-using Volo.Abp.Application.Services;
 using Volo.Abp;
+using Volo.Abp.Application.Services;
 
 namespace GGA1C.Sync.Labels;
 
 /// <summary>
-/// Работа с буфером этикеток. Пишет сюда виджет Grist (через GristLabelsController,
-/// авторизация по ключу), читает GoLabel2 — но не через этот сервис, а напрямую из файла
-/// буфера по ODBC или из выгрузки CSV.
+/// Запись этикеток в буфер конкретной учётной записи. Пишет сюда виджет Grist через
+/// GristLabelsController, предъявляя ключ; читает GoLabel2 - но не через этот сервис,
+/// а напрямую из файла буфера.
 ///
 /// <para>
-/// <b>RemoteService отключён намеренно.</b> ABP по соглашению публикует сервисы приложения
-/// как REST API (здесь это настроено в SyncBlazorModule через ConventionalControllers).
-/// Для этого сервиса такая публикация недопустима: эндпоинты получались анонимными, то есть
-/// любой в сети мог прочитать буфер через /api/app/labels и вытереть его через
-/// /api/app/labels/clear-all. Проверено вживую — GET отвечал 200 без всякого ключа.
-/// Единственная HTTP-дверь к буферу должна быть одна: GristLabelsController, который
-/// сверяет ключ. Интерфейс остаётся доступен изнутри приложения — контроллеру и страницам.
+/// RemoteService отключён намеренно. ABP по соглашению публикует сервисы приложения как
+/// REST API (настроено в SyncBlazorModule через ConventionalControllers). Для этого сервиса
+/// такая публикация недопустима: эндпоинты получались анонимными, и любой в сети мог
+/// читать и вытирать буфер мимо проверки ключа. Проверено вживую - GET отвечал 200.
+/// Единственная HTTP-дверь к буферу - GristLabelsController.
 /// </para>
 /// </summary>
 [RemoteService(IsEnabled = false)]
 public interface ILabelsAppService : IApplicationService
 {
-    /// <summary>Сверяет присланный ключ с шифрованной настройкой Sync.GristApiKey.
-    /// Пустая настройка означает «доступ закрыт», а не «пускать всех».</summary>
-    Task<bool> IsApiKeyValidAsync(string? providedKey);
+    /// <summary>
+    /// Опознать учётку по ключу. Возвращает null, если ключ неизвестен. Отключённая
+    /// учётка возвращается с IsEnabled = false - чтобы в ответе можно было отличить
+    /// "ключ не тот" от "ключ отозван".
+    /// </summary>
+    Task<LabelClientDto?> ResolveClientAsync(string? key);
 
-    Task<List<LabelRecord>> GetAllAsync();
+    Task<List<LabelRecord>> GetAllAsync(string slug);
 
-    Task<int> UpsertManyAsync(List<LabelRecord> records);
+    Task<int> UpsertManyAsync(string slug, List<LabelRecord> records);
 
-    /// <summary>Заменить буфер целиком — основной режим виджета.</summary>
-    Task<int> ReplaceAllAsync(List<LabelRecord> records);
+    /// <summary>Заменить буфер учётки целиком - основной режим виджета.</summary>
+    Task<int> ReplaceAllAsync(string slug, List<LabelRecord> records);
 
-    Task<bool> DeleteAsync(string externalId);
+    Task<bool> DeleteAsync(string slug, string externalId);
 
-    Task ClearAllAsync();
+    Task ClearAllAsync(string slug);
 
-    /// <summary>Текущий ключ для виджета. Только для вошедших пользователей.</summary>
-    Task<string?> GetApiKeyAsync();
-
-    /// <summary>Выпустить новый ключ. Старый сразу перестаёт работать — его придётся
-    /// обновить в настройках виджета в Grist.</summary>
-    Task<string> RegenerateApiKeyAsync();
+    /// <summary>Отметить успешное использование ключа.</summary>
+    Task TouchAsync(int clientId);
 }

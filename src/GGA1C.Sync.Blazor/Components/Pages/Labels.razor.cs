@@ -1,41 +1,123 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using GGA1C.Sync.Labels;
 using Microsoft.AspNetCore.Components;
-using Microsoft.Extensions.Configuration;
 
 // Пространство имён должно совпадать с тем, что генерирует razor для файла в
 // Components/Pages, иначе partial-класс не склеится с компонентом и переопределения
-// вроде OnInitializedAsync просто не найдут базовый метод.
+// вроде OnInitializedAsync не найдут базовый метод.
 namespace GGA1C.Sync.Blazor.Components.Pages;
 
 public partial class Labels
 {
-    [Inject] private ILabelsAppService LabelsAppService { get; set; } = default!;
-    [Inject] private IConfiguration Configuration { get; set; } = default!;
+    [Inject] private ILabelClientsAppService ClientsAppService { get; set; } = default!;
 
-    private List<LabelRecord> Rows { get; set; } = new();
+    private List<LabelClientDto> Clients { get; set; } = new();
 
-    private string? ApiKey { get; set; }
+    private string NewName { get; set; } = "";
+    private string NewSlug { get; set; } = "";
 
-    private string BufferPath =>
-        Configuration["Labels:DatabasePath"] ?? @"C:\GGA1C\buffers\labels.db";
+    // Ключ показываем отдельной плашкой: в таблице его быть не должно, иначе он утечёт
+    // в чей-нибудь скриншот при разборе совсем другого вопроса.
+    private string? ShownKey { get; set; }
+    private string ShownKeyFor { get; set; } = "";
+
+    private bool Busy { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
-        ApiKey = await LabelsAppService.GetApiKeyAsync();
     }
 
     private async Task LoadAsync()
     {
-        Rows = await LabelsAppService.GetAllAsync();
+        Busy = true;
+        try
+        {
+            Clients = await ClientsAppService.GetListAsync();
+        }
+        finally
+        {
+            Busy = false;
+        }
     }
 
-    private async Task ClearAsync()
+    private async Task CreateAsync()
+    {
+        Busy = true;
+        try
+        {
+            var key = await ClientsAppService.CreateAsync(NewName, NewSlug);
+            ShownKeyFor = $"Ключ для «{NewName}»";
+            ShownKey = key;
+            NewName = "";
+            NewSlug = "";
+            await LoadAsync();
+            await Notify.Success("Учётная запись создана");
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task RevealAsync(LabelClientDto client)
+    {
+        var key = await ClientsAppService.RevealKeyAsync(client.Id);
+
+        if (string.IsNullOrEmpty(key))
+        {
+            await Notify.Warn("Ключ не сохранён в читаемом виде — выпустите новый");
+            return;
+        }
+
+        ShownKeyFor = $"Ключ для «{client.Name}»";
+        ShownKey = key;
+    }
+
+    private async Task RegenerateAsync(LabelClientDto client)
     {
         var confirmed = await Message.Confirm(
-            "Удалить все записи из буфера этикеток? Следующая синхронизация из Grist " +
+            $"Старый ключ «{client.Name}» сразу перестанет работать, и синхронизация из " +
+            "его виджета будет отвечать 401, пока новый ключ не прописан в настройках. " +
+            "Продолжить?");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        Busy = true;
+        try
+        {
+            ShownKey = await ClientsAppService.RegenerateKeyAsync(client.Id);
+            ShownKeyFor = $"Новый ключ для «{client.Name}»";
+            await LoadAsync();
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task ToggleAsync(LabelClientDto client, bool enabled)
+    {
+        Busy = true;
+        try
+        {
+            await ClientsAppService.SetEnabledAsync(client.Id, enabled);
+            await LoadAsync();
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task ClearBufferAsync(LabelClientDto client)
+    {
+        var confirmed = await Message.Confirm(
+            $"Удалить все этикетки из буфера «{client.Name}»? Следующая синхронизация " +
             "наполнит его заново.");
 
         if (!confirmed)
@@ -43,23 +125,40 @@ public partial class Labels
             return;
         }
 
-        await LabelsAppService.ClearAllAsync();
-        await LoadAsync();
-        await Notify.Success("Буфер очищен");
+        Busy = true;
+        try
+        {
+            await ClientsAppService.ClearBufferAsync(client.Id);
+            await LoadAsync();
+            await Notify.Success("Буфер очищен");
+        }
+        finally
+        {
+            Busy = false;
+        }
     }
 
-    private async Task RegenerateKeyAsync()
+    private async Task DeleteAsync(LabelClientDto client)
     {
         var confirmed = await Message.Confirm(
-            "Старый ключ сразу перестанет работать, и синхронизация из виджета будет " +
-            "отвечать 401, пока новый ключ не прописан в его настройках. Продолжить?");
+            $"Удалить учётную запись «{client.Name}»? Её ключ перестанет работать. " +
+            "Файл буфера останется на диске — в нём может быть неотпечатанная партия.");
 
         if (!confirmed)
         {
             return;
         }
 
-        ApiKey = await LabelsAppService.RegenerateApiKeyAsync();
-        await Notify.Success("Выпущен новый ключ — обновите его в настройках виджета");
+        Busy = true;
+        try
+        {
+            await ClientsAppService.DeleteAsync(client.Id);
+            await LoadAsync();
+            await Notify.Success("Учётная запись удалена");
+        }
+        finally
+        {
+            Busy = false;
+        }
     }
 }

@@ -1,85 +1,81 @@
-using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
-using GGA1C.Sync.Settings;
-using Microsoft.AspNetCore.Authorization;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
-using Volo.Abp.SettingManagement;
 
 namespace GGA1C.Sync.Labels;
 
-// Атрибут обязателен ИМЕННО на классе: ABP ищет его на типе реализации, и пометки
-// только на интерфейсе недостаточно - проверено, GET /api/app/labels продолжал
-// отдавать содержимое буфера анонимно.
+// Атрибут нужен и на классе: ABP ищет его на типе реализации, пометки на интерфейсе
+// недостаточно - проверено, GET /api/app/labels продолжал отдавать содержимое буфера
+// анонимно.
 [RemoteService(IsEnabled = false)]
 public class LabelsAppService : ApplicationService, ILabelsAppService
 {
-    private readonly ILabelsBuffer _buffer;
-    private readonly ISettingManager _settingManager;
+    private readonly ILabelsBufferFactory _buffers;
+    private readonly ILabelClientStore _clients;
 
-    public LabelsAppService(ILabelsBuffer buffer, ISettingManager settingManager)
+    public LabelsAppService(ILabelsBufferFactory buffers, ILabelClientStore clients)
     {
-        _buffer = buffer;
-        _settingManager = settingManager;
+        _buffers = buffers;
+        _clients = clients;
     }
 
-    public async Task<bool> IsApiKeyValidAsync(string? providedKey)
+    public async Task<LabelClientDto?> ResolveClientAsync(string? key)
     {
-        if (string.IsNullOrWhiteSpace(providedKey))
+        if (string.IsNullOrWhiteSpace(key))
         {
-            return false;
+            return null;
         }
 
-        var expected = await SettingProvider.GetOrNullAsync(SyncSettings.GristApiKey);
+        var client = await _clients.FindByKeyAsync(key);
+        if (client == null)
+        {
+            return null;
+        }
 
-        // Пустая настройка = доступ закрыт. Иначе незаполненный ключ открывал бы буфер всем.
-        return !string.IsNullOrWhiteSpace(expected) && providedKey == expected;
+        // Путь и счётчик здесь намеренно не заполняем: это горячий путь каждого запроса
+        // от виджета, а подсчёт строк означал бы открытие файла буфера.
+        return new LabelClientDto
+        {
+            Id = client.Id,
+            Name = client.Name,
+            Slug = client.Slug,
+            KeyPrefix = client.KeyPrefix,
+            IsEnabled = client.IsEnabled,
+            LastUsedAt = client.LastUsedAt
+        };
     }
 
-    public Task<List<LabelRecord>> GetAllAsync()
+    public Task<List<LabelRecord>> GetAllAsync(string slug)
     {
-        return Task.FromResult(_buffer.GetAll());
+        return Task.FromResult(_buffers.For(slug).GetAll());
     }
 
-    public Task<int> UpsertManyAsync(List<LabelRecord> records)
+    public Task<int> UpsertManyAsync(string slug, List<LabelRecord> records)
     {
-        _buffer.UpsertMany(records);
+        _buffers.For(slug).UpsertMany(records);
         return Task.FromResult(records.Count);
     }
 
-    public Task<int> ReplaceAllAsync(List<LabelRecord> records)
+    public Task<int> ReplaceAllAsync(string slug, List<LabelRecord> records)
     {
-        _buffer.ReplaceAll(records);
+        _buffers.For(slug).ReplaceAll(records);
         return Task.FromResult(records.Count);
     }
 
-    public Task<bool> DeleteAsync(string externalId)
+    public Task<bool> DeleteAsync(string slug, string externalId)
     {
-        return Task.FromResult(_buffer.Delete(externalId));
+        return Task.FromResult(_buffers.For(slug).Delete(externalId));
     }
 
-    public Task ClearAllAsync()
+    public Task ClearAllAsync(string slug)
     {
-        _buffer.ClearAll();
+        _buffers.For(slug).ClearAll();
         return Task.CompletedTask;
     }
 
-    // Ключ возвращаем и меняем только вошедшим пользователям. Публикация этого сервиса
-    // как REST API отключена (см. ILabelsAppService), но [Authorize] оставлен вторым
-    // рубежом: если публикацию когда-нибудь включат обратно, ключ не утечёт анонимно.
-
-    [Authorize]
-    public async Task<string?> GetApiKeyAsync()
+    public async Task TouchAsync(int clientId)
     {
-        return await _settingManager.GetOrNullGlobalAsync(SyncSettings.GristApiKey);
-    }
-
-    [Authorize]
-    public async Task<string> RegenerateApiKeyAsync()
-    {
-        var key = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N")[..8];
-        await _settingManager.SetGlobalAsync(SyncSettings.GristApiKey, key);
-        return key;
+        await _clients.TouchAsync(clientId);
     }
 }

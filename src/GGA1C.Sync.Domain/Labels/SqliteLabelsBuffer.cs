@@ -4,42 +4,41 @@ using System.IO;
 using System.Linq;
 using Dapper;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration;
-using Volo.Abp.DependencyInjection;
 
 namespace GGA1C.Sync.Labels;
 
 /// <summary>
-/// Буфер этикеток в отдельном файле SQLite.
-///
-/// Путь задаётся настройкой Labels:DatabasePath и по умолчанию ведёт в C:\GGA1C\buffers,
-/// то есть вне репозитория, вне папки сборки и ОТДЕЛЬНО от основной базы приложения —
-/// только этот файл отдаётся наружу, читающей стороне (GoLabel2).
+/// Буфер этикеток в отдельном файле SQLite. Создаётся фабрикой на каждую учётную запись:
+/// у каждой свой файл, поэтому синхронизация одного оператора не затирает партию другого,
+/// и блокировка записи у каждого своя — в SQLite она на уровне файла.
 ///
 /// Режим журнала намеренно оставлен по умолчанию (delete, не WAL): в WAL читателю нужны
-/// права на запись в папку, и read-only доступ через ODBC перестал бы работать.
+/// права на запись в папку, и read-only доступ GoLabel2 через ODBC перестал бы работать.
 /// </summary>
-public class SqliteLabelsBuffer : ILabelsBuffer, ISingletonDependency
+public class SqliteLabelsBuffer : ILabelsBuffer
 {
     private readonly string _connectionString;
 
-    public SqliteLabelsBuffer(IConfiguration configuration)
+    public SqliteLabelsBuffer(string databasePath)
     {
-        var path = configuration["Labels:DatabasePath"];
-        if (string.IsNullOrWhiteSpace(path))
+        if (string.IsNullOrWhiteSpace(databasePath))
         {
-            path = @"C:\GGA1C\buffers\labels.db";
+            throw new ArgumentException("Не задан путь к файлу буфера", nameof(databasePath));
         }
 
-        var dir = Path.GetDirectoryName(Path.GetFullPath(path));
+        DatabasePath = Path.GetFullPath(databasePath);
+
+        var dir = Path.GetDirectoryName(DatabasePath);
         if (!string.IsNullOrEmpty(dir))
         {
             Directory.CreateDirectory(dir);
         }
 
-        _connectionString = $"Data Source={path}";
+        _connectionString = $"Data Source={DatabasePath}";
         InitSchema();
     }
+
+    public string DatabasePath { get; }
 
     private SqliteConnection Connect() => new(_connectionString);
 
