@@ -29,11 +29,11 @@ public interface ILabelsAppService : IApplicationService
     Task<LabelClientDto?> ResolveClientAsync(string? key);
 
     /// <summary>
-    /// Опознать человека по короткоживущему токену, который виджет получил у самого Grist.
-    /// Хаб спрашивает Grist, чья это сессия, и ищет учётку по адресу почты — секретов в
-    /// документе при этом не хранится.
+    /// Опознать человека по токену Keycloak, который виджет получил кодом с PKCE.
+    /// Основной способ: Keycloak — источник людей, и в документе Grist при этом не нужно
+    /// ни строчки, ни прав на запись.
     /// </summary>
-    Task<GristClientResolution> ResolveClientByGristTokenAsync(string? token);
+    Task<GristClientResolution> ResolveClientByKeycloakTokenAsync(string? token);
 
     Task<List<LabelRecord>> GetAllAsync(string slug);
 

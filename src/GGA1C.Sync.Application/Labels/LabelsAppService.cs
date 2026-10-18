@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using GGA1C.Sync.Grist;
+using GGA1C.Sync.Keycloak;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
 
@@ -14,49 +14,46 @@ public class LabelsAppService : ApplicationService, ILabelsAppService
 {
     private readonly ILabelsBufferFactory _buffers;
     private readonly ILabelClientStore _clients;
-    private readonly GristIdentityResolver _identity;
+    private readonly KeycloakTokenVerifier _keycloakTokens;
 
     public LabelsAppService(
         ILabelsBufferFactory buffers,
         ILabelClientStore clients,
-        GristIdentityResolver identity)
+        KeycloakTokenVerifier keycloakTokens)
     {
         _buffers = buffers;
         _clients = clients;
-        _identity = identity;
+        _keycloakTokens = keycloakTokens;
     }
 
-    public async Task<GristClientResolution> ResolveClientByGristTokenAsync(string? token)
+    public async Task<GristClientResolution> ResolveClientByKeycloakTokenAsync(string? token)
     {
-        var (email, error) = await _identity.ResolveEmailAsync(token);
+        var (sub, email, error) = await _keycloakTokens.VerifyAsync(token);
 
-        if (email == null)
+        if (error != null)
         {
             return new GristClientResolution { Error = error };
         }
 
-        var client = await _clients.FindByEmailAsync(email);
+        // Сначала по sub: он не меняется, когда человеку правят почту или имя. Почта -
+        // запасной путь для учёток, заведённых руками и ещё не привязанных к Keycloak.
+        var client = sub == null ? null : await _clients.FindBySubAsync(sub);
+
+        if (client == null && !string.IsNullOrWhiteSpace(email))
+        {
+            client = await _clients.FindByEmailAsync(email);
+        }
 
         if (client == null)
         {
             return new GristClientResolution
             {
-                Error = $"В хабе нет учётной записи с почтой {email}"
+                Error = $"В хабе нет учётной записи для {email ?? sub} — " +
+                        "запустите сверку с Keycloak"
             };
         }
 
-        return new GristClientResolution
-        {
-            Client = new LabelClientDto
-            {
-                Id = client.Id,
-                Name = client.Name,
-                Slug = client.Slug,
-                KeyPrefix = client.KeyPrefix,
-                IsEnabled = client.IsEnabled,
-                LastUsedAt = client.LastUsedAt
-            }
-        };
+        return new GristClientResolution { Client = ToDto(client) };
     }
 
     public async Task<LabelClientDto?> ResolveClientAsync(string? key)
@@ -67,13 +64,16 @@ public class LabelsAppService : ApplicationService, ILabelsAppService
         }
 
         var client = await _clients.FindByKeyAsync(key);
-        if (client == null)
-        {
-            return null;
-        }
 
-        // Путь и счётчик здесь намеренно не заполняем: это горячий путь каждого запроса
-        // от виджета, а подсчёт строк означал бы открытие файла буфера.
+        return client == null ? null : ToDto(client);
+    }
+
+    /// <summary>
+    /// Путь к буферу и счётчик строк здесь намеренно не заполняются: это горячий путь
+    /// каждого запроса от виджета, а подсчёт означал бы открытие файла буфера.
+    /// </summary>
+    private static LabelClientDto ToDto(LabelClient client)
+    {
         return new LabelClientDto
         {
             Id = client.Id,

@@ -1,7 +1,6 @@
 @page "/labels"
 @attribute [Authorize]
 @using GGA1C.Sync.Labels
-@using GGA1C.Sync.Grist
 @inherits SyncComponentBase
 
 <MudText Typo="Typo.h5" Class="mb-4">Grist → GoLabel2</MudText>
@@ -211,83 +210,6 @@
             <b>Endpoint</b> — <code>/api/grist/labels/replace-all</code>. Ключ принимается и
             как <code>Authorization: Bearer</code>, и как <code>X-Api-Key</code>.
         </MudText>
-    </MudCardContent>
-</MudCard>
-
-<MudCard Class="mb-4">
-    <MudCardContent>
-        <MudText Typo="Typo.h6" Class="mb-1">Опознание через Grist</MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-            Виджет присылает короткоживущий токен, который выдаёт ему сам Grist, а хаб этим
-            токеном спрашивает Grist, кто это. В документе для этого нужна таблица с одной
-            колонкой <code>email</code> и правило доступа
-            <code>user.Email == rec.email</code> на чтение: человек видит в ней только свою
-            строку, её хаб и получает. Список почт хаб ведёт сам — при сверке с Keycloak и
-            при изменении учёток; руками там ничего заполнять не нужно, а ключей учёток
-            в документе не лежит вовсе.
-        </MudText>
-
-        <MudStack Spacing="3" Style="max-width: 820px;">
-            <MudTextField @bind-Value="GristSettings.ServerUrl" Label="Адрес Grist" T="string"
-                          Placeholder="http://192.168.88.238:8484"
-                          Variant="Variant.Outlined" Margin="Margin.Dense"
-                          Adornment="@Mark(Filled(GristSettings.ServerUrl))"
-                          AdornmentIcon="@Icons.Material.Filled.CheckCircle"
-                          AdornmentColor="Color.Success" />
-
-            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                <MudTextField @bind-Value="GristSettings.DocId" Label="Документ" T="string"
-                              Variant="Variant.Outlined" Margin="Margin.Dense"
-                              Class="flex-grow-1"
-                              Adornment="@Mark(Filled(GristSettings.DocId))"
-                              AdornmentIcon="@Icons.Material.Filled.CheckCircle"
-                              AdornmentColor="Color.Success" />
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
-                           Disabled="@Busy" StartIcon="@Icons.Material.Filled.NetworkCheck"
-                           Style="@ButtonWidth" OnClick="TestGristAsync">Проверить связь</MudButton>
-            </MudStack>
-
-            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                <MudTextField @bind-Value="GristSettings.IdentityTable" Label="Таблица пользователей"
-                              T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
-                              Class="flex-grow-1"
-                              Adornment="@Mark(Filled(GristSettings.IdentityTable))"
-                              AdornmentIcon="@Icons.Material.Filled.CheckCircle"
-                              AdornmentColor="Color.Success" />
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
-                           Disabled="@Busy" StartIcon="@Icons.Material.Filled.GroupAdd"
-                           Style="@ButtonWidth" OnClick="SyncIdentityAsync">Обновить людей</MudButton>
-            </MudStack>
-
-            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                <MudTextField @bind-Value="GristSettings.ApiKey" Label="Ключ API Grist" T="string"
-                              InputType="InputType.Password"
-                              Variant="Variant.Outlined" Margin="Margin.Dense"
-                              Class="flex-grow-1"
-                              Adornment="@Mark(GristSettings.HasApiKey)"
-                              AdornmentIcon="@Icons.Material.Filled.CheckCircle"
-                              AdornmentColor="Color.Success" />
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium"
-                           Disabled="@Busy" StartIcon="@Icons.Material.Filled.Save"
-                           Style="@ButtonWidth" OnClick="SaveGristAsync">Сохранить</MudButton>
-            </MudStack>
-
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                Документ — идентификатор из адресной строки Grist, таблица по умолчанию
-                <code>LabelIdentity</code>. Ключ API нужен только кнопке «Проверить связь»:
-                в опознании людей он не участвует, там работает токен от самого Grist.
-                Учётку хаб ищет по почте, поэтому у человека она должна совпадать с той,
-                под которой он входит в Grist. Кнопка «Обновить людей» нужна, только если
-                Grist был недоступен в момент изменения учёток.
-            </MudText>
-        </MudStack>
-
-        @if (GristTest != null)
-        {
-            <MudAlert Class="mt-4" Severity="@(GristTest.Ok ? Severity.Success : Severity.Error)"
-                      Variant="Variant.Outlined">@GristTest.Message</MudAlert>
-        }
-
     </MudCardContent>
 </MudCard>
 

@@ -14,13 +14,13 @@ namespace GGA1C.Sync.Controllers;
 /// изменений - он проверен живым запросом от виджета widget_report_grist, менять его нельзя,
 /// иначе кнопка "Синхронизация" перестанет работать.
 ///
-/// Разделение по людям. Основной способ - токен, который виджет получает у самого Grist
-/// (grist.docApi.getAccessToken): хаб этим токеном спрашивает Grist, чья это сессия, и
-/// находит учётку по адресу почты. Секретов в документе при этом не лежит, а токен живёт
-/// минуты и подделать его нельзя - проверяет его Grist.
+/// Разделение по людям. Основной способ - токен Keycloak: виджет получает его кодом с PKCE
+/// на публичном клиенте, а хаб проверяет подпись открытыми ключами реалма и читает оттуда
+/// sub и почту. Keycloak и так источник людей, и в документе Grist при этом не нужно ни
+/// строчки, ни прав на запись - в бою их у хаба и не будет.
 ///
 /// Удостоверение принимается в трёх видах:
-///   X-Grist-Token: TOKEN        - основной способ
+///   X-Keycloak-Token: JWT       - основной способ
 ///   Authorization: Bearer KEY   - прежний ключ учётки, пока виджеты не переведены
 ///   X-Api-Key: KEY              - он же, как задумывалось изначально
 ///
@@ -124,24 +124,11 @@ public class GristLabelsController : AbpControllerBase
     /// </summary>
     private async Task<(LabelClientDto? Client, IActionResult? Error)> ResolveAsync()
     {
-        var token = Request.Headers["X-Grist-Token"].ToString();
+        var keycloakToken = Request.Headers["X-Keycloak-Token"].ToString();
 
-        if (!string.IsNullOrWhiteSpace(token))
+        if (!string.IsNullOrWhiteSpace(keycloakToken))
         {
-            var resolution = await _labels.ResolveClientByGristTokenAsync(token);
-
-            if (resolution.Client == null)
-            {
-                return (null, Unauthorized(new { error = resolution.Error }));
-            }
-
-            if (!resolution.Client.IsEnabled)
-            {
-                return (null, Unauthorized(
-                    new { error = $"Учётная запись \"{resolution.Client.Name}\" отключена" }));
-            }
-
-            return (resolution.Client, null);
+            return Check(await _labels.ResolveClientByKeycloakTokenAsync(keycloakToken));
         }
 
         var provided = Request.Headers["X-Api-Key"].ToString();
@@ -159,7 +146,8 @@ public class GristLabelsController : AbpControllerBase
 
         if (client == null)
         {
-            return (null, Unauthorized(new { error = "Удостоверение не принято: нет ни токена Grist, ни известного ключа" }));
+            return (null, Unauthorized(
+                new { error = "Удостоверение не принято: нет ни токена Keycloak, ни известного ключа" }));
         }
 
         if (!client.IsEnabled)
@@ -168,6 +156,26 @@ public class GristLabelsController : AbpControllerBase
         }
 
         return (client, null);
+    }
+
+    /// <summary>
+    /// Общая проверка опознанной учётки: отключённая отличается от неопознанной, иначе
+    /// отзыв доступа выглядел бы для оператора как «удостоверение не приняли».
+    /// </summary>
+    private (LabelClientDto? Client, IActionResult? Error) Check(GristClientResolution resolution)
+    {
+        if (resolution.Client == null)
+        {
+            return (null, Unauthorized(new { error = resolution.Error }));
+        }
+
+        if (!resolution.Client.IsEnabled)
+        {
+            return (null, Unauthorized(
+                new { error = $"Учётная запись \"{resolution.Client.Name}\" отключена" }));
+        }
+
+        return (resolution.Client, null);
     }
 
     /// <summary>

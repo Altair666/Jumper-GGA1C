@@ -46,6 +46,12 @@
                            Style="@ButtonWidth" OnClick="SyncAsync">Синхронизировать</MudButton>
             </MudStack>
 
+            <MudTextField @bind-Value="Kc.WidgetClientId" Label="Клиент виджета" T="string"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="@Mark(Filled(Kc.WidgetClientId))"
+                          AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                          AdornmentColor="Color.Success" />
+
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudTextField @bind-Value="Kc.ClientSecret" Label="Секрет клиента" T="string"
                               InputType="InputType.Password"
@@ -126,6 +132,17 @@
                         отдаётся: в поле приходит столько точек, сколько в нём знаков. Точки
                         можно выделить и стереть — тогда сохранение удалит секрет; оставленные
                         как есть точки означают «не менять».
+                    </td>
+                </tr>
+                <tr>
+                    <td style="vertical-align: top;"><b>Клиент виджета</b></td>
+                    <td>
+                        Второй клиент, <code>gga1c-widget</code>: им виджет в Grist
+                        доказывает, кто перед ним. Он публичный — секрета не хранит и
+                        доступа ни к чему не даёт, только позволяет человеку предъявить
+                        подписанное Keycloak удостоверение. Пароль человек вводит на
+                        странице Keycloak, виджет его не видит. Хаб принимает токены
+                        только этого клиента.
                     </td>
                 </tr>
                 <tr>

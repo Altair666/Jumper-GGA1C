@@ -57,31 +57,13 @@ public static class SyncSettings
         public const string ClientId = KeycloakPrefix + ".ClientId";
 
         public const string ClientSecret = KeycloakPrefix + ".ClientSecret";
-    }
-
-    /// <summary>
-    /// Документ Grist, по которому хаб опознаёт людей. Виджет присылает короткоживущий
-    /// токен от самого Grist, хаб читает им таблицу с адресами почты и узнаёт, кто это.
-    /// Ключи учёток в документе при этом не хранятся.
-    /// </summary>
-    public static class Grist
-    {
-        private const string GristPrefix = Prefix + ".Grist";
-
-        /// <summary>Адрес Grist, например http://192.168.88.238:8484</summary>
-        public const string ServerUrl = GristPrefix + ".ServerUrl";
-
-        /// <summary>Идентификатор документа — тот, что в адресной строке Grist.</summary>
-        public const string DocId = GristPrefix + ".DocId";
 
         /// <summary>
-        /// Ключ API Grist. Нужен только кнопке «Проверить связь» — в опознании людей он
-        /// не участвует, там работает токен, который виджет получает у самого Grist.
+        /// Публичный клиент, которым виджет в Grist доказывает, кто перед ним. Секрета у
+        /// него нет и доступа ни к чему он не даёт — только подписанное удостоверение
+        /// человека. Хаб принимает токены лишь этого клиента.
         /// </summary>
-        public const string ApiKey = GristPrefix + ".ApiKey";
-
-        /// <summary>Таблица с колонкой email, по умолчанию LabelIdentity.</summary>
-        public const string IdentityTable = GristPrefix + ".IdentityTable";
+        public const string WidgetClientId = KeycloakPrefix + ".WidgetClientId";
     }
 
     public const string AutoSyncEnabled = Prefix + ".AutoSyncEnabled";

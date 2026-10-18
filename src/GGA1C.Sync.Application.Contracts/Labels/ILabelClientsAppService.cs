@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using GGA1C.Sync.Connections;
-using GGA1C.Sync.Grist;
 using GGA1C.Sync.Keycloak;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
@@ -80,19 +79,4 @@ public interface ILabelClientsAppService : IApplicationService
     /// </summary>
     Task<KeycloakSyncReport> SyncFromKeycloakAsync();
 
-    // ── Опознание людей через Grist ───────────────────────────────────────────
-
-    Task<GristSettingsDto> GetGristSettingsAsync();
-
-    Task SaveGristSettingsAsync(GristSettingsDto input);
-
-    /// <summary>Проверить связь: прочитать таблицу с адресами почты в документе.</summary>
-    Task<ConnectionTestResultDto> TestGristAsync();
-
-    /// <summary>
-    /// Привести таблицу почт в документе в соответствие с учётками. Делается само при
-    /// сверке с Keycloak и при изменениях учёток; кнопка нужна, когда Grist в тот момент
-    /// был недоступен.
-    /// </summary>
-    Task<ConnectionTestResultDto> SyncGristIdentityAsync();
 }

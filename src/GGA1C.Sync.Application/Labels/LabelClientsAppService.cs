@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using GGA1C.Sync.Connections;
-using GGA1C.Sync.Grist;
 using GGA1C.Sync.Keycloak;
 using GGA1C.Sync.Secrets;
 using GGA1C.Sync.Settings;
@@ -28,22 +27,19 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     private readonly ISettingManager _settingManager;
     private readonly KeycloakClient _keycloak;
     private readonly KeycloakAccountSync _keycloakSync;
-    private readonly GristIdentityResolver _gristIdentity;
 
     public LabelClientsAppService(
         ILabelClientStore clients,
         ILabelsBufferFactory buffers,
         ISettingManager settingManager,
         KeycloakClient keycloak,
-        KeycloakAccountSync keycloakSync,
-        GristIdentityResolver gristIdentity)
+        KeycloakAccountSync keycloakSync)
     {
         _clients = clients;
         _buffers = buffers;
         _settingManager = settingManager;
         _keycloak = keycloak;
         _keycloakSync = keycloakSync;
-        _gristIdentity = gristIdentity;
     }
 
     public async Task<List<LabelClientDto>> GetListAsync()
@@ -97,10 +93,6 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         // первой синхронизации - иначе источник ODBC не настроить.
         _buffers.For(client.Slug);
 
-        // Без строки в таблице почт Grist не сможет опознать человека, и виджет ответит
-        // "вашей строки нет".
-        await SyncIdentityQuietlyAsync();
-
         return key;
     }
 
@@ -117,9 +109,6 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     public async Task SetEnabledAsync(int id, bool enabled)
     {
         await _clients.SetEnabledAsync(id, enabled);
-
-        // Отключили - строку из таблицы почт нужно убрать, включили - вернуть
-        await SyncIdentityQuietlyAsync();
     }
 
     public async Task DeleteAsync(int id)
@@ -131,16 +120,6 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         }
 
         var slug = client.Slug;
-
-        // Строку в документе убираем, пока её номер ещё известен
-        try
-        {
-            await _gristIdentity.RemoveRowAsync(client.GristRowId);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Строка почты в Grist не удалена");
-        }
 
         await _clients.DeleteAsync(id);
 
@@ -290,6 +269,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             BaseUrl = await Get(SyncSettings.Keycloak.BaseUrl),
             Realm = await Get(SyncSettings.Keycloak.Realm),
             ClientId = await Get(SyncSettings.Keycloak.ClientId),
+            WidgetClientId = await SettingProvider.GetOrNullAsync(SyncSettings.Keycloak.WidgetClientId) ?? "",
 
             // Вместо секрета - маска той же длины: значение наружу не уходит, но видно,
             // что секрет есть и какой он длины, и поле можно выделить и стереть.
@@ -303,6 +283,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         await Set(SyncSettings.Keycloak.BaseUrl, input.BaseUrl?.TrimEnd('/') ?? "");
         await Set(SyncSettings.Keycloak.Realm, input.Realm ?? "");
         await Set(SyncSettings.Keycloak.ClientId, input.ClientId ?? "");
+        await Set(SyncSettings.Keycloak.WidgetClientId, input.WidgetClientId?.Trim() ?? "");
 
         // Одни точки - поле не трогали, оставляем прежний секрет. Пусто - человек стёр
         // маску, значит секрет нужно удалить. Иное - новое значение.
@@ -320,86 +301,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
     public async Task<KeycloakSyncReport> SyncFromKeycloakAsync()
     {
-        var report = await _keycloakSync.SyncAsync();
-
-        // Появились или исчезли люди - таблица почт в документе должна это отразить,
-        // иначе новый сотрудник получит от виджета "вашей строки нет".
-        await SyncIdentityQuietlyAsync();
-
-        return report;
-    }
-
-    // ── Ключи в Grist ─────────────────────────────────────────────────────────
-
-    public async Task<GristSettingsDto> GetGristSettingsAsync()
-    {
-        // Ключ - через ISettingProvider: шифрованную настройку расшифровывает только он.
-        var apiKey = await SettingProvider.GetOrNullAsync(SyncSettings.Grist.ApiKey) ?? "";
-
-        return new GristSettingsDto
-        {
-            ServerUrl = await Get(SyncSettings.Grist.ServerUrl),
-            DocId = await Get(SyncSettings.Grist.DocId),
-            IdentityTable = await SettingProvider.GetOrNullAsync(SyncSettings.Grist.IdentityTable) ?? "",
-            ApiKey = SecretMask.For(apiKey),
-            HasApiKey = !string.IsNullOrEmpty(apiKey)
-        };
-    }
-
-    public async Task SaveGristSettingsAsync(GristSettingsDto input)
-    {
-        await Set(SyncSettings.Grist.ServerUrl, input.ServerUrl?.TrimEnd('/') ?? "");
-        await Set(SyncSettings.Grist.DocId, input.DocId?.Trim() ?? "");
-        await Set(SyncSettings.Grist.IdentityTable, input.IdentityTable?.Trim() ?? "");
-
-        if (!SecretMask.IsMask(input.ApiKey))
-        {
-            await Set(SyncSettings.Grist.ApiKey, input.ApiKey?.Trim() ?? "");
-        }
-    }
-
-    public async Task<ConnectionTestResultDto> TestGristAsync()
-    {
-        var (ok, message) = await _gristIdentity.TestAsync();
-        return new ConnectionTestResultDto { Ok = ok, Message = message };
-    }
-
-    public async Task<ConnectionTestResultDto> SyncGristIdentityAsync()
-    {
-        var (ok, message, added, removed) = await _gristIdentity.SyncIdentityTableAsync();
-
-        return new ConnectionTestResultDto
-        {
-            Ok = ok,
-            Message = ok ? $"{message}: добавлено {added}, убрано {removed}" : message
-        };
-    }
-
-    /// <summary>
-    /// Обновить таблицу почт, не роняя саму операцию: учётка уже создана или удалена, а
-    /// недоступный в этот момент Grist не повод показывать человеку ошибку. Следующая
-    /// сверка с Keycloak или кнопка в интерфейсе доберут.
-    /// </summary>
-    private async Task SyncIdentityQuietlyAsync()
-    {
-        if (!await _gristIdentity.IsConfiguredAsync())
-        {
-            return;
-        }
-
-        try
-        {
-            var (ok, message, _, _) = await _gristIdentity.SyncIdentityTableAsync();
-
-            if (!ok)
-            {
-                Logger.LogWarning("Таблица почт в Grist не обновлена: {Message}", message);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Таблица почт в Grist не обновлена");
-        }
+        return await _keycloakSync.SyncAsync();
     }
 
     private async Task<string> Get(string name)

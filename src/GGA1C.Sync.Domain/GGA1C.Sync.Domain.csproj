@@ -10,6 +10,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GGA1C.Sync.Domain.Shared\GGA1C.Sync.Domain.Shared.csproj" />
+    <!-- Проверка подписи токена Keycloak. Версия та же, что уже тянет ABP через
+         OpenIddict, поэтому пакет берётся из локального кеша. -->
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
   </ItemGroup>
 
   <ItemGroup>

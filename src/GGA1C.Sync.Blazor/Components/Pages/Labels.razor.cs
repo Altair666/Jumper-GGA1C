@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using GGA1C.Sync.Connections;
-using GGA1C.Sync.Grist;
 using GGA1C.Sync.Labels;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
@@ -32,10 +30,6 @@ public partial class Labels
     /// <summary>Открытая карточка учётных данных. Пусто — карточка не показана.</summary>
     private AccountCredentialsDto? Creds { get; set; }
 
-    private GristSettingsDto GristSettings { get; set; } = new();
-
-    private ConnectionTestResultDto? GristTest { get; set; }
-
     /// <summary>Одинаковая ширина у кнопок справа от полей — иначе они разной длины.</summary>
     private const string ButtonWidth = "min-width: 210px;";
 
@@ -44,7 +38,6 @@ public partial class Labels
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
-        GristSettings = await ClientsAppService.GetGristSettingsAsync();
     }
 
     private async Task LoadAsync()
@@ -259,55 +252,6 @@ public partial class Labels
 
             await LoadAsync();
             await Notify.Success("Учётные данные сохранены");
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
-    // ── Ключи в Grist ─────────────────────────────────────────────────────────
-
-    private async Task SaveGristAsync()
-    {
-        Busy = true;
-        try
-        {
-            await ClientsAppService.SaveGristSettingsAsync(GristSettings);
-
-            // Перечитываем: ключ в ответе приходит маской, и в поле не должно остаться
-            // набранное значение.
-            GristSettings = await ClientsAppService.GetGristSettingsAsync();
-
-            await Notify.Success("Настройки Grist сохранены");
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
-    private async Task SyncIdentityAsync()
-    {
-        Busy = true;
-        GristTest = null;
-        try
-        {
-            GristTest = await ClientsAppService.SyncGristIdentityAsync();
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
-    private async Task TestGristAsync()
-    {
-        Busy = true;
-        GristTest = null;
-        try
-        {
-            GristTest = await ClientsAppService.TestGristAsync();
         }
         finally
         {

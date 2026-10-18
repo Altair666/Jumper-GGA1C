@@ -20,6 +20,12 @@ public class KeycloakSettingsDto
     public string ClientId { get; set; } = "";
 
     /// <summary>Маска сохранённого секрета при чтении; что ввели — при сохранении.</summary>
+    /// <summary>
+    /// Публичный клиент, которым виджет доказывает, кто перед ним. Секрета у него нет и
+    /// доступа ни к чему он не даёт — только подписанное удостоверение человека.
+    /// </summary>
+    public string WidgetClientId { get; set; } = "";
+
     public string ClientSecret { get; set; } = "";
 
     public bool HasClientSecret { get; set; }
