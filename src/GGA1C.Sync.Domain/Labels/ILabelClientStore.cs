@@ -55,4 +55,10 @@ public interface ILabelClientStore
     /// Две фамилии Иванов — обычное дело, и второй не должен ломать синхронизацию.
     /// </summary>
     Task<string> MakeUniqueSlugAsync(string baseSlug);
+
+    /// <summary>
+    /// Записать учётные данные человека во внешних системах. Пароли шифруются здесь —
+    /// в открытом виде они не попадают ни в базу, ни обратно в интерфейс.
+    /// </summary>
+    Task SetCredentialsAsync(int id, AccountCredentials input);
 }

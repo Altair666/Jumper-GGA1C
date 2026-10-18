@@ -1,0 +1,142 @@
+@page "/keycloak"
+@attribute [Authorize]
+@using GGA1C.Sync.Keycloak
+@inherits SyncComponentBase
+
+<MudText Typo="Typo.h5" Class="mb-4">Keycloak</MudText>
+
+<MudCard Class="mb-4">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-1">Подключение</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Отсюда хаб берёт список сотрудников и заводит им учётки с ключами.
+            Пароли людей для этого не нужны: хаб предъявляет свой секрет и умеет только
+            читать список.
+        </MudText>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="5">
+                <MudTextField @bind-Value="Kc.BaseUrl" Label="Адрес Keycloak" T="string"
+                              Placeholder="http://192.168.88.238:8080"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Без /realms" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="Kc.Realm" Label="Реалм" T="string"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Пространство со своими людьми" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="Kc.ClientId" Label="Клиент" T="string"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Программа, а не человек" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="Kc.ClientSecret" Label="Секрет клиента" T="string"
+                              InputType="InputType.Password"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(Kc.HasClientSecret ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.ErrorOutline)"
+                              AdornmentColor="@(Kc.HasClientSecret ? Color.Success : Color.Warning)"
+                              HelperText="@SecretHint" />
+            </MudItem>
+        </MudGrid>
+
+        <MudStack Row="true" Spacing="2" Class="mt-3 flex-wrap">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium"
+                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveAsync">Сохранить</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.NetworkCheck"
+                       OnClick="TestAsync">Проверить связь</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Sync"
+                       OnClick="SyncAsync">Синхронизировать</MudButton>
+        </MudStack>
+
+        @if (Test != null)
+        {
+            <MudAlert Class="mt-3" Severity="@(Test.Ok ? Severity.Success : Severity.Error)"
+                      Variant="Variant.Outlined">@Test.Message</MudAlert>
+        }
+
+        @if (Report != null)
+        {
+            <MudAlert Class="mt-3" Severity="@(Report.Ok ? Severity.Success : Severity.Error)"
+                      Variant="Variant.Outlined">
+                @if (!Report.Ok)
+                {
+                    <MudText Typo="Typo.body2">@Report.Message</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">
+                        Проверено: @Report.Checked · создано: @Report.Created ·
+                        обновлено: @Report.Updated · привязано: @Report.Linked ·
+                        отключено: @Report.Disabled · включено: @Report.Restored
+                        @if (Report.SkippedWithoutEmail > 0)
+                        {
+                            <text> · без email: @Report.SkippedWithoutEmail</text>
+                        }
+                    </MudText>
+                    @foreach (var line in Report.Details)
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block">@line</MudText>
+                    }
+                }
+            </MudAlert>
+        }
+    </MudCardContent>
+</MudCard>
+
+<MudCard>
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Что здесь что</MudText>
+
+        <MudSimpleTable Dense="true" Hover="false" Striped="true" Bordered="false" Elevation="0">
+            <tbody>
+                <tr>
+                    <td style="width: 140px; vertical-align: top;"><b>Реалм</b></td>
+                    <td>
+                        Отдельное пространство со своим списком людей, своими ролями и своими
+                        ключами подписи токенов. Пользователь одного реалма в другом не
+                        существует вовсе. <code>master</code> — служебный, в нём живёт
+                        администратор самого Keycloak; сотрудники должны быть в рабочем реалме.
+                    </td>
+                </tr>
+                <tr>
+                    <td style="vertical-align: top;"><b>Клиент</b></td>
+                    <td>
+                        Зарегистрированная программа внутри реалма, а не человек. Бывает двух
+                        сортов: одни впускают людей (человека перебрасывает в Keycloak, он
+                        вводит свой пароль и возвращается), другие действуют сами — у них своя
+                        служебная учётная запись и свой секрет. Хаб относится ко вторым.
+                    </td>
+                </tr>
+                <tr>
+                    <td style="vertical-align: top;"><b>Секрет</b></td>
+                    <td>
+                        Пароль самой программы. Хранится в базе зашифрованным и наружу не
+                        отдаётся — поэтому поле всегда пустое, даже когда секрет задан; значок
+                        в поле показывает, задан он или нет. Пустое поле при сохранении
+                        означает «оставить прежний».
+                    </td>
+                </tr>
+                <tr>
+                    <td style="vertical-align: top;"><b>Роль</b></td>
+                    <td>
+                        Клиенту нужна включённая служебная учётная запись и роль
+                        <code>view-users</code> из <code>realm-management</code>: без неё токен
+                        выдаётся, а список пользователей отвечает 403.
+                    </td>
+                </tr>
+            </tbody>
+        </MudSimpleTable>
+
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+            Отключение человека в Keycloak закрывает ему и печать этикеток: сверка идёт раз
+            в час и отключает учётку. Включённую обратно в Keycloak учётку сверка включает
+            тоже — но только если её отключила она же, а не администратор вручную.
+        </MudAlert>
+    </MudCardContent>
+</MudCard>

@@ -143,6 +143,14 @@ public class SqliteLabelsBuffer : ILabelsBuffer
         return db.Query<LabelRecord>(SelectSql + " ORDER BY id DESC").ToList();
     }
 
+    public List<LabelRecord> GetTop(int count)
+    {
+        using var db = Connect();
+        return db.Query<LabelRecord>(
+            SelectSql + " ORDER BY id DESC LIMIT @count",
+            new { count = Math.Max(0, count) }).ToList();
+    }
+
     public int Count()
     {
         using var db = Connect();

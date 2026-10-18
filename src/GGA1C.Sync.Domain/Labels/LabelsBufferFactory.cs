@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Data.Sqlite;
@@ -35,6 +36,30 @@ public class LabelsBufferFactory : ILabelsBufferFactory, ISingletonDependency
     public string PathFor(string slug)
     {
         return Path.Combine(BuffersRoot, Normalize(slug), "labels.db");
+    }
+
+    public BufferFileInfo Describe(string slug)
+    {
+        var path = PathFor(slug);
+        var file = new FileInfo(path);
+
+        return file.Exists
+            ? new BufferFileInfo(path, true, file.Length, file.LastWriteTimeUtc)
+            : new BufferFileInfo(path, false, 0, null);
+    }
+
+    public List<string> ListFolders()
+    {
+        if (!Directory.Exists(BuffersRoot))
+        {
+            return [];
+        }
+
+        return Directory.GetDirectories(BuffersRoot)
+            .Select(d => Path.GetFileName(d))
+            .Where(n => !string.IsNullOrEmpty(n))
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     public void Delete(string slug)

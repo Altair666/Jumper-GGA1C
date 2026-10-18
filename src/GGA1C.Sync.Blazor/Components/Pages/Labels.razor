@@ -1,8 +1,6 @@
 ﻿@page "/labels"
 @attribute [Authorize]
 @using GGA1C.Sync.Labels
-@using GGA1C.Sync.Keycloak
-@using GGA1C.Sync.Connections
 @inherits SyncComponentBase
 
 <MudText Typo="Typo.h5" Class="mb-4">Grist → GoLabel2</MudText>
@@ -23,91 +21,73 @@
     </MudAlert>
 }
 
-<MudCard Class="mb-4">
-    <MudCardContent>
-        <MudText Typo="Typo.h6" Class="mb-3">Учётные записи из Keycloak</MudText>
+@if (Creds != null)
+{
+    <MudCard Class="mb-4">
+        <MudCardContent>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-1">
+                <MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Color="Color.Primary" />
+                <MudText Typo="Typo.h6">Учётные данные: @Creds.Name</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Чем хаб представляется во внешних системах от имени этого человека.
+                Пароли хранятся зашифрованными и обратно в интерфейс не отдаются —
+                пустое поле означает «оставить прежний».
+            </MudText>
 
-        <MudGrid Spacing="2">
-            <MudItem xs="12" md="5">
-                <MudTextField @bind-Value="Kc.BaseUrl" Label="Адрес Keycloak" T="string"
-                              Placeholder="http://192.168.88.238:8080"
-                              Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="Без /realms" />
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudTextField @bind-Value="Kc.Realm" Label="Реалм" T="string"
-                              Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="Пространство со своими людьми" />
-            </MudItem>
-            <MudItem xs="12" md="4">
-                <MudTextField @bind-Value="Kc.ClientId" Label="Клиент" T="string"
-                              Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="Программа, а не человек" />
-            </MudItem>
-            <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="Kc.ClientSecret" Label="Секрет клиента" T="string"
-                              InputType="InputType.Password"
-                              Variant="Variant.Outlined" Margin="Margin.Dense"
-                              Adornment="Adornment.End"
-                              AdornmentIcon="@(Kc.HasClientSecret ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.ErrorOutline)"
-                              AdornmentColor="@(Kc.HasClientSecret ? Color.Success : Color.Warning)"
-                              HelperText="@SecretHint" />
-            </MudItem>
-        </MudGrid>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Creds.AltiumLogin" Label="Altium Designer — логин"
+                                  T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  HelperText="Учётка в Altium Enterprise Server" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Creds.AltiumPassword" Label="Altium Designer — пароль"
+                                  T="string" InputType="InputType.Password"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@StateIcon(Creds.HasAltiumPassword)"
+                                  AdornmentColor="@StateColor(Creds.HasAltiumPassword)"
+                                  HelperText="@StateHint(Creds.HasAltiumPassword)" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Creds.PdmLogin" Label="SOLIDWORKS PDM — логин"
+                                  T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  HelperText="Логин в хранилище PDM" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Creds.PdmPassword" Label="SOLIDWORKS PDM — пароль"
+                                  T="string" InputType="InputType.Password"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@StateIcon(Creds.HasPdmPassword)"
+                                  AdornmentColor="@StateColor(Creds.HasPdmPassword)"
+                                  HelperText="@StateHint(Creds.HasPdmPassword)" />
+                </MudItem>
+            </MudGrid>
 
-        <MudStack Row="true" Spacing="2" Class="mt-3 flex-wrap">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium"
-                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Save"
-                       OnClick="SaveKeycloakAsync">Сохранить</MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
-                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.NetworkCheck"
-                       OnClick="TestKeycloakAsync">Проверить связь</MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
-                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Sync"
-                       OnClick="SyncKeycloakAsync">Синхронизировать</MudButton>
-        </MudStack>
+            <MudStack Row="true" Spacing="2" Class="mt-3 flex-wrap">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium"
+                           Disabled="@Busy" StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveCredsAsync">Сохранить</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Medium"
+                           Disabled="@Busy" StartIcon="@Icons.Material.Filled.Close"
+                           OnClick="@(() => Creds = null)">Закрыть</MudButton>
+                <MudSpacer />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary align-self-center">
+                    Изменены: @FormatWhen(Creds.UpdatedAt)
+                </MudText>
+            </MudStack>
 
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
-            Клиенту в Keycloak нужна включённая служебная учётная запись и роль
-            <code>view-users</code> из <code>realm-management</code>: без неё токен выдаётся,
-            а список пользователей отвечает 403. Пароли сотрудников при этом не нужны —
-            хаб предъявляет свой секрет и умеет только читать список.
-        </MudAlert>
-
-        @if (KcTest != null)
-        {
-            <MudAlert Class="mt-3" Severity="@(KcTest.Ok ? Severity.Success : Severity.Error)"
-                      Variant="Variant.Outlined">@KcTest.Message</MudAlert>
-        }
-
-        @if (KcReport != null)
-        {
-            <MudAlert Class="mt-3" Severity="@(KcReport.Ok ? Severity.Success : Severity.Error)"
-                      Variant="Variant.Outlined">
-                @if (!KcReport.Ok)
-                {
-                    <MudText Typo="Typo.body2">@KcReport.Message</MudText>
-                }
-                else
-                {
-                    <MudText Typo="Typo.body2">
-                        Проверено: @KcReport.Checked · создано: @KcReport.Created ·
-                        обновлено: @KcReport.Updated · привязано: @KcReport.Linked ·
-                        отключено: @KcReport.Disabled · включено: @KcReport.Restored
-                        @if (KcReport.SkippedWithoutEmail > 0)
-                        {
-                            <text> · без email: @KcReport.SkippedWithoutEmail</text>
-                        }
-                    </MudText>
-                    @foreach (var line in KcReport.Details)
-                    {
-                        <MudText Typo="Typo.caption" Class="d-block">@line</MudText>
-                    }
-                }
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+                Пароль PDM приходится хранить потому, что PDM не умеет ни SAML, ни OIDC —
+                через Keycloak в него не войти, а действовать от имени человека без его
+                пароля PDM не позволяет. Altium работает по тем же правилам: от имени
+                человека — значит с его логином.
             </MudAlert>
-        }
-    </MudCardContent>
-</MudCard>
+        </MudCardContent>
+    </MudCard>
+}
 
 <MudCard Class="mb-4">
     <MudCardContent>
@@ -139,7 +119,7 @@
     </MudCardContent>
 </MudCard>
 
-<MudCard>
+<MudCard Class="mb-4">
     <MudCardContent>
         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
             <MudText Typo="Typo.h6">Учётные записи</MudText>
@@ -152,16 +132,10 @@
                        OnClick="LoadAsync">Обновить</MudButton>
         </MudStack>
 
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-            У каждой учётки свой ключ и свой файл буфера, поэтому синхронизация одного
-            оператора не затирает партию другого. Путь к файлу прописывается в источнике
-            ODBC на машине с GoLabel2.
-        </MudText>
-
         @if (Clients.Count == 0)
         {
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                Учётных записей нет.
+                Учётных записей нет. Заведите вручную или подтяните из Keycloak.
             </MudAlert>
         }
         else
@@ -172,23 +146,28 @@
                     <MudTh>Папка</MudTh>
                     <MudTh>Ключ</MudTh>
                     <MudTh>Этикеток</MudTh>
-                    <MudTh>Файл буфера</MudTh>
+                    <MudTh>Данные</MudTh>
                     <MudTh>Использован</MudTh>
                     <MudTh>Включена</MudTh>
-                    <MudTh Style="width: 160px;">Действия</MudTh>
+                    <MudTh Style="width: 200px;">Действия</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Имя">@context.Name</MudTd>
                     <MudTd DataLabel="Папка"><code>@context.Slug</code></MudTd>
                     <MudTd DataLabel="Ключ"><code>@context.KeyPrefix…</code></MudTd>
                     <MudTd DataLabel="Этикеток">@context.RowCount</MudTd>
-                    <MudTd DataLabel="Файл буфера">
-                        <MudText Typo="Typo.caption">@context.BufferPath</MudText>
+                    <MudTd DataLabel="Данные">
+                        <MudStack Row="true" Spacing="1">
+                            <MudIcon Size="Size.Small" Title="Altium Designer"
+                                     Icon="@Icons.Material.Filled.Memory"
+                                     Color="@StateColor(context.HasAltiumCredentials)" />
+                            <MudIcon Size="Size.Small" Title="SOLIDWORKS PDM"
+                                     Icon="@Icons.Material.Filled.Inventory2"
+                                     Color="@StateColor(context.HasPdmCredentials)" />
+                        </MudStack>
                     </MudTd>
                     <MudTd DataLabel="Использован">
-                        <MudText Typo="Typo.caption">
-                            @(context.LastUsedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")
-                        </MudText>
+                        <MudText Typo="Typo.caption">@FormatWhen(context.LastUsedAt)</MudText>
                     </MudTd>
                     <MudTd DataLabel="Включена">
                         <MudSwitch T="bool" Color="Color.Primary" Value="@context.IsEnabled"
@@ -196,6 +175,10 @@
                     </MudTd>
                     <MudTd>
                         <MudStack Row="true" Spacing="0">
+                            <MudIconButton Icon="@Icons.Material.Filled.ManageAccounts" Size="Size.Small"
+                                           Color="Color.Primary" Title="Учётные данные Altium и PDM"
+                                           Disabled="@Busy"
+                                           OnClick="@(() => OpenCredsAsync(context))" />
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
                                            Title="Показать ключ" Disabled="@Busy"
                                            OnClick="@(() => RevealAsync(context))" />
@@ -222,5 +205,126 @@
             <b>Endpoint</b> — <code>/api/grist/labels/replace-all</code>. Ключ принимается и
             как <code>Authorization: Bearer</code>, и как <code>X-Api-Key</code>.
         </MudText>
+    </MudCardContent>
+</MudCard>
+
+<MudCard>
+    <MudCardContent>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h6">Буферы</MudText>
+            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">
+                @Buffers.Count
+            </MudChip>
+            <MudSpacer />
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadBuffersAsync">Обновить</MudButton>
+        </MudStack>
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Это то, что сейчас лежит в файлах и что прочитает GoLabel2 через ODBC. У каждой
+            учётки свой файл, поэтому синхронизация одного оператора не затирает партию
+            другого. Путь из заголовка прописывается в источнике ODBC на машине с принтером.
+        </MudText>
+
+        @if (Buffers.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Буферов нет: папки появляются вместе с учётными записями.
+            </MudAlert>
+        }
+        else
+        {
+            <MudExpansionPanels MultiExpansion="true" Elevation="0" Outlined="true">
+                @foreach (var buffer in Buffers)
+                {
+                    <MudExpansionPanel>
+                        <TitleContent>
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@(buffer.ClientId == null
+                                                 ? Icons.Material.Filled.FolderOff
+                                                 : Icons.Material.Filled.Folder)"
+                                         Color="@(buffer.ClientId == null ? Color.Warning : Color.Default)" />
+                                <MudText Typo="Typo.body1"><b>@buffer.Name</b></MudText>
+                                <code>@buffer.Slug</code>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                         Color="@(buffer.RowCount > 0 ? Color.Success : Color.Default)">
+                                    @buffer.RowCount @Plural(buffer.RowCount)
+                                </MudChip>
+                                @if (buffer.ClientId == null)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                                             Variant="Variant.Outlined">нет учётки</MudChip>
+                                }
+                                @if (!buffer.FileExists)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error"
+                                             Variant="Variant.Outlined">нет файла</MudChip>
+                                }
+                                <MudSpacer />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @FormatSize(buffer.SizeBytes) · @FormatWhen(buffer.UpdatedAt)
+                                </MudText>
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2"
+                                     Style="font-family: monospace;">@buffer.Path</MudText>
+
+                            @if (buffer.Rows.Count == 0)
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                    Буфер пуст — синхронизация из виджета его наполнит.
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudTable Items="@buffer.Rows" Dense="true" Hover="true"
+                                          Striped="true" T="LabelRecord" Elevation="0">
+                                    <HeaderContent>
+                                        <MudTh>Дата</MudTh>
+                                        <MudTh>Код изделия</MudTh>
+                                        <MudTh>Код режима</MudTh>
+                                        <MudTh>Ключ строки</MudTh>
+                                        <MudTh>Обновлена</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Дата">@context.Date</MudTd>
+                                        <MudTd DataLabel="Код изделия"><code>@context.ProductCode</code></MudTd>
+                                        <MudTd DataLabel="Код режима"><code>@context.ModeCode</code></MudTd>
+                                        <MudTd DataLabel="Ключ строки">
+                                            <MudText Typo="Typo.caption">@context.ExternalId</MudText>
+                                        </MudTd>
+                                        <MudTd DataLabel="Обновлена">
+                                            <MudText Typo="Typo.caption">@FormatWhen(context.UpdatedAt)</MudText>
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+
+                                @if (buffer.RowCount > buffer.Rows.Count)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">
+                                        Показаны первые @buffer.Rows.Count из @buffer.RowCount —
+                                        остальное читается из файла.
+                                    </MudText>
+                                }
+                            }
+
+                            @if (buffer.ClientId == null)
+                            {
+                                <MudStack Row="true" Spacing="2" Class="mt-3">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                                               Size="Size.Medium" Disabled="@Busy"
+                                               StartIcon="@Icons.Material.Filled.Delete"
+                                               OnClick="@(() => DeleteFolderAsync(buffer))">
+                                        Удалить папку
+                                    </MudButton>
+                                </MudStack>
+                            }
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
+        }
     </MudCardContent>
 </MudCard>

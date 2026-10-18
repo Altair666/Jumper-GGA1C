@@ -13,6 +13,12 @@ public interface ILabelsBuffer
 
     List<LabelRecord> GetAll();
 
+    /// <summary>
+    /// Первые строки буфера (новые сверху). Нужно интерфейсу: показать таблицу буфера,
+    /// не вытягивая из файла всю партию.
+    /// </summary>
+    List<LabelRecord> GetTop(int count);
+
     int Count();
 
     /// <summary>Добавить или обновить записи по ExternalId.</summary>

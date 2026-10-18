@@ -1,4 +1,4 @@
-﻿using System.Threading.Tasks;
+using System.Threading.Tasks;
 using GGA1C.Sync.Localization;
 using GGA1C.Sync.MultiTenancy;
 using Volo.Abp.Identity.Blazor.MudBlazor;
@@ -53,6 +53,17 @@ public class SyncMenuContributor : IMenuContributor
                 "/altium-1c",
                 icon: "fas fa-microchip",
                 order: 2
+            )
+        );
+
+        context.Menu.Items.Insert(
+            3,
+            new ApplicationMenuItem(
+                SyncMenus.Keycloak,
+                "Keycloak",
+                "/keycloak",
+                icon: "fas fa-id-badge",
+                order: 3
             )
         );
 

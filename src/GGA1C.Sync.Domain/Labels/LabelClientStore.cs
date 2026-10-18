@@ -191,6 +191,36 @@ public class LabelClientStore : DomainService, ILabelClientStore
             .WithData("message", $"Не удалось подобрать свободное имя папки для «{baseSlug}»");
     }
 
+    public async Task SetCredentialsAsync(int id, AccountCredentials input)
+    {
+        var client = await _repo.GetAsync(id);
+
+        client.AltiumLogin = Trim(input.AltiumLogin);
+        client.PdmLogin = Trim(input.PdmLogin);
+
+        // Пустое поле пароля - "оставить прежний": наружу пароль не отдаётся, поэтому
+        // форма приходит пустой, и очистка по пустоте стирала бы пароль при каждом
+        // сохранении. Стереть пароль можно, удалив учётку или задав новый.
+        if (!string.IsNullOrWhiteSpace(input.AltiumPassword))
+        {
+            client.AltiumPasswordEncrypted = _encryption.Encrypt(input.AltiumPassword.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(input.PdmPassword))
+        {
+            client.PdmPasswordEncrypted = _encryption.Encrypt(input.PdmPassword.Trim());
+        }
+
+        client.CredentialsUpdatedAt = DateTime.UtcNow;
+
+        await _repo.UpdateAsync(client, autoSave: true);
+    }
+
+    private static string? Trim(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
     /// <summary>40 знаков hex — тот же вид, что выдавала прежняя версия сервиса,
     /// чтобы уже прописанные в виджетах ключи не выглядели инородно.</summary>
     private static string GenerateKey()

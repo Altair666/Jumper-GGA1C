@@ -1,4 +1,4 @@
-﻿using GGA1C.Sync.Altium;
+using GGA1C.Sync.Altium;
 using GGA1C.Sync.Diagnostics;
 using GGA1C.Sync.Labels;
 using Microsoft.EntityFrameworkCore;
@@ -160,6 +160,13 @@ public class SyncDbContext :
             b.Property(x => x.KeycloakSub).HasMaxLength(64);
             b.Property(x => x.KeycloakUsername).HasMaxLength(128);
             b.Property(x => x.Email).HasMaxLength(256);
+
+            // Учётные данные во внешних системах. Пароли лежат зашифрованными, поэтому
+            // поле заметно длиннее самого пароля.
+            b.Property(x => x.AltiumLogin).HasMaxLength(128);
+            b.Property(x => x.AltiumPasswordEncrypted).HasMaxLength(512);
+            b.Property(x => x.PdmLogin).HasMaxLength(128);
+            b.Property(x => x.PdmPasswordEncrypted).HasMaxLength(512);
         });
 
         builder.Entity<RequestLogItem>(b =>

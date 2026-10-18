@@ -322,6 +322,14 @@ namespace GGA1C.Sync.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("AltiumLogin")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AltiumPasswordEncrypted")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("TEXT")
                         .HasColumnName("CreationTime");
@@ -329,6 +337,9 @@ namespace GGA1C.Sync.Migrations
                     b.Property<Guid?>("CreatorId")
                         .HasColumnType("TEXT")
                         .HasColumnName("CreatorId");
+
+                    b.Property<DateTime?>("CredentialsUpdatedAt")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
@@ -374,6 +385,14 @@ namespace GGA1C.Sync.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PdmLogin")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PdmPasswordEncrypted")
+                        .HasMaxLength(512)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Slug")

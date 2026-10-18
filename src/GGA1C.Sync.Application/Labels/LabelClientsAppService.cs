@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using GGA1C.Sync.Connections;
@@ -50,7 +52,9 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             IsEnabled = c.IsEnabled,
             LastUsedAt = c.LastUsedAt,
             BufferPath = _buffers.PathFor(c.Slug),
-            RowCount = _buffers.For(c.Slug).Count()
+            RowCount = _buffers.For(c.Slug).Count(),
+            HasAltiumCredentials = !string.IsNullOrEmpty(c.AltiumPasswordEncrypted),
+            HasPdmCredentials = !string.IsNullOrEmpty(c.PdmPasswordEncrypted)
         }).ToList();
     }
 
@@ -132,6 +136,116 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         }
 
         _buffers.For(client.Slug).ClearAll();
+    }
+
+    // ── Буферы ────────────────────────────────────────────────────────────────
+
+    public async Task<List<BufferContentsDto>> GetBuffersAsync(int maxRows = 50)
+    {
+        var clients = await _clients.GetAllAsync();
+        var result = new List<BufferContentsDto>();
+
+        foreach (var client in clients)
+        {
+            result.Add(Describe(client.Id, client.Name, client.Slug, maxRows));
+        }
+
+        var known = clients.Select(c => c.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Папки без учётки: обычно след удалённой учётки, чей файл в тот момент держал
+        // открытый источник ODBC. Без показа в интерфейсе они копились бы незамеченными.
+        foreach (var folder in _buffers.ListFolders().Where(f => !known.Contains(f)))
+        {
+            result.Add(Describe(null, "Папка без учётной записи", folder, maxRows));
+        }
+
+        return result;
+    }
+
+    public async Task DeleteBufferFolderAsync(string slug)
+    {
+        var clients = await _clients.GetAllAsync();
+
+        if (clients.Any(c => string.Equals(c.Slug, slug, StringComparison.OrdinalIgnoreCase)))
+        {
+            // Иначе буфер работающей учётки удалялся бы мимо подтверждения, которое
+            // показывается при удалении учётной записи.
+            throw new BusinessException("GGA1C.Sync:BufferBelongsToClient")
+                .WithData("message",
+                    $"Папка «{slug}» принадлежит учётной записи — удаляйте вместе с учёткой");
+        }
+
+        _buffers.Delete(slug);
+    }
+
+    private BufferContentsDto Describe(int? clientId, string name, string slug, int maxRows)
+    {
+        var dto = new BufferContentsDto
+        {
+            ClientId = clientId,
+            Name = name,
+            Slug = slug,
+            Path = Path.Combine(_buffers.BuffersRoot, slug)
+        };
+
+        try
+        {
+            var info = _buffers.Describe(slug);
+
+            dto.Path = info.Path;
+            dto.FileExists = info.Exists;
+            dto.SizeBytes = info.SizeBytes;
+            dto.UpdatedAt = info.UpdatedAt;
+
+            if (info.Exists)
+            {
+                var buffer = _buffers.For(slug);
+                dto.RowCount = buffer.Count();
+                dto.Rows = buffer.GetTop(maxRows);
+            }
+        }
+        catch (BusinessException)
+        {
+            // Имя папки не проходит проверку - значит её создали не мы. Показываем как есть:
+            // читать там нечего, но видеть её в списке полезно.
+        }
+
+        return dto;
+    }
+
+    // ── Учётные данные во внешних системах ────────────────────────────────────
+
+    public async Task<AccountCredentialsDto> GetCredentialsAsync(int id)
+    {
+        var client = await _clients.FindAsync(id)
+            ?? throw new BusinessException("GGA1C.Sync:ClientNotFound")
+                .WithData("message", "Учётная запись не найдена");
+
+        return new AccountCredentialsDto
+        {
+            Id = client.Id,
+            Name = client.Name,
+            AltiumLogin = client.AltiumLogin ?? "",
+            PdmLogin = client.PdmLogin ?? "",
+
+            // Пароли наружу не отдаём - только факт, что они заданы
+            AltiumPassword = "",
+            PdmPassword = "",
+            HasAltiumPassword = !string.IsNullOrEmpty(client.AltiumPasswordEncrypted),
+            HasPdmPassword = !string.IsNullOrEmpty(client.PdmPasswordEncrypted),
+            UpdatedAt = client.CredentialsUpdatedAt
+        };
+    }
+
+    public async Task SaveCredentialsAsync(AccountCredentialsDto input)
+    {
+        await _clients.SetCredentialsAsync(
+            input.Id,
+            new AccountCredentials(
+                input.AltiumLogin,
+                input.AltiumPassword,
+                input.PdmLogin,
+                input.PdmPassword));
     }
 
     // ── Keycloak ──────────────────────────────────────────────────────────────

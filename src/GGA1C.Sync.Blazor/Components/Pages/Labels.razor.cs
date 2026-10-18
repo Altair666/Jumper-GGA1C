@@ -1,9 +1,9 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using GGA1C.Sync.Connections;
-using GGA1C.Sync.Keycloak;
 using GGA1C.Sync.Labels;
 using Microsoft.AspNetCore.Components;
+using MudBlazor;
 
 // Пространство имён должно совпадать с тем, что генерирует razor для файла в
 // Components/Pages, иначе partial-класс не склеится с компонентом и переопределения
@@ -16,6 +16,8 @@ public partial class Labels
 
     private List<LabelClientDto> Clients { get; set; } = new();
 
+    private List<BufferContentsDto> Buffers { get; set; } = new();
+
     private string NewName { get; set; } = "";
     private string NewEmail { get; set; } = "";
 
@@ -25,22 +27,14 @@ public partial class Labels
 
     private string ShownKeyFor { get; set; } = "";
 
-    private string SecretHint => Kc.HasClientSecret
-        ? "Сохранён. Пустое поле — оставить как есть"
-        : "Не задан";
-
-    private KeycloakSettingsDto Kc { get; set; } = new();
-
-    private ConnectionTestResultDto? KcTest { get; set; }
-
-    private KeycloakSyncReport? KcReport { get; set; }
+    /// <summary>Открытая карточка учётных данных. Пусто — карточка не показана.</summary>
+    private AccountCredentialsDto? Creds { get; set; }
 
     private bool Busy { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
-        Kc = await ClientsAppService.GetKeycloakSettingsAsync();
     }
 
     private async Task LoadAsync()
@@ -49,6 +43,20 @@ public partial class Labels
         try
         {
             Clients = await ClientsAppService.GetListAsync();
+            Buffers = await ClientsAppService.GetBuffersAsync();
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task LoadBuffersAsync()
+    {
+        Busy = true;
+        try
+        {
+            Buffers = await ClientsAppService.GetBuffersAsync();
         }
         finally
         {
@@ -168,6 +176,13 @@ public partial class Labels
         try
         {
             await ClientsAppService.DeleteAsync(client.Id);
+
+            // Карточку учётных данных закрываем: она могла быть открыта на удалённой учётке
+            if (Creds?.Id == client.Id)
+            {
+                Creds = null;
+            }
+
             await LoadAsync();
             await Notify.Success("Учётная запись удалена");
         }
@@ -177,18 +192,23 @@ public partial class Labels
         }
     }
 
-    private async Task SaveKeycloakAsync()
+    private async Task DeleteFolderAsync(BufferContentsDto buffer)
     {
+        var confirmed = await Message.Confirm(
+            $"Удалить папку «{buffer.Slug}» вместе с файлом? Учётной записи у неё нет, " +
+            $"этикеток внутри: {buffer.RowCount}.");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
         Busy = true;
         try
         {
-            await ClientsAppService.SaveKeycloakSettingsAsync(Kc);
-
-            // Перечитываем: секрет в ответе приходит пустым, зато обновится флаг
-            // «сохранён», и поле не останется с набранным значением.
-            Kc = await ClientsAppService.GetKeycloakSettingsAsync();
-
-            await Notify.Success("Настройки Keycloak сохранены");
+            await ClientsAppService.DeleteBufferFolderAsync(buffer.Slug);
+            await LoadBuffersAsync();
+            await Notify.Success("Папка удалена");
         }
         finally
         {
@@ -196,14 +216,14 @@ public partial class Labels
         }
     }
 
-    private async Task TestKeycloakAsync()
+    // ── Учётные данные во внешних системах ────────────────────────────────────
+
+    private async Task OpenCredsAsync(LabelClientDto client)
     {
         Busy = true;
-        KcTest = null;
-        KcReport = null;
         try
         {
-            KcTest = await ClientsAppService.TestKeycloakAsync();
+            Creds = await ClientsAppService.GetCredentialsAsync(client.Id);
         }
         finally
         {
@@ -211,19 +231,81 @@ public partial class Labels
         }
     }
 
-    private async Task SyncKeycloakAsync()
+    private async Task SaveCredsAsync()
     {
+        if (Creds == null)
+        {
+            return;
+        }
+
         Busy = true;
-        KcTest = null;
-        KcReport = null;
         try
         {
-            KcReport = await ClientsAppService.SyncFromKeycloakAsync();
+            await ClientsAppService.SaveCredentialsAsync(Creds);
+
+            // Перечитываем: пароли в ответе приходят пустыми, зато обновятся признаки
+            // «задан», и поля не останутся с набранными значениями.
+            Creds = await ClientsAppService.GetCredentialsAsync(Creds.Id);
+
             await LoadAsync();
+            await Notify.Success("Учётные данные сохранены");
         }
         finally
         {
             Busy = false;
         }
+    }
+
+    // ── Мелочи для разметки ───────────────────────────────────────────────────
+
+    private static string StateIcon(bool has) => has
+        ? Icons.Material.Filled.CheckCircle
+        : Icons.Material.Filled.ErrorOutline;
+
+    private static Color StateColor(bool has) => has ? Color.Success : Color.Default;
+
+    private static string StateHint(bool has) => has
+        ? "Задан. Пустое поле — оставить как есть"
+        : "Не задан";
+
+    private static string FormatWhen(DateTime? utc)
+    {
+        return utc?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—";
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return "—";
+        }
+
+        if (bytes < 1024)
+        {
+            return $"{bytes} Б";
+        }
+
+        return bytes < 1024 * 1024
+            ? $"{bytes / 1024.0:0.#} КБ"
+            : $"{bytes / 1024.0 / 1024.0:0.#} МБ";
+    }
+
+    private static string Plural(int count)
+    {
+        // Этикетка / этикетки / этикеток - иначе в заголовке буфера читается коряво
+        var last = count % 10;
+        var lastTwo = count % 100;
+
+        if (last == 1 && lastTwo != 11)
+        {
+            return "этикетка";
+        }
+
+        if (last is >= 2 and <= 4 && lastTwo is < 12 or > 14)
+        {
+            return "этикетки";
+        }
+
+        return "этикеток";
     }
 }

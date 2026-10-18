@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using GGA1C.Sync.Connections;
 using GGA1C.Sync.Keycloak;
@@ -31,12 +31,38 @@ public interface ILabelClientsAppService : IApplicationService
 
     Task SetEnabledAsync(int id, bool enabled);
 
-    /// <summary>Удалить учётку. Файл буфера остаётся на диске - в нём может быть
-    /// неотпечатанная партия.</summary>
+    /// <summary>
+    /// Удалить учётку вместе с папкой буфера, чтобы не копить мусор на сервере. Если файл
+    /// занят (открыт источник ODBC), ключ всё равно уже отозван, а папка остаётся видна
+    /// в интерфейсе как буфер без учётной записи.
+    /// </summary>
     Task DeleteAsync(int id);
 
     /// <summary>Очистить буфер учётки, не трогая саму учётку.</summary>
     Task ClearBufferAsync(int id);
+
+    // ── Буферы ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Все буферы в корне: содержимое по каждой учётке и папки без хозяина.
+    /// <paramref name="maxRows"/> ограничивает показываемые строки — в буфере их может
+    /// быть сколько угодно, а в интерфейсе нужна таблица, а не выгрузка.
+    /// </summary>
+    Task<List<BufferContentsDto>> GetBuffersAsync(int maxRows = 50);
+
+    /// <summary>
+    /// Удалить папку буфера, которой не соответствует ни одна учётка. Учётный буфер
+    /// так не удалить — для него есть удаление вместе с учёткой.
+    /// </summary>
+    Task DeleteBufferFolderAsync(string slug);
+
+    // ── Учётные данные во внешних системах ────────────────────────────────────
+
+    /// <summary>Логины Altium и PDM плюс признаки «пароль задан». Пароли не возвращаются.</summary>
+    Task<AccountCredentialsDto> GetCredentialsAsync(int id);
+
+    /// <summary>Сохранить учётные данные. Пустой пароль оставляет прежний.</summary>
+    Task SaveCredentialsAsync(AccountCredentialsDto input);
 
     // ── Keycloak ──────────────────────────────────────────────────────────────
 

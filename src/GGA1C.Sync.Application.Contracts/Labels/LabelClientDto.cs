@@ -27,4 +27,10 @@ public class LabelClientDto
 
     /// <summary>Сколько этикеток сейчас в буфере этой учётки.</summary>
     public int RowCount { get; set; }
+
+    /// <summary>Заданы ли учётные данные Altium Designer. Сами данные здесь не передаются.</summary>
+    public bool HasAltiumCredentials { get; set; }
+
+    /// <summary>Заданы ли учётные данные SOLIDWORKS PDM.</summary>
+    public bool HasPdmCredentials { get; set; }
 }

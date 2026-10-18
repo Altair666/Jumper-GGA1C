@@ -73,4 +73,34 @@ public class LabelClient : AuditedEntity<int>
 
     /// <summary>Когда последний раз сверялись с Keycloak.</summary>
     public DateTime? SyncedAt { get; set; }
+
+    // ── Учётные данные во внешних системах ────────────────────────────────────
+
+    /// <summary>
+    /// Логин человека в Altium Designer (Altium Enterprise Server). Нужен, чтобы выгрузка
+    /// компонентов шла от его имени: в журнале Altium остаётся он, а не одна служебная
+    /// учётка на весь завод.
+    /// </summary>
+    public string? AltiumLogin { get; set; }
+
+    /// <summary>
+    /// Пароль Altium, зашифрованный ключом StringEncryption (он лежит вне репозитория).
+    /// Наружу не отдаётся никогда — ни в интерфейс, ни в API: в интерфейсе видно только,
+    /// задан он или нет.
+    /// </summary>
+    public string? AltiumPasswordEncrypted { get; set; }
+
+    /// <summary>
+    /// Логин в хранилище SOLIDWORKS PDM. Хранить его приходится потому, что PDM не умеет
+    /// ни SAML, ни OIDC, а значит через Keycloak в него не войти; способа действовать от
+    /// имени человека без его пароля PDM тоже не даёт.
+    /// </summary>
+    public string? PdmLogin { get; set; }
+
+    /// <summary>Пароль PDM, зашифрованный тем же ключом. См. оговорку у <see cref="PdmLogin"/>.</summary>
+    public string? PdmPasswordEncrypted { get; set; }
+
+    /// <summary>Когда учётные данные последний раз меняли. Видно в интерфейсе, чтобы было
+    /// понятно, не устарел ли пароль после смены в домене.</summary>
+    public DateTime? CredentialsUpdatedAt { get; set; }
 }

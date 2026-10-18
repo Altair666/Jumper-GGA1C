@@ -106,6 +106,49 @@ public class LabelsBufferTests : IDisposable
     }
 
     [Fact]
+    public void Первые_строки_буфера_отдаются_с_ограничением()
+    {
+        var buffer = _factory.For("ivanov");
+
+        buffer.ReplaceAll([
+            new LabelRecord { ExternalId = "A", ProductCode = "A-1" },
+            new LabelRecord { ExternalId = "B", ProductCode = "B-1" },
+            new LabelRecord { ExternalId = "C", ProductCode = "C-1" }
+        ]);
+
+        // Интерфейс показывает таблицу буфера, а не выгружает его целиком - иначе на
+        // большой партии страница тянула бы из файла всё.
+        var top = buffer.GetTop(2);
+
+        top.Count.ShouldBe(2);
+        top[0].ExternalId.ShouldBe("C");   // новые сверху
+        buffer.Count().ShouldBe(3);
+    }
+
+    [Fact]
+    public void Буферы_видно_списком_с_размером_файла()
+    {
+        _factory.For("ivanov").ReplaceAll([new LabelRecord { ExternalId = "A", ProductCode = "A-1" }]);
+        _factory.For("petrov");
+
+        // Папку, созданную не нами, список тоже обязан показать: иначе буфер, оставшийся
+        // от удалённой учётки, копился бы на сервере незамеченным.
+        Directory.CreateDirectory(Path.Combine(_root, "orphan"));
+
+        _factory.ListFolders().ShouldBe(["ivanov", "orphan", "petrov"]);
+
+        var info = _factory.Describe("ivanov");
+        info.Exists.ShouldBeTrue();
+        info.SizeBytes.ShouldBeGreaterThan(0);
+        info.UpdatedAt.ShouldNotBeNull();
+
+        var missing = _factory.Describe("nobody");
+        missing.Exists.ShouldBeFalse();
+        missing.SizeBytes.ShouldBe(0);
+        missing.UpdatedAt.ShouldBeNull();
+    }
+
+    [Fact]
     public void Удаление_буфера_убирает_папку_с_файлом()
     {
         var buffer = _factory.For("ivanov");
