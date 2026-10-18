@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
@@ -27,6 +27,13 @@ public interface ILabelsAppService : IApplicationService
     /// "ключ не тот" от "ключ отозван".
     /// </summary>
     Task<LabelClientDto?> ResolveClientAsync(string? key);
+
+    /// <summary>
+    /// Опознать человека по короткоживущему токену, который виджет получил у самого Grist.
+    /// Хаб спрашивает Grist, чья это сессия, и ищет учётку по адресу почты — секретов в
+    /// документе при этом не хранится.
+    /// </summary>
+    Task<GristClientResolution> ResolveClientByGristTokenAsync(string? token);
 
     Task<List<LabelRecord>> GetAllAsync(string slug);
 

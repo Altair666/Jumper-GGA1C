@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -228,11 +229,38 @@ public class SyncBlazorModule : AbpModule
         });
     }
 
+    /// <summary>
+    /// Без ключа шифрования сервис запускается, но тихо ломает всё, что связано с секретами:
+    /// новые значения шифруются другим ключом, старые не расшифровываются. Причём ABP на
+    /// настройке не падает, а отдаёт шифротекст как значение — и хаб отправляет его, скажем,
+    /// в Keycloak вместо секрета, получая 401 без единой подсказки, что дело в ключе.
+    /// Проверено вживую. Поэтому — громкая запись в журнал при старте.
+    /// </summary>
+    private static void WarnIfEncryptionKeyMissing(
+        ApplicationInitializationContext context,
+        IConfiguration configuration)
+    {
+        if (!string.IsNullOrWhiteSpace(configuration["StringEncryption:DefaultPassPhrase"]))
+        {
+            return;
+        }
+
+        context.ServiceProvider
+            .GetRequiredService<ILogger<SyncBlazorModule>>()
+            .LogError(
+                "Не задан StringEncryption:DefaultPassPhrase. Сохранённые пароли и ключи " +
+                "не расшифруются, а новые будут зашифрованы ключом, который потеряется " +
+                "при следующем запуске. Значение лежит в переменной окружения " +
+                @"StringEncryption__DefaultPassPhrase (копия - C:\GGA1C\stringencryption.key).");
+    }
+
     public override void OnApplicationInitialization(ApplicationInitializationContext context)
     {
         var env = context.GetEnvironment();
         var app = context.GetApplicationBuilder();
         var appConfiguration = context.ServiceProvider.GetRequiredService<IConfiguration>();
+
+        WarnIfEncryptionKeyMissing(context, appConfiguration);
 
         app.UseAbpRequestLocalization();
 

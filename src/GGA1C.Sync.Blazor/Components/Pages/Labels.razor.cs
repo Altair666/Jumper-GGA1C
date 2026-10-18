@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using GGA1C.Sync.Connections;
+using GGA1C.Sync.Grist;
 using GGA1C.Sync.Labels;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
@@ -30,11 +32,19 @@ public partial class Labels
     /// <summary>Открытая карточка учётных данных. Пусто — карточка не показана.</summary>
     private AccountCredentialsDto? Creds { get; set; }
 
+    private GristSettingsDto GristSettings { get; set; } = new();
+
+    private ConnectionTestResultDto? GristTest { get; set; }
+
+    /// <summary>Одинаковая ширина у кнопок справа от полей — иначе они разной длины.</summary>
+    private const string ButtonWidth = "min-width: 210px;";
+
     private bool Busy { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
+        GristSettings = await ClientsAppService.GetGristSettingsAsync();
     }
 
     private async Task LoadAsync()
@@ -256,18 +266,52 @@ public partial class Labels
         }
     }
 
+    // ── Ключи в Grist ─────────────────────────────────────────────────────────
+
+    private async Task SaveGristAsync()
+    {
+        Busy = true;
+        try
+        {
+            await ClientsAppService.SaveGristSettingsAsync(GristSettings);
+
+            // Перечитываем: ключ в ответе приходит маской, и в поле не должно остаться
+            // набранное значение.
+            GristSettings = await ClientsAppService.GetGristSettingsAsync();
+
+            await Notify.Success("Настройки Grist сохранены");
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task TestGristAsync()
+    {
+        Busy = true;
+        GristTest = null;
+        try
+        {
+            GristTest = await ClientsAppService.TestGristAsync();
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
     // ── Мелочи для разметки ───────────────────────────────────────────────────
 
     private static Color StateColor(bool has) => has ? Color.Success : Color.Default;
 
     /// <summary>
-    /// Что показать под полем пароля. Точек в поле ровно столько, сколько знаков в
-    /// сохранённом пароле, поэтому подсказка говорит, что с ними можно сделать: оставить
-    /// как есть - не менять, стереть - удалить пароль.
+    /// Зелёная галочка в поле: значение на месте. Для пароля «на месте» означает, что он
+    /// сохранён, — само значение наружу не отдаётся, в поле приходят только точки.
     /// </summary>
-    private static string SecretHint(bool has, string value) => has
-        ? $"Сохранён, знаков: {value.Length}. Сотрите точки, чтобы удалить"
-        : "Не задан";
+    private static Adornment Mark(bool ok) => ok ? Adornment.End : Adornment.None;
+
+    private static bool Filled(string? value) => !string.IsNullOrWhiteSpace(value);
 
     private static string FormatWhen(DateTime? utc)
     {

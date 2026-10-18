@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using GGA1C.Sync.Connections;
+using GGA1C.Sync.Grist;
 using GGA1C.Sync.Keycloak;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
@@ -78,4 +79,13 @@ public interface ILabelClientsAppService : IApplicationService
     /// отключить тех, у кого сняли доступ, включить обратно тех, кому вернули.
     /// </summary>
     Task<KeycloakSyncReport> SyncFromKeycloakAsync();
+
+    // ── Опознание людей через Grist ───────────────────────────────────────────
+
+    Task<GristSettingsDto> GetGristSettingsAsync();
+
+    Task SaveGristSettingsAsync(GristSettingsDto input);
+
+    /// <summary>Проверить связь: прочитать таблицу с адресами почты в документе.</summary>
+    Task<ConnectionTestResultDto> TestGristAsync();
 }

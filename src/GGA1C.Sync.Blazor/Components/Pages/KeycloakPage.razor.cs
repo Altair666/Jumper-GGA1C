@@ -3,6 +3,7 @@ using GGA1C.Sync.Connections;
 using GGA1C.Sync.Keycloak;
 using GGA1C.Sync.Labels;
 using Microsoft.AspNetCore.Components;
+using MudBlazor;
 
 // Пространство имён должно совпадать с тем, что генерирует razor для файла в
 // Components/Pages, иначе partial-класс не склеится с компонентом.
@@ -25,11 +26,15 @@ public partial class KeycloakPage
     /// сверху — чтобы кнопка стояла вровень с полем ввода, а не сползала к подписи под
     /// ним: подпись делает поле выше кнопки.
     /// </summary>
-    private const string ButtonWidth = "min-width: 210px; margin-top: 1px;";
+    private const string ButtonWidth = "min-width: 210px;";
 
-    private string SecretHint => Kc.HasClientSecret
-        ? $"Сохранён, знаков: {Kc.ClientSecret.Length}. Сотрите точки, чтобы удалить"
-        : "Не задан";
+    /// <summary>
+    /// Зелёная галочка в поле: значение на месте. Для секрета «на месте» означает, что он
+    /// сохранён, — само значение наружу не отдаётся, в поле приходят только точки.
+    /// </summary>
+    private static Adornment Mark(bool ok) => ok ? Adornment.End : Adornment.None;
+
+    private static bool Filled(string? value) => !string.IsNullOrWhiteSpace(value);
 
     protected override async Task OnInitializedAsync()
     {

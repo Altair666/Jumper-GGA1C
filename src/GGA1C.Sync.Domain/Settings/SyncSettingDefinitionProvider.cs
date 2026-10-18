@@ -1,4 +1,4 @@
-﻿using Volo.Abp.Settings;
+using Volo.Abp.Settings;
 
 namespace GGA1C.Sync.Settings;
 
@@ -33,6 +33,11 @@ public class SyncSettingDefinitionProvider : SettingDefinitionProvider
             new SettingDefinition(SyncSettings.Keycloak.Realm, isVisibleToClients: false),
             new SettingDefinition(SyncSettings.Keycloak.ClientId, isVisibleToClients: false),
             new SettingDefinition(SyncSettings.Keycloak.ClientSecret, isVisibleToClients: false, isEncrypted: true),
+
+            new SettingDefinition(SyncSettings.Grist.ServerUrl, isVisibleToClients: false),
+            new SettingDefinition(SyncSettings.Grist.DocId, isVisibleToClients: false),
+            new SettingDefinition(SyncSettings.Grist.ApiKey, isVisibleToClients: false, isEncrypted: true),
+            new SettingDefinition(SyncSettings.Grist.IdentityTable, "LabelIdentity", isVisibleToClients: false),
 
             new SettingDefinition(SyncSettings.AutoSyncEnabled, "false", isVisibleToClients: false),
             new SettingDefinition(SyncSettings.IntervalMinutes, "60", isVisibleToClients: false),

@@ -18,34 +18,42 @@
             <MudTextField @bind-Value="Kc.BaseUrl" Label="Адрес Keycloak" T="string"
                           Placeholder="http://192.168.88.238:8080"
                           Variant="Variant.Outlined" Margin="Margin.Dense"
-                          HelperText="Без /realms" />
+                          Adornment="@Mark(Filled(Kc.BaseUrl))"
+                          AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                          AdornmentColor="Color.Success" />
 
-            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudTextField @bind-Value="Kc.Realm" Label="Реалм" T="string"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="Пространство со своими людьми"
-                              Class="flex-grow-1" />
+                              Class="flex-grow-1"
+                              Adornment="@Mark(Filled(Kc.Realm))"
+                              AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                              AdornmentColor="Color.Success" />
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
                            Disabled="@Busy" StartIcon="@Icons.Material.Filled.NetworkCheck"
                            Style="@ButtonWidth" OnClick="TestAsync">Проверить связь</MudButton>
             </MudStack>
 
-            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudTextField @bind-Value="Kc.ClientId" Label="Клиент" T="string"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="Программа, а не человек"
-                              Class="flex-grow-1" />
+                              Class="flex-grow-1"
+                              Adornment="@Mark(Filled(Kc.ClientId))"
+                              AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                              AdornmentColor="Color.Success" />
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
                            Disabled="@Busy" StartIcon="@Icons.Material.Filled.Sync"
                            Style="@ButtonWidth" OnClick="SyncAsync">Синхронизировать</MudButton>
             </MudStack>
 
-            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudTextField @bind-Value="Kc.ClientSecret" Label="Секрет клиента" T="string"
                               InputType="InputType.Password"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="@SecretHint"
-                              Class="flex-grow-1" />
+                              Class="flex-grow-1"
+                              Adornment="@Mark(Kc.HasClientSecret)"
+                              AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                              AdornmentColor="Color.Success" />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium"
                            Disabled="@Busy" StartIcon="@Icons.Material.Filled.Save"
                            Style="@ButtonWidth" OnClick="SaveAsync">Сохранить</MudButton>

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -14,13 +14,15 @@ namespace GGA1C.Sync.Controllers;
 /// изменений - он проверен живым запросом от виджета widget_report_grist, менять его нельзя,
 /// иначе кнопка "Синхронизация" перестанет работать.
 ///
-/// Разделение по учётным записям идёт ПО КЛЮЧУ: ключ и есть удостоверение, по нему хаб
-/// находит учётку и пишет в её буфер. Иначе никак - Grist не отдаёт виджету личность
-/// пользователя (в plugin API нет getUser, сессионная кука HttpOnly и SameSite=Lax).
+/// Разделение по людям. Основной способ - токен, который виджет получает у самого Grist
+/// (grist.docApi.getAccessToken): хаб этим токеном спрашивает Grist, чья это сессия, и
+/// находит учётку по адресу почты. Секретов в документе при этом не лежит, а токен живёт
+/// минуты и подделать его нельзя - проверяет его Grist.
 ///
-/// Ключ принимается в двух видах:
-///   Authorization: Bearer KEY   - так шлёт виджет
-///   X-Api-Key: KEY              - как задумывалось изначально, оставлено для совместимости
+/// Удостоверение принимается в трёх видах:
+///   X-Grist-Token: TOKEN        - основной способ
+///   Authorization: Bearer KEY   - прежний ключ учётки, пока виджеты не переведены
+///   X-Api-Key: KEY              - он же, как задумывалось изначально
 ///
 /// Тело принимается в трёх формах: голый массив, одиночный объект и обёртка
 /// {"items":[...]} / {"records":[...]} - последнюю шлёт виджет.
@@ -116,11 +118,32 @@ public class GristLabelsController : AbpControllerBase
     }
 
     /// <summary>
-    /// Опознаёт учётку по ключу. Отключённая учётка отличается в ответе от неизвестного
-    /// ключа: иначе отзыв доступа выглядел бы для оператора как "ключ потерялся".
+    /// Опознаёт человека. Сначала по токену Grist, затем - по ключу учётки, пока виджеты
+    /// не переведены на токены. Отключённая учётка отличается в ответе от неизвестного
+    /// удостоверения: иначе отзыв доступа выглядел бы для оператора как "ключ потерялся".
     /// </summary>
     private async Task<(LabelClientDto? Client, IActionResult? Error)> ResolveAsync()
     {
+        var token = Request.Headers["X-Grist-Token"].ToString();
+
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            var resolution = await _labels.ResolveClientByGristTokenAsync(token);
+
+            if (resolution.Client == null)
+            {
+                return (null, Unauthorized(new { error = resolution.Error }));
+            }
+
+            if (!resolution.Client.IsEnabled)
+            {
+                return (null, Unauthorized(
+                    new { error = $"Учётная запись \"{resolution.Client.Name}\" отключена" }));
+            }
+
+            return (resolution.Client, null);
+        }
+
         var provided = Request.Headers["X-Api-Key"].ToString();
 
         if (string.IsNullOrEmpty(provided))
@@ -136,7 +159,7 @@ public class GristLabelsController : AbpControllerBase
 
         if (client == null)
         {
-            return (null, Unauthorized(new { error = "Ключ не известен" }));
+            return (null, Unauthorized(new { error = "Удостоверение не принято: нет ни токена Grist, ни известного ключа" }));
         }
 
         if (!client.IsEnabled)

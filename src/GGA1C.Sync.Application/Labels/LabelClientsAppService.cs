@@ -4,10 +4,12 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using GGA1C.Sync.Connections;
+using GGA1C.Sync.Grist;
 using GGA1C.Sync.Keycloak;
 using GGA1C.Sync.Secrets;
 using GGA1C.Sync.Settings;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
 using Volo.Abp.SettingManagement;
@@ -26,19 +28,22 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     private readonly ISettingManager _settingManager;
     private readonly KeycloakClient _keycloak;
     private readonly KeycloakAccountSync _keycloakSync;
+    private readonly GristIdentityResolver _gristIdentity;
 
     public LabelClientsAppService(
         ILabelClientStore clients,
         ILabelsBufferFactory buffers,
         ISettingManager settingManager,
         KeycloakClient keycloak,
-        KeycloakAccountSync keycloakSync)
+        KeycloakAccountSync keycloakSync,
+        GristIdentityResolver gristIdentity)
     {
         _clients = clients;
         _buffers = buffers;
         _settingManager = settingManager;
         _keycloak = keycloak;
         _keycloakSync = keycloakSync;
+        _gristIdentity = gristIdentity;
     }
 
     public async Task<List<LabelClientDto>> GetListAsync()
@@ -299,6 +304,41 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     public async Task<KeycloakSyncReport> SyncFromKeycloakAsync()
     {
         return await _keycloakSync.SyncAsync();
+    }
+
+    // ── Ключи в Grist ─────────────────────────────────────────────────────────
+
+    public async Task<GristSettingsDto> GetGristSettingsAsync()
+    {
+        // Ключ - через ISettingProvider: шифрованную настройку расшифровывает только он.
+        var apiKey = await SettingProvider.GetOrNullAsync(SyncSettings.Grist.ApiKey) ?? "";
+
+        return new GristSettingsDto
+        {
+            ServerUrl = await Get(SyncSettings.Grist.ServerUrl),
+            DocId = await Get(SyncSettings.Grist.DocId),
+            IdentityTable = await SettingProvider.GetOrNullAsync(SyncSettings.Grist.IdentityTable) ?? "",
+            ApiKey = SecretMask.For(apiKey),
+            HasApiKey = !string.IsNullOrEmpty(apiKey)
+        };
+    }
+
+    public async Task SaveGristSettingsAsync(GristSettingsDto input)
+    {
+        await Set(SyncSettings.Grist.ServerUrl, input.ServerUrl?.TrimEnd('/') ?? "");
+        await Set(SyncSettings.Grist.DocId, input.DocId?.Trim() ?? "");
+        await Set(SyncSettings.Grist.IdentityTable, input.IdentityTable?.Trim() ?? "");
+
+        if (!SecretMask.IsMask(input.ApiKey))
+        {
+            await Set(SyncSettings.Grist.ApiKey, input.ApiKey?.Trim() ?? "");
+        }
+    }
+
+    public async Task<ConnectionTestResultDto> TestGristAsync()
+    {
+        var (ok, message) = await _gristIdentity.TestAsync();
+        return new ConnectionTestResultDto { Ok = ok, Message = message };
     }
 
     private async Task<string> Get(string name)

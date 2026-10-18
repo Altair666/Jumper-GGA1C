@@ -1,5 +1,6 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using GGA1C.Sync.Grist;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
 
@@ -13,11 +14,49 @@ public class LabelsAppService : ApplicationService, ILabelsAppService
 {
     private readonly ILabelsBufferFactory _buffers;
     private readonly ILabelClientStore _clients;
+    private readonly GristIdentityResolver _identity;
 
-    public LabelsAppService(ILabelsBufferFactory buffers, ILabelClientStore clients)
+    public LabelsAppService(
+        ILabelsBufferFactory buffers,
+        ILabelClientStore clients,
+        GristIdentityResolver identity)
     {
         _buffers = buffers;
         _clients = clients;
+        _identity = identity;
+    }
+
+    public async Task<GristClientResolution> ResolveClientByGristTokenAsync(string? token)
+    {
+        var (email, error) = await _identity.ResolveEmailAsync(token);
+
+        if (email == null)
+        {
+            return new GristClientResolution { Error = error };
+        }
+
+        var client = await _clients.FindByEmailAsync(email);
+
+        if (client == null)
+        {
+            return new GristClientResolution
+            {
+                Error = $"В хабе нет учётной записи с почтой {email}"
+            };
+        }
+
+        return new GristClientResolution
+        {
+            Client = new LabelClientDto
+            {
+                Id = client.Id,
+                Name = client.Name,
+                Slug = client.Slug,
+                KeyPrefix = client.KeyPrefix,
+                IsEnabled = client.IsEnabled,
+                LastUsedAt = client.LastUsedAt
+            }
+        };
     }
 
     public async Task<LabelClientDto?> ResolveClientAsync(string? key)
