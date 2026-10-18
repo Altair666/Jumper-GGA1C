@@ -36,6 +36,8 @@ public class SyncDbContext :
     public DbSet<RequestLogItem> RequestLog { get; set; }
     public DbSet<LabelClient> LabelClients { get; set; }
 
+    public DbSet<LabelRow> Labels { get; set; }
+
     #region Entities from the modules
 
     /* Notice: We only implemented IIdentityDbContext and ITenantManagementDbContext
@@ -167,6 +169,39 @@ public class SyncDbContext :
             b.Property(x => x.AltiumPasswordEncrypted).HasMaxLength(512);
             b.Property(x => x.PdmLogin).HasMaxLength(128);
             b.Property(x => x.PdmPasswordEncrypted).HasMaxLength(512);
+
+            // Логин печати - имя пользователя MySQL, им подключается GoLabel II.
+            // Уникален: двум людям один логин выдавать нельзя.
+            b.HasIndex(x => x.PrintLogin).IsUnique();
+            b.Property(x => x.PrintLogin).HasMaxLength(32);
+        });
+
+        builder.Entity<LabelRow>(b =>
+        {
+            b.ToTable(SyncConsts.DbTablePrefix + "Labels", SyncConsts.DbSchema);
+            b.ConfigureByConvention();
+
+            // Ключ строки уникален внутри учётки: виджет шлёт партию целиком, и upsert
+            // опирается именно на эту пару.
+            b.HasIndex(x => new { x.Slug, x.ExternalId }).IsUnique();
+
+            // Отбор по учётке идёт на каждом запросе от виджета и в представлении
+            // my_labels, которое читает GoLabel II.
+            b.HasIndex(x => x.Slug);
+
+            b.Property(x => x.Slug).HasMaxLength(64).IsRequired();
+            b.Property(x => x.ExternalId).HasMaxLength(256).IsRequired();
+            b.Property(x => x.Date).HasMaxLength(64);
+            b.Property(x => x.ProductCode).HasMaxLength(128);
+            b.Property(x => x.ModeCode).HasMaxLength(128);
+            b.Property(x => x.Article).HasMaxLength(128);
+            b.Property(x => x.Name).HasMaxLength(256);
+            b.Property(x => x.Manufacturer).HasMaxLength(256);
+            b.Property(x => x.Barcode).HasMaxLength(128);
+            b.Property(x => x.Qty).HasMaxLength(64);
+            b.Property(x => x.Extra1).HasMaxLength(256);
+            b.Property(x => x.Extra2).HasMaxLength(256);
+            b.Property(x => x.Extra3).HasMaxLength(256);
         });
 
         builder.Entity<RequestLogItem>(b =>

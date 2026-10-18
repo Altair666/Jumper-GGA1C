@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Threading.Tasks;
 using GGA1C.Sync.Settings;
 using Microsoft.Extensions.Configuration;
@@ -29,20 +29,17 @@ public class LabelClientsDataSeedContributor : IDataSeedContributor, ITransientD
     private const string LegacyClientSlug = "shared";
 
     private readonly ILabelClientStore _clients;
-    private readonly ILabelsBufferFactory _buffers;
     private readonly ISettingManager _settingManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<LabelClientsDataSeedContributor> _logger;
 
     public LabelClientsDataSeedContributor(
         ILabelClientStore clients,
-        ILabelsBufferFactory buffers,
         ISettingManager settingManager,
         IConfiguration configuration,
         ILogger<LabelClientsDataSeedContributor> logger)
     {
         _clients = clients;
-        _buffers = buffers;
         _settingManager = settingManager;
         _configuration = configuration;
         _logger = logger;
@@ -70,33 +67,5 @@ public class LabelClientsDataSeedContributor : IDataSeedContributor, ITransientD
             "Создана учётная запись виджета \"{Name}\" (папка {Slug}), ключ {Prefix}...",
             client.Name, client.Slug, key[..8]);
 
-        MoveLegacyBuffer(client.Slug);
-    }
-
-    /// <summary>
-    /// Переносит файл буфера из корня в папку учётки. Если там уже что-то есть - не
-    /// трогаем: перезапись уничтожила бы данные, а это не то, что должен делать засев.
-    /// </summary>
-    private void MoveLegacyBuffer(string slug)
-    {
-        var legacyPath = Path.Combine(_buffers.BuffersRoot, "labels.db");
-        var targetPath = _buffers.PathFor(slug);
-
-        if (!File.Exists(legacyPath) || File.Exists(targetPath))
-        {
-            _buffers.For(slug);
-            return;
-        }
-
-        var targetDir = Path.GetDirectoryName(targetPath);
-        if (!string.IsNullOrEmpty(targetDir))
-        {
-            Directory.CreateDirectory(targetDir);
-        }
-
-        File.Move(legacyPath, targetPath);
-
-        _logger.LogInformation(
-            "Прежний буфер перенесён: {From} -> {To}", legacyPath, targetPath);
     }
 }

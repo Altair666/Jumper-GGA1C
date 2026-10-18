@@ -23,20 +23,23 @@ namespace GGA1C.Sync.Labels;
 public class LabelClientsAppService : ApplicationService, ILabelClientsAppService
 {
     private readonly ILabelClientStore _clients;
-    private readonly ILabelsBufferFactory _buffers;
+    private readonly ILabelsStore _labels;
+    private readonly IPrintLoginService _printLogins;
     private readonly ISettingManager _settingManager;
     private readonly KeycloakClient _keycloak;
     private readonly KeycloakAccountSync _keycloakSync;
 
     public LabelClientsAppService(
         ILabelClientStore clients,
-        ILabelsBufferFactory buffers,
+        ILabelsStore labels,
+        IPrintLoginService printLogins,
         ISettingManager settingManager,
         KeycloakClient keycloak,
         KeycloakAccountSync keycloakSync)
     {
         _clients = clients;
-        _buffers = buffers;
+        _labels = labels;
+        _printLogins = printLogins;
         _settingManager = settingManager;
         _keycloak = keycloak;
         _keycloakSync = keycloakSync;
@@ -46,6 +49,11 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     {
         var clients = await _clients.GetAllAsync();
 
+        // Счётчики берём одним запросом с группировкой, а не по учётке отдельно:
+        // страница открывается часто, а учёток будет десятки.
+        var buffers = (await _labels.GetBuffersAsync())
+            .ToDictionary(b => b.Slug, b => b, StringComparer.OrdinalIgnoreCase);
+
         return clients.Select(c => new LabelClientDto
         {
             Id = c.Id,
@@ -54,8 +62,8 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             KeyPrefix = c.KeyPrefix,
             IsEnabled = c.IsEnabled,
             LastUsedAt = c.LastUsedAt,
-            BufferPath = _buffers.PathFor(c.Slug),
-            RowCount = _buffers.For(c.Slug).Count(),
+            PrintLogin = c.PrintLogin ?? "",
+            RowCount = buffers.TryGetValue(c.Slug, out var info) ? info.RowCount : 0,
             HasAltiumCredentials = !string.IsNullOrEmpty(c.AltiumPasswordEncrypted),
             HasPdmCredentials = !string.IsNullOrEmpty(c.PdmPasswordEncrypted)
         }).ToList();
@@ -89,10 +97,6 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             await _clients.UpdateAsync(client);
         }
 
-        // Создаём файл буфера сразу, чтобы путь для DSN в GoLabel2 существовал ещё до
-        // первой синхронизации - иначе источник ODBC не настроить.
-        _buffers.For(client.Slug);
-
         return key;
     }
 
@@ -121,13 +125,27 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
         var slug = client.Slug;
 
+        // Логин печати в MySQL и строки буфера уходят вместе с учёткой: иначе на сервере
+        // остаётся и доступ, и чужие данные.
+        await _printLogins.DropAsync(client.PrintLogin);
+        await _labels.ClearAsync(slug);
+
         await _clients.DeleteAsync(id);
 
-        // Файл буфера удаляем вместе с учёткой, чтобы не копить мусор на сервере.
-        // Порядок именно такой: сначала запись, потом файлы. Если удаление файлов
-        // упрётся в занятый файл, учётка уже отозвана - ключ не работает, и повторное
-        // удаление доберёт папку.
-        _buffers.Delete(slug);
+    }
+
+    public async Task<string> IssuePrintLoginAsync(int id)
+    {
+        var client = await _clients.FindAsync(id)
+            ?? throw new BusinessException("GGA1C.Sync:ClientNotFound")
+                .WithData("message", "Учётная запись не найдена");
+
+        var password = await _printLogins.IssueAsync(client.Slug);
+
+        client.PrintLogin = _printLogins.LoginFor(client.Slug);
+        await _clients.UpdateAsync(client);
+
+        return password;
     }
 
     public async Task ClearBufferAsync(int id)
@@ -138,7 +156,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             return;
         }
 
-        _buffers.For(client.Slug).ClearAll();
+        await _labels.ClearAsync(client.Slug);
     }
 
     // ── Буферы ────────────────────────────────────────────────────────────────
@@ -146,20 +164,44 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     public async Task<List<BufferContentsDto>> GetBuffersAsync(int maxRows = 50)
     {
         var clients = await _clients.GetAllAsync();
+        var buffers = (await _labels.GetBuffersAsync())
+            .ToDictionary(b => b.Slug, b => b, StringComparer.OrdinalIgnoreCase);
+
         var result = new List<BufferContentsDto>();
 
         foreach (var client in clients)
         {
-            result.Add(Describe(client.Id, client.Name, client.Slug, maxRows));
+            buffers.TryGetValue(client.Slug, out var info);
+
+            result.Add(new BufferContentsDto
+            {
+                ClientId = client.Id,
+                Name = client.Name,
+                Slug = client.Slug,
+                PrintLogin = client.PrintLogin ?? "",
+                RowCount = info?.RowCount ?? 0,
+                UpdatedAt = info?.UpdatedAt,
+                Rows = (info?.RowCount ?? 0) > 0
+                    ? await _labels.GetTopAsync(client.Slug, maxRows)
+                    : new List<LabelRecord>()
+            });
+
+            buffers.Remove(client.Slug);
         }
 
-        var known = clients.Select(c => c.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        // Папки без учётки: обычно след удалённой учётки, чей файл в тот момент держал
-        // открытый источник ODBC. Без показа в интерфейсе они копились бы незамеченными.
-        foreach (var folder in _buffers.ListFolders().Where(f => !known.Contains(f)))
+        // Строки, оставшиеся от удалённых учёток, тоже показываем: иначе они копились бы
+        // в таблице незамеченными.
+        foreach (var orphan in buffers.Values)
         {
-            result.Add(Describe(null, "Папка без учётной записи", folder, maxRows));
+            result.Add(new BufferContentsDto
+            {
+                ClientId = null,
+                Name = "Строки без учётной записи",
+                Slug = orphan.Slug,
+                RowCount = orphan.RowCount,
+                UpdatedAt = orphan.UpdatedAt,
+                Rows = await _labels.GetTopAsync(orphan.Slug, maxRows)
+            });
         }
 
         return result;
@@ -171,49 +213,12 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
         if (clients.Any(c => string.Equals(c.Slug, slug, StringComparison.OrdinalIgnoreCase)))
         {
-            // Иначе буфер работающей учётки удалялся бы мимо подтверждения, которое
-            // показывается при удалении учётной записи.
             throw new BusinessException("GGA1C.Sync:BufferBelongsToClient")
                 .WithData("message",
-                    $"Папка «{slug}» принадлежит учётной записи — удаляйте вместе с учёткой");
+                    $"Строки «{slug}» принадлежат учётной записи — удаляйте вместе с учёткой");
         }
 
-        _buffers.Delete(slug);
-    }
-
-    private BufferContentsDto Describe(int? clientId, string name, string slug, int maxRows)
-    {
-        var dto = new BufferContentsDto
-        {
-            ClientId = clientId,
-            Name = name,
-            Slug = slug,
-            Path = Path.Combine(_buffers.BuffersRoot, slug)
-        };
-
-        try
-        {
-            var info = _buffers.Describe(slug);
-
-            dto.Path = info.Path;
-            dto.FileExists = info.Exists;
-            dto.SizeBytes = info.SizeBytes;
-            dto.UpdatedAt = info.UpdatedAt;
-
-            if (info.Exists)
-            {
-                var buffer = _buffers.For(slug);
-                dto.RowCount = buffer.Count();
-                dto.Rows = buffer.GetTop(maxRows);
-            }
-        }
-        catch (BusinessException)
-        {
-            // Имя папки не проходит проверку - значит её создали не мы. Показываем как есть:
-            // читать там нечего, но видеть её в списке полезно.
-        }
-
-        return dto;
+        await _labels.ClearAsync(slug);
     }
 
     // ── Учётные данные во внешних системах ────────────────────────────────────

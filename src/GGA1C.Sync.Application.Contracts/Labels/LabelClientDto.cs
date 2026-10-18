@@ -22,8 +22,11 @@ public class LabelClientDto
 
     public DateTime? LastUsedAt { get; set; }
 
-    /// <summary>Полный путь к файлу буфера — его прописывают в DSN для GoLabel2.</summary>
-    public string BufferPath { get; set; } = "";
+    /// <summary>
+    /// Логин в MySQL, которым GoLabel II забирает этикетки этого человека. Пусто, пока
+    /// логин не выдан. Пароль здесь не передаётся: он показывается один раз при выдаче.
+    /// </summary>
+    public string PrintLogin { get; set; } = "";
 
     /// <summary>Сколько этикеток сейчас в буфере этой учётки.</summary>
     public int RowCount { get; set; }

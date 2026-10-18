@@ -6,10 +6,9 @@ namespace GGA1C.Sync.Labels;
 /// <summary>
 /// Содержимое одного буфера: то, что сейчас лежит в файле и что прочитает GoLabel2.
 ///
-/// Один и тот же вид используется и для буферов учёток, и для осиротевших папок —
-/// у вторых <see cref="ClientId"/> пуст. Так в интерфейсе виден весь корень буферов
-/// целиком, включая папки, оставшиеся после удалённых учёток: иначе они копились бы
-/// на сервере незамеченными.
+/// Один и тот же вид используется и для буферов учёток, и для строк, оставшихся без
+/// учётной записи — у вторых <see cref="ClientId"/> пуст. Так в интерфейсе видно всё
+/// содержимое таблицы, включая хвосты от удалённых учёток.
 /// </summary>
 public class BufferContentsDto
 {
@@ -21,12 +20,8 @@ public class BufferContentsDto
 
     public string Slug { get; set; } = "";
 
-    /// <summary>Полный путь к файлу — его прописывают в источнике ODBC для GoLabel2.</summary>
-    public string Path { get; set; } = "";
-
-    public bool FileExists { get; set; }
-
-    public long SizeBytes { get; set; }
+    /// <summary>Логин в MySQL, которым этот буфер читает GoLabel II.</summary>
+    public string PrintLogin { get; set; } = "";
 
     /// <summary>Когда в файл последний раз писали.</summary>
     public DateTime? UpdatedAt { get; set; }

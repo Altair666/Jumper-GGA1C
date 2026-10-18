@@ -100,6 +100,13 @@ public class LabelClient : AuditedEntity<int>
     /// <summary>Пароль PDM, зашифрованный тем же ключом. См. оговорку у <see cref="PdmLogin"/>.</summary>
     public string? PdmPasswordEncrypted { get; set; }
 
+    /// <summary>
+    /// Логин этого человека в MySQL, которым подключается GoLabel II. Пусто, пока логин
+    /// не выдан. Пароль у нас не хранится вовсе: он показывается один раз при выдаче —
+    /// как ключ виджета. Забыл — выдаётся новый.
+    /// </summary>
+    public string? PrintLogin { get; set; }
+
     /// <summary>Когда учётные данные последний раз меняли. Видно в интерфейсе, чтобы было
     /// понятно, не устарел ли пароль после смены в домене.</summary>
     public DateTime? CredentialsUpdatedAt { get; set; }

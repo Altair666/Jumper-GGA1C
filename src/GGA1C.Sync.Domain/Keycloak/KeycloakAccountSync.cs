@@ -25,18 +25,15 @@ public class KeycloakAccountSync : DomainService
 {
     private readonly KeycloakClient _keycloak;
     private readonly ILabelClientStore _clients;
-    private readonly ILabelsBufferFactory _buffers;
     private readonly ILogger<KeycloakAccountSync> _log;
 
     public KeycloakAccountSync(
         KeycloakClient keycloak,
         ILabelClientStore clients,
-        ILabelsBufferFactory buffers,
         ILogger<KeycloakAccountSync> log)
     {
         _keycloak = keycloak;
         _clients = clients;
-        _buffers = buffers;
         _log = log;
     }
 
@@ -142,10 +139,6 @@ public class KeycloakAccountSync : DomainService
         }
 
         await _clients.UpdateAsync(client);
-
-        // Файл буфера создаём сразу: путь для источника ODBC в GoLabel2 должен
-        // существовать до первой синхронизации.
-        _buffers.For(client.Slug);
 
         report.Created++;
 

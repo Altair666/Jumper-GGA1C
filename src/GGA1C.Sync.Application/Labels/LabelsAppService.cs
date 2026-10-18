@@ -12,16 +12,16 @@ namespace GGA1C.Sync.Labels;
 [RemoteService(IsEnabled = false)]
 public class LabelsAppService : ApplicationService, ILabelsAppService
 {
-    private readonly ILabelsBufferFactory _buffers;
+    private readonly ILabelsStore _labels;
     private readonly ILabelClientStore _clients;
     private readonly KeycloakTokenVerifier _keycloakTokens;
 
     public LabelsAppService(
-        ILabelsBufferFactory buffers,
+        ILabelsStore labels,
         ILabelClientStore clients,
         KeycloakTokenVerifier keycloakTokens)
     {
-        _buffers = buffers;
+        _labels = labels;
         _clients = clients;
         _keycloakTokens = keycloakTokens;
     }
@@ -87,30 +87,27 @@ public class LabelsAppService : ApplicationService, ILabelsAppService
 
     public Task<List<LabelRecord>> GetAllAsync(string slug)
     {
-        return Task.FromResult(_buffers.For(slug).GetAll());
+        return _labels.GetAllAsync(slug);
     }
 
     public Task<int> UpsertManyAsync(string slug, List<LabelRecord> records)
     {
-        _buffers.For(slug).UpsertMany(records);
-        return Task.FromResult(records.Count);
+        return _labels.UpsertManyAsync(slug, records);
     }
 
     public Task<int> ReplaceAllAsync(string slug, List<LabelRecord> records)
     {
-        _buffers.For(slug).ReplaceAll(records);
-        return Task.FromResult(records.Count);
+        return _labels.ReplaceAllAsync(slug, records);
     }
 
     public Task<bool> DeleteAsync(string slug, string externalId)
     {
-        return Task.FromResult(_buffers.For(slug).Delete(externalId));
+        return _labels.DeleteAsync(slug, externalId);
     }
 
     public Task ClearAllAsync(string slug)
     {
-        _buffers.For(slug).ClearAll();
-        return Task.CompletedTask;
+        return _labels.ClearAsync(slug);
     }
 
     public async Task TouchAsync(int clientId)

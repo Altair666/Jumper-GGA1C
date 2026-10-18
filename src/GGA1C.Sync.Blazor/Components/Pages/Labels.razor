@@ -151,6 +151,7 @@
                     <MudTh>Папка</MudTh>
                     <MudTh>Ключ</MudTh>
                     <MudTh>Этикеток</MudTh>
+                    <MudTh>Логин печати</MudTh>
                     <MudTh>Данные</MudTh>
                     <MudTh>Использован</MudTh>
                     <MudTh>Включена</MudTh>
@@ -161,6 +162,16 @@
                     <MudTd DataLabel="Папка"><code>@context.Slug</code></MudTd>
                     <MudTd DataLabel="Ключ"><code>@context.KeyPrefix…</code></MudTd>
                     <MudTd DataLabel="Этикеток">@context.RowCount</MudTd>
+                    <MudTd DataLabel="Логин печати">
+                        @if (string.IsNullOrEmpty(context.PrintLogin))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">не выдан</MudText>
+                        }
+                        else
+                        {
+                            <code>@context.PrintLogin</code>
+                        }
+                    </MudTd>
                     <MudTd DataLabel="Данные">
                         <MudStack Row="true" Spacing="1">
                             <MudIcon Size="Size.Small" Title="Altium Designer"
@@ -184,6 +195,10 @@
                                            Color="Color.Primary" Title="Учётные данные Altium и PDM"
                                            Disabled="@Busy"
                                            OnClick="@(() => OpenCredsAsync(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Print" Size="Size.Small"
+                                           Color="Color.Primary"
+                                           Title="Выдать логин печати для GoLabel II" Disabled="@Busy"
+                                           OnClick="@(() => IssuePrintLoginAsync(context))" />
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
                                            Title="Показать ключ" Disabled="@Busy"
                                            OnClick="@(() => RevealAsync(context))" />
@@ -203,6 +218,13 @@
         }
 
         <MudDivider Class="my-4" />
+
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
+            <b>GoLabel II:</b> «Подключить базу» → MySQL. Сервер — адрес этого компьютера,
+            порт 3306, база <code>gga1c</code>, логин и пароль — выданные здесь, таблица —
+            <code>my_labels</code>. Ни ODBC, ни источников данных: в GoLabel II своего
+            драйвера MySQL достаточно, а ODBC он не поддерживает вовсе.
+        </MudAlert>
 
         <MudText Typo="Typo.body2" Class="mud-text-secondary">
             В настройках виджета: <b>Server URL</b> — адрес этого сервера (тот же, с которого
@@ -227,15 +249,16 @@
         </MudStack>
 
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-            Это то, что сейчас лежит в файлах и что прочитает GoLabel2 через ODBC. У каждой
-            учётки свой файл, поэтому синхронизация одного оператора не затирает партию
-            другого. Путь из заголовка прописывается в источнике ODBC на машине с принтером.
+            Это то, что сейчас лежит в базе и что забирает GoLabel II. У каждого человека
+            свой логин в MySQL, и представление <code>my_labels</code> отдаёт ему только его
+            строки — чужие он не увидит, прав на саму таблицу у него нет. Ни драйверов, ни
+            источников данных на машине с принтером настраивать не нужно.
         </MudText>
 
         @if (Buffers.Count == 0)
         {
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                Буферов нет: папки появляются вместе с учётными записями.
+                Буферы пусты: строки появятся после синхронизации из виджета.
             </MudAlert>
         }
         else
@@ -247,8 +270,8 @@
                         <TitleContent>
                             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                                 <MudIcon Icon="@(buffer.ClientId == null
-                                                 ? Icons.Material.Filled.FolderOff
-                                                 : Icons.Material.Filled.Folder)"
+                                                 ? Icons.Material.Filled.PersonOff
+                                                 : Icons.Material.Filled.Print)"
                                          Color="@(buffer.ClientId == null ? Color.Warning : Color.Default)" />
                                 <MudText Typo="Typo.body1"><b>@buffer.Name</b></MudText>
                                 <code>@buffer.Slug</code>
@@ -261,20 +284,25 @@
                                     <MudChip T="string" Size="Size.Small" Color="Color.Warning"
                                              Variant="Variant.Outlined">нет учётки</MudChip>
                                 }
-                                @if (!buffer.FileExists)
+                                @if (buffer.ClientId != null && string.IsNullOrEmpty(buffer.PrintLogin))
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Error"
-                                             Variant="Variant.Outlined">нет файла</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                                             Variant="Variant.Outlined">логин печати не выдан</MudChip>
                                 }
                                 <MudSpacer />
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                    @FormatSize(buffer.SizeBytes) · @FormatWhen(buffer.UpdatedAt)
+                                    @FormatWhen(buffer.UpdatedAt)
                                 </MudText>
                             </MudStack>
                         </TitleContent>
                         <ChildContent>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2"
-                                     Style="font-family: monospace;">@buffer.Path</MudText>
+                            @if (!string.IsNullOrEmpty(buffer.PrintLogin))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2"
+                                         Style="font-family: monospace;">
+                                    @buffer.PrintLogin → my_labels
+                                </MudText>
+                            }
 
                             @if (buffer.Rows.Count == 0)
                             {
@@ -322,7 +350,7 @@
                                                Size="Size.Medium" Disabled="@Busy"
                                                StartIcon="@Icons.Material.Filled.Delete"
                                                OnClick="@(() => DeleteFolderAsync(buffer))">
-                                        Удалить папку
+                                        Удалить строки
                                     </MudButton>
                                 </MudStack>
                             }

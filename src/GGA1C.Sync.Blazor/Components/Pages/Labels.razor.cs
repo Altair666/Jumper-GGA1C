@@ -86,6 +86,40 @@ public partial class Labels
         }
     }
 
+    private async Task IssuePrintLoginAsync(LabelClientDto client)
+    {
+        var confirmed = string.IsNullOrEmpty(client.PrintLogin) || await Message.Confirm(
+            $"Логин печати «{client.PrintLogin}» уже выдан. Выдать новый пароль? " +
+            "Старый сразу перестанет работать, и в GoLabel II на машине с принтером " +
+            "придётся вписать новый.");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        Busy = true;
+        try
+        {
+            var password = await ClientsAppService.IssuePrintLoginAsync(client.Id);
+
+            ShownKeyFor = $"Пароль печати для «{client.Name}» (логин {ClientLogin(client)})";
+            ShownKey = password;
+
+            await LoadAsync();
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    /// <summary>Логин выдаётся по имени папки, поэтому его видно до перечитывания списка.</summary>
+    private static string ClientLogin(LabelClientDto client)
+    {
+        return string.IsNullOrEmpty(client.PrintLogin) ? "lbl_" + client.Slug : client.PrintLogin;
+    }
+
     private async Task RevealAsync(LabelClientDto client)
     {
         var key = await ClientsAppService.RevealKeyAsync(client.Id);
@@ -274,23 +308,6 @@ public partial class Labels
     private static string FormatWhen(DateTime? utc)
     {
         return utc?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—";
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        if (bytes <= 0)
-        {
-            return "—";
-        }
-
-        if (bytes < 1024)
-        {
-            return $"{bytes} Б";
-        }
-
-        return bytes < 1024 * 1024
-            ? $"{bytes / 1024.0:0.#} КБ"
-            : $"{bytes / 1024.0 / 1024.0:0.#} МБ";
     }
 
     private static string Plural(int count)
