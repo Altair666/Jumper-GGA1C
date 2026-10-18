@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
@@ -32,6 +33,7 @@ using Volo.Abp.AspNetCore.Serilog;
 using Volo.Abp.Autofac;
 using Volo.Abp.Mapperly;
 using Volo.Abp.Identity.Blazor.MudBlazor.Server;
+using System.IO;
 using System.Threading.Tasks;
 using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Modularity;
@@ -230,6 +232,7 @@ public class SyncBlazorModule : AbpModule
     {
         var env = context.GetEnvironment();
         var app = context.GetApplicationBuilder();
+        var appConfiguration = context.ServiceProvider.GetRequiredService<IConfiguration>();
 
         app.UseAbpRequestLocalization();
 
@@ -245,6 +248,29 @@ public class SyncBlazorModule : AbpModule
 
         app.UseHttpsRedirection();
         app.UseCorrelationId();
+        // Копия Grist-виджета отдаётся ОТСЮДА, а не из wwwroot, по двум причинам.
+        //
+        // Первая: виджет должен жить на том же origin, что и наш API. Иначе браузер
+        // требует CORS-предварительный запрос, и синхронизация падает в "Failed to fetch"
+        // ещё до ответа сервера - проверено, preflight отдавал 405 без заголовков CORS.
+        //
+        // Вторая: MapAbpStaticAssets (и MapStaticAssets в .NET 9+) отдаёт только те файлы,
+        // что известны на момент сборки, из манифеста. Виджет обновляется задачей
+        // планировщика на ходу, поэтому положенный в wwwroot файл просто не отдавался бы
+        // без пересборки. Отдельный провайдер читает папку с диска на каждый запрос.
+        //
+        // Папка намеренно вне репозитория: виджет живёт в своём репозитории и в сборке
+        // основного Grist, здесь только отладочная копия.
+        var widgetPath = appConfiguration["Widget:LocalPath"];
+        if (!string.IsNullOrWhiteSpace(widgetPath) && Directory.Exists(widgetPath))
+        {
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(widgetPath),
+                RequestPath = "/widget"
+            });
+        }
+
         app.MapAbpStaticAssets();
         app.UseRouting();
         app.UseAuthentication();
