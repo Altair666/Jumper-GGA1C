@@ -28,6 +28,12 @@ public class LabelClientDto
     /// </summary>
     public string PrintLogin { get; set; } = "";
 
+    /// <summary>
+    /// Почта человека: она же логин печати и она же связь с Grist. Показывается в
+    /// интерфейсе, чтобы было видно, каким будет логин до его выдачи.
+    /// </summary>
+    public string Email { get; set; } = "";
+
     /// <summary>Сколько этикеток сейчас в буфере этой учётки.</summary>
     public int RowCount { get; set; }
 

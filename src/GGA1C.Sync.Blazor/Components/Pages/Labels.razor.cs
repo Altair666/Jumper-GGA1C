@@ -114,10 +114,17 @@ public partial class Labels
         }
     }
 
-    /// <summary>Логин выдаётся по имени папки, поэтому его видно до перечитывания списка.</summary>
+    /// <summary>
+    /// Логин печати — почта человека; пока он не выдан, показываем, каким он будет.
+    /// </summary>
     private static string ClientLogin(LabelClientDto client)
     {
-        return string.IsNullOrEmpty(client.PrintLogin) ? "lbl_" + client.Slug : client.PrintLogin;
+        if (!string.IsNullOrEmpty(client.PrintLogin))
+        {
+            return client.PrintLogin;
+        }
+
+        return string.IsNullOrEmpty(client.Email) ? "lbl_" + client.Slug : client.Email;
     }
 
     private async Task RevealAsync(LabelClientDto client)

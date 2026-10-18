@@ -63,6 +63,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             IsEnabled = c.IsEnabled,
             LastUsedAt = c.LastUsedAt,
             PrintLogin = c.PrintLogin ?? "",
+            Email = c.Email ?? "",
             RowCount = buffers.TryGetValue(c.Slug, out var info) ? info.RowCount : 0,
             HasAltiumCredentials = !string.IsNullOrEmpty(c.AltiumPasswordEncrypted),
             HasPdmCredentials = !string.IsNullOrEmpty(c.PdmPasswordEncrypted)
@@ -140,9 +141,9 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             ?? throw new BusinessException("GGA1C.Sync:ClientNotFound")
                 .WithData("message", "Учётная запись не найдена");
 
-        var password = await _printLogins.IssueAsync(client.Slug);
+        var password = await _printLogins.IssueAsync(client.Slug, client.Email);
 
-        client.PrintLogin = _printLogins.LoginFor(client.Slug);
+        client.PrintLogin = _printLogins.LoginFor(client.Slug, client.Email);
         await _clients.UpdateAsync(client);
 
         return password;

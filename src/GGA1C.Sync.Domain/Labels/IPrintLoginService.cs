@@ -19,14 +19,18 @@ namespace GGA1C.Sync.Labels;
 /// </summary>
 public interface IPrintLoginService
 {
-    /// <summary>Логин, который получит человек с этой папкой-учёткой.</summary>
-    string LoginFor(string slug);
+    /// <summary>
+    /// Логин для этого человека. Это его **почта** — та же, под которой он входит в
+    /// Keycloak и Grist, чтобы не заводить человеку ещё одно имя. Если почты нет или она
+    /// длиннее, чем позволяет MySQL (32 знака), берётся имя папки с приставкой lbl_.
+    /// </summary>
+    string LoginFor(string slug, string? email);
 
     /// <summary>
     /// Создать логин (или сменить ему пароль) и вернуть пароль в открытом виде — один раз.
     /// Заодно проверяет, что представление на месте.
     /// </summary>
-    Task<string> IssueAsync(string slug);
+    Task<string> IssueAsync(string slug, string? email);
 
     /// <summary>Удалить логин вместе с правами. Вызывается при удалении учётки.</summary>
     Task DropAsync(string? login);
