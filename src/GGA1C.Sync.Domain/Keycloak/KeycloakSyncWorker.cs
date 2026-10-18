@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using GGA1C.Sync.Grist;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.BackgroundWorkers;
@@ -45,6 +46,7 @@ public class KeycloakSyncWorker : AsyncPeriodicBackgroundWorkerBase
         }
 
         var sync = workerContext.ServiceProvider.GetRequiredService<KeycloakAccountSync>();
+        var identity = workerContext.ServiceProvider.GetRequiredService<GristIdentityResolver>();
         var uowManager = workerContext.ServiceProvider.GetRequiredService<IUnitOfWorkManager>();
 
         try
@@ -74,6 +76,24 @@ public class KeycloakSyncWorker : AsyncPeriodicBackgroundWorkerBase
                     "включено {Restored}",
                     report.Checked, report.Created, report.Updated,
                     report.Linked, report.Disabled, report.Restored);
+            }
+
+            // Список людей в документе Grist ведём сами: по нему хаб опознаёт того, кто
+            // пришёл из виджета, и расхождение означало бы, что новый сотрудник не может
+            // синхронизировать этикетки.
+            if (await identity.IsConfiguredAsync())
+            {
+                var (ok, message, added, removed) = await identity.SyncIdentityTableAsync();
+
+                if (!ok)
+                {
+                    logger.LogWarning("Таблица почт в Grist не обновлена: {Message}", message);
+                }
+                else if (added + removed > 0)
+                {
+                    logger.LogInformation(
+                        "Таблица почт в Grist: добавлено {Added}, убрано {Removed}", added, removed);
+                }
             }
 
             await uow.CompleteAsync();

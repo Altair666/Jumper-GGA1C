@@ -97,6 +97,10 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         // первой синхронизации - иначе источник ODBC не настроить.
         _buffers.For(client.Slug);
 
+        // Без строки в таблице почт Grist не сможет опознать человека, и виджет ответит
+        // "вашей строки нет".
+        await SyncIdentityQuietlyAsync();
+
         return key;
     }
 
@@ -113,6 +117,9 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     public async Task SetEnabledAsync(int id, bool enabled)
     {
         await _clients.SetEnabledAsync(id, enabled);
+
+        // Отключили - строку из таблицы почт нужно убрать, включили - вернуть
+        await SyncIdentityQuietlyAsync();
     }
 
     public async Task DeleteAsync(int id)
@@ -124,6 +131,16 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         }
 
         var slug = client.Slug;
+
+        // Строку в документе убираем, пока её номер ещё известен
+        try
+        {
+            await _gristIdentity.RemoveRowAsync(client.GristRowId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Строка почты в Grist не удалена");
+        }
 
         await _clients.DeleteAsync(id);
 
@@ -303,7 +320,13 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
     public async Task<KeycloakSyncReport> SyncFromKeycloakAsync()
     {
-        return await _keycloakSync.SyncAsync();
+        var report = await _keycloakSync.SyncAsync();
+
+        // Появились или исчезли люди - таблица почт в документе должна это отразить,
+        // иначе новый сотрудник получит от виджета "вашей строки нет".
+        await SyncIdentityQuietlyAsync();
+
+        return report;
     }
 
     // ── Ключи в Grist ─────────────────────────────────────────────────────────
@@ -339,6 +362,44 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     {
         var (ok, message) = await _gristIdentity.TestAsync();
         return new ConnectionTestResultDto { Ok = ok, Message = message };
+    }
+
+    public async Task<ConnectionTestResultDto> SyncGristIdentityAsync()
+    {
+        var (ok, message, added, removed) = await _gristIdentity.SyncIdentityTableAsync();
+
+        return new ConnectionTestResultDto
+        {
+            Ok = ok,
+            Message = ok ? $"{message}: добавлено {added}, убрано {removed}" : message
+        };
+    }
+
+    /// <summary>
+    /// Обновить таблицу почт, не роняя саму операцию: учётка уже создана или удалена, а
+    /// недоступный в этот момент Grist не повод показывать человеку ошибку. Следующая
+    /// сверка с Keycloak или кнопка в интерфейсе доберут.
+    /// </summary>
+    private async Task SyncIdentityQuietlyAsync()
+    {
+        if (!await _gristIdentity.IsConfiguredAsync())
+        {
+            return;
+        }
+
+        try
+        {
+            var (ok, message, _, _) = await _gristIdentity.SyncIdentityTableAsync();
+
+            if (!ok)
+            {
+                Logger.LogWarning("Таблица почт в Grist не обновлена: {Message}", message);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Таблица почт в Grist не обновлена");
+        }
     }
 
     private async Task<string> Get(string name)

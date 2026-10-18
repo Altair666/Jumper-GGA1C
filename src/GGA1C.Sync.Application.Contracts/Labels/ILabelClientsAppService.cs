@@ -88,4 +88,11 @@ public interface ILabelClientsAppService : IApplicationService
 
     /// <summary>Проверить связь: прочитать таблицу с адресами почты в документе.</summary>
     Task<ConnectionTestResultDto> TestGristAsync();
+
+    /// <summary>
+    /// Привести таблицу почт в документе в соответствие с учётками. Делается само при
+    /// сверке с Keycloak и при изменениях учёток; кнопка нужна, когда Grist в тот момент
+    /// был недоступен.
+    /// </summary>
+    Task<ConnectionTestResultDto> SyncGristIdentityAsync();
 }

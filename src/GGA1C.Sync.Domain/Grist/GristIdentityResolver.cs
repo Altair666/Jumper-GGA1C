@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using GGA1C.Sync.Labels;
 using GGA1C.Sync.Settings;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.Domain.Services;
@@ -30,15 +32,18 @@ public class GristIdentityResolver : DomainService
 
     private readonly IHttpClientFactory _factory;
     private readonly ISettingProvider _settings;
+    private readonly ILabelClientStore _clients;
     private readonly ILogger<GristIdentityResolver> _log;
 
     public GristIdentityResolver(
         IHttpClientFactory factory,
         ISettingProvider settings,
+        ILabelClientStore clients,
         ILogger<GristIdentityResolver> log)
     {
         _factory = factory;
         _settings = settings;
+        _clients = clients;
         _log = log;
     }
 
@@ -125,6 +130,145 @@ public class GristIdentityResolver : DomainService
         {
             return (false, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Приводит таблицу почт в документе в соответствие с учётками хаба: добавляет
+    /// появившихся, убирает исчезнувших и отключённых.
+    ///
+    /// Таблицу при этом НЕ читает — не может: правило доступа
+    /// <c>user.Email == rec.email</c> отдаёт даже владельцу ключа API только его
+    /// собственную строку, и попытка свериться чтением заканчивается дублями на каждого
+    /// человека. Поэтому номер созданной строки хаб запоминает у себя
+    /// (<see cref="LabelClient.GristRowId"/>) и дальше работает по своим записям.
+    ///
+    /// Цена такого решения: если строки правят в самом Grist руками, хаб об этом не
+    /// узнает. Поправить можно кнопкой в интерфейсе — она заведёт строки заново тем, у
+    /// кого номера нет.
+    /// </summary>
+    public async Task<(bool Ok, string Message, int Added, int Removed)> SyncIdentityTableAsync()
+    {
+        var apiKey = await Get(SyncSettings.Grist.ApiKey);
+
+        if (!await IsConfiguredAsync() || string.IsNullOrWhiteSpace(apiKey))
+        {
+            return (false, "Не заданы адрес Grist, документ или ключ API", 0, 0);
+        }
+
+        try
+        {
+            var clients = await _clients.GetAllAsync();
+
+            var needRow = clients
+                .Where(c => c.IsEnabled && !string.IsNullOrWhiteSpace(c.Email) && c.GristRowId == null)
+                .ToList();
+
+            var loseRow = clients
+                .Where(c => c.GristRowId != null && (!c.IsEnabled || string.IsNullOrWhiteSpace(c.Email)))
+                .ToList();
+
+            if (needRow.Count > 0)
+            {
+                var ids = await AddRowsAsync(apiKey, needRow.Select(c => c.Email!.Trim()));
+
+                // Grist возвращает номера в том же порядке, в каком приняла записи
+                for (var i = 0; i < needRow.Count && i < ids.Count; i++)
+                {
+                    needRow[i].GristRowId = ids[i];
+                    await _clients.UpdateAsync(needRow[i]);
+                }
+            }
+
+            if (loseRow.Count > 0)
+            {
+                await DeleteRowsAsync(apiKey, loseRow.Select(c => c.GristRowId!.Value));
+
+                foreach (var client in loseRow)
+                {
+                    client.GristRowId = null;
+                    await _clients.UpdateAsync(client);
+                }
+            }
+
+            return (true, "Таблица почт обновлена", needRow.Count, loseRow.Count);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message, 0, 0);
+        }
+    }
+
+    /// <summary>
+    /// Убрать строку удаляемой учётки. Вызывается до удаления записи, пока номер строки
+    /// ещё известен: иначе строка осталась бы в документе навсегда.
+    /// </summary>
+    public async Task RemoveRowAsync(int? rowId)
+    {
+        var apiKey = await Get(SyncSettings.Grist.ApiKey);
+
+        if (rowId == null || string.IsNullOrWhiteSpace(apiKey) || !await IsConfiguredAsync())
+        {
+            return;
+        }
+
+        await DeleteRowsAsync(apiKey, [rowId.Value]);
+    }
+
+    private async Task<List<int>> AddRowsAsync(string apiKey, IEnumerable<string> emails)
+    {
+        var body = new { records = emails.Select(e => new { fields = new { email = e } }).ToList() };
+        var json = await SendAsync(apiKey, HttpMethod.Post, "records", body);
+
+        using var doc = JsonDocument.Parse(json);
+        var ids = new List<int>();
+
+        if (doc.RootElement.TryGetProperty("records", out var records))
+        {
+            foreach (var record in records.EnumerateArray())
+            {
+                ids.Add(record.GetProperty("id").GetInt32());
+            }
+        }
+
+        return ids;
+    }
+
+    private async Task DeleteRowsAsync(string apiKey, IEnumerable<int> rowIds)
+    {
+        // Удаление строк в Grist идёт отдельным адресом и принимает просто список номеров
+        await SendAsync(apiKey, HttpMethod.Post, "data/delete", rowIds.ToList());
+    }
+
+    private async Task<string> SendAsync(string apiKey, HttpMethod method, string path, object body)
+    {
+        using var http = _factory.CreateClient("grist");
+        http.Timeout = TimeSpan.FromSeconds(20);
+        http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+        var url = await UrlAsync();
+
+        if (path != "records")
+        {
+            url = url[..url.LastIndexOf("/records", StringComparison.Ordinal)] + "/" + path;
+        }
+
+        var request = new HttpRequestMessage(method, url)
+        {
+            Content = System.Net.Http.Json.JsonContent.Create(body)
+        };
+
+        var response = await http.SendAsync(request);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            _log.LogWarning("Grist ответил {Status}: {Body}", (int)response.StatusCode, error);
+
+            throw new InvalidOperationException(Hint(response.StatusCode));
+        }
+
+        return await response.Content.ReadAsStringAsync();
     }
 
     private async Task<List<string>> ReadEmailsAsync(string? token = null, string? apiKey = null)

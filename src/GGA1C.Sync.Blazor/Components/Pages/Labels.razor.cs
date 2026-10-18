@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using GGA1C.Sync.Connections;
@@ -280,6 +280,20 @@ public partial class Labels
             GristSettings = await ClientsAppService.GetGristSettingsAsync();
 
             await Notify.Success("Настройки Grist сохранены");
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task SyncIdentityAsync()
+    {
+        Busy = true;
+        GristTest = null;
+        try
+        {
+            GristTest = await ClientsAppService.SyncGristIdentityAsync();
         }
         finally
         {
