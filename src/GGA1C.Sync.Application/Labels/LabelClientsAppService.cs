@@ -41,6 +41,21 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
     public async Task<string> CreateAsync(string name, string slug)
     {
+        // Папку буфера можно не указывать: выведем из имени, взяв фамилию и
+        // транслитерировав её. Кириллица в пути и в имени сетевой шары для GoLabel2
+        // неуместна, поэтому именно транслитерация, а не имя как есть.
+        if (string.IsNullOrWhiteSpace(slug))
+        {
+            slug = SlugGenerator.FromName(name);
+
+            if (string.IsNullOrWhiteSpace(slug))
+            {
+                throw new BusinessException("GGA1C.Sync:CannotDeriveSlug")
+                    .WithData("message",
+                        "Не удалось вывести имя папки из имени учётной записи — укажите его вручную");
+            }
+        }
+
         var (client, key) = await _clients.CreateAsync(name, slug);
 
         // Создаём файл буфера сразу, чтобы путь для DSN в GoLabel2 существовал ещё до
@@ -67,7 +82,21 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
     public async Task DeleteAsync(int id)
     {
+        var client = await _clients.FindAsync(id);
+        if (client == null)
+        {
+            return;
+        }
+
+        var slug = client.Slug;
+
         await _clients.DeleteAsync(id);
+
+        // Файл буфера удаляем вместе с учёткой, чтобы не копить мусор на сервере.
+        // Порядок именно такой: сначала запись, потом файлы. Если удаление файлов
+        // упрётся в занятый файл, учётка уже отозвана - ключ не работает, и повторное
+        // удаление доберёт папку.
+        _buffers.Delete(slug);
     }
 
     public async Task ClearBufferAsync(int id)

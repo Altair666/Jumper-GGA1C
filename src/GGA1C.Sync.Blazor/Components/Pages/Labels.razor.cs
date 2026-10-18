@@ -17,6 +17,36 @@ public partial class Labels
     private string NewName { get; set; } = "";
     private string NewSlug { get; set; } = "";
 
+    /// <summary>Правил ли папку руками. Если да — больше не перебиваем её из имени.</summary>
+    private bool SlugTouched { get; set; }
+
+    private string SlugHint => SlugTouched
+        ? "Латиница, цифры, дефис, подчёркивание"
+        : "Подставляется из фамилии; можно поправить";
+
+    /// <summary>
+    /// Папка буфера выводится из фамилии транслитерацией. Кириллица в пути и в имени
+    /// сетевой шары для GoLabel2 неуместна, поэтому именно латиница.
+    /// </summary>
+    private void OnNameChanged(string value)
+    {
+        NewName = value;
+
+        if (!SlugTouched)
+        {
+            NewSlug = SlugGenerator.FromName(value);
+        }
+    }
+
+    private void OnSlugChanged(string value)
+    {
+        NewSlug = value;
+
+        // Пустое поле означает «снова выводить из имени»: так опечатку можно откатить,
+        // просто стерев содержимое.
+        SlugTouched = !string.IsNullOrWhiteSpace(value);
+    }
+
     // Ключ показываем отдельной плашкой: в таблице его быть не должно, иначе он утечёт
     // в чей-нибудь скриншот при разборе совсем другого вопроса.
     private string? ShownKey { get; set; }
@@ -52,6 +82,7 @@ public partial class Labels
             ShownKey = key;
             NewName = "";
             NewSlug = "";
+            SlugTouched = false;
             await LoadAsync();
             await Notify.Success("Учётная запись создана");
         }
@@ -141,8 +172,9 @@ public partial class Labels
     private async Task DeleteAsync(LabelClientDto client)
     {
         var confirmed = await Message.Confirm(
-            $"Удалить учётную запись «{client.Name}»? Её ключ перестанет работать. " +
-            "Файл буфера останется на диске — в нём может быть неотпечатанная партия.");
+            $"Удалить учётную запись «{client.Name}»? Ключ перестанет работать, а папка " +
+            $"буфера будет удалена вместе с содержимым — сейчас в ней этикеток: " +
+            $"{client.RowCount}. Если партия ещё не напечатана, сначала напечатайте её.");
 
         if (!confirmed)
         {

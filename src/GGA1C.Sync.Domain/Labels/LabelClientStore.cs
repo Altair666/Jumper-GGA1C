@@ -123,9 +123,8 @@ public class LabelClientStore : DomainService, ILabelClientStore
 
     public async Task DeleteAsync(int id)
     {
-        // Файл буфера намеренно НЕ удаляем: в нём может лежать неотпечатанная партия,
-        // и восстановить её после удаления учётки будет нечем. Папку чистит администратор
-        // руками, когда убедится, что она не нужна.
+        // Здесь удаляется только запись. Файлы буфера сносит LabelClientsAppService:
+        // ему доступна фабрика буферов, а хранилищу знать про файловую систему незачем.
         await _repo.DeleteAsync(id, autoSave: true);
     }
 

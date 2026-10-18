@@ -13,4 +13,10 @@ public interface ILabelsBufferFactory
 
     /// <summary>Путь к файлу буфера, не открывая его.</summary>
     string PathFor(string slug);
+
+    /// <summary>
+    /// Удалить буфер учётки вместе с папкой, чтобы не копить мусор на сервере.
+    /// Вызывается при удалении учётной записи.
+    /// </summary>
+    void Delete(string slug);
 }

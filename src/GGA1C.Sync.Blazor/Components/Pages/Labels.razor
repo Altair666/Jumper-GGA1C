@@ -10,11 +10,13 @@
     <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Class="mb-4"
               ShowCloseIcon="true" CloseIconClicked="@(() => ShownKey = null)">
         <MudText Typo="Typo.body1"><b>@ShownKeyFor</b></MudText>
-        <MudText Typo="Typo.body2" Class="mt-1" Style="font-family: monospace; font-size: 1.05em;">
-            @ShownKey
-        </MudText>
+        <MudTextField Value="@ShownKey" ReadOnly="true" T="string" Class="mt-1"
+                      Variant="Variant.Filled" Margin="Margin.Dense"
+                      Style="font-family: monospace;" />
         <MudText Typo="Typo.caption">
-            Вставить в настройках виджета (⚙) в поле API Key.
+            Выделить и скопировать, затем вставить в настройках виджета (⚙) в поле API Key.
+            Кнопки копирования нет намеренно: браузерный буфер обмена доступен только
+            на https, а сервис работает по http — кнопка молча не срабатывала бы.
         </MudText>
     </MudAlert>
 }
@@ -24,15 +26,16 @@
         <MudText Typo="Typo.h6" Class="mb-3">Новая учётная запись</MudText>
         <MudGrid Spacing="2" Class="align-center">
             <MudItem xs="12" md="5">
-                <MudTextField @bind-Value="NewName" Label="Имя" T="string"
-                              Placeholder="Иванов, участок сборки"
+                <MudTextField Value="@NewName" ValueChanged="@OnNameChanged" T="string"
+                              Label="Имя" Immediate="true"
+                              Placeholder="Иванов Пётр"
                               Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12" md="4">
-                <MudTextField @bind-Value="NewSlug" Label="Папка буфера" T="string"
-                              Placeholder="ivanov"
+                <MudTextField Value="@NewSlug" ValueChanged="@OnSlugChanged" T="string"
+                              Label="Папка буфера" Immediate="true"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="Латиница, цифры, дефис, подчёркивание" />
+                              HelperText="@SlugHint" />
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@Busy"
