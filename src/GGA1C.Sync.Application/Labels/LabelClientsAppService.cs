@@ -54,24 +54,33 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         }).ToList();
     }
 
-    public async Task<string> CreateAsync(string name, string slug)
+    public async Task<string> CreateAsync(string name, string? email)
     {
-        // Папку буфера можно не указывать: выведем из имени, взяв фамилию и
-        // транслитерировав её. Кириллица в пути и в имени сетевой шары для GoLabel2
-        // неуместна, поэтому именно транслитерация, а не имя как есть.
-        if (string.IsNullOrWhiteSpace(slug))
-        {
-            slug = SlugGenerator.FromName(name);
+        // Папку выводим сами: сначала из фамилии, потом из email. Поле в интерфейсе
+        // убрано намеренно — оно попадает в путь на диске и в адрес шары для GoLabel2,
+        // и ошибиться в нём легче, чем выиграть от возможности задать его руками.
+        var baseSlug = SlugGenerator.FromNameOrEmail(name, email);
 
-            if (string.IsNullOrWhiteSpace(slug))
-            {
-                throw new BusinessException("GGA1C.Sync:CannotDeriveSlug")
-                    .WithData("message",
-                        "Не удалось вывести имя папки из имени учётной записи — укажите его вручную");
-            }
+        if (string.IsNullOrWhiteSpace(baseSlug))
+        {
+            throw new BusinessException("GGA1C.Sync:CannotDeriveSlug")
+                .WithData("message",
+                    "Не удалось вывести имя папки: укажите фамилию латиницей или кириллицей, " +
+                    "либо задайте email");
         }
 
+        // Двух Ивановых достаточно, чтобы сломать наивную схему
+        var slug = await _clients.MakeUniqueSlugAsync(baseSlug);
+
         var (client, key) = await _clients.CreateAsync(name, slug);
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            // Email нужен не для красоты: именно по нему Grist будет отдавать виджету
+            // строку с его ключом (правило user.Email == rec.email).
+            client.Email = email.Trim();
+            await _clients.UpdateAsync(client);
+        }
 
         // Создаём файл буфера сразу, чтобы путь для DSN в GoLabel2 существовал ещё до
         // первой синхронизации - иначе источник ODBC не настроить.

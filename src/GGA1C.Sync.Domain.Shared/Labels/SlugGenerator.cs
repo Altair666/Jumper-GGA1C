@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -5,15 +6,15 @@ using System.Text;
 namespace GGA1C.Sync.Labels;
 
 /// <summary>
-/// Делает имя папки буфера из имени учётной записи.
+/// Делает имя папки буфера из имени учётной записи или из email.
 ///
 /// Папка попадает в путь на диске и в адрес сетевой шары для GoLabel2, поэтому кириллица
-/// там неуместна: имена шар с не-ASCII символами доставляют проблемы и в ODBC-строках,
+/// там неуместна: имена шар с не-ASCII символами доставляют проблемы и в строках ODBC,
 /// и при настройке источника на клиентских машинах. Отсюда транслитерация.
 ///
-/// Берётся первое слово — фамилия: «Иванов Пётр Сергеевич» даёт ivanov. Если слов нет
-/// или после чистки ничего не осталось, вернётся пустая строка, и вызывающий решает,
-/// что делать — молча подставлять мусор нельзя, это путь на диске.
+/// В интерфейсе папка не спрашивается — её выводят отсюда, поэтому обе функции обязаны
+/// возвращать пустую строку, а не мусор, если выжать нечего: вызывающий тогда скажет
+/// человеку, что не хватает данных, вместо того чтобы создать папку со случайным именем.
 /// </summary>
 public static class SlugGenerator
 {
@@ -29,8 +30,8 @@ public static class SlugGenerator
     };
 
     /// <summary>
-    /// Имя папки из имени учётки: первое слово, транслитерация, нижний регистр.
-    /// Возвращает пустую строку, если выжать нечего.
+    /// Имя папки из имени учётки: первое слово (фамилия), транслитерация, нижний регистр.
+    /// «Иванов Пётр Сергеевич» даёт ivanov, «Иванов, участок сборки» — тоже ivanov.
     /// </summary>
     public static string FromName(string? name)
     {
@@ -39,19 +40,52 @@ public static class SlugGenerator
             return "";
         }
 
-        // Фамилия — первое слово. Разделителями считаем и пробел, и запятую:
-        // «Иванов, участок сборки» тоже должно дать ivanov.
-        var surname = name.Trim().Split([' ', ',', ';', '\t'], System.StringSplitOptions.RemoveEmptyEntries)
-                          .FirstOrDefault();
+        var surname = name.Trim()
+            .Split([' ', ',', ';', '\t'], StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
 
-        if (string.IsNullOrWhiteSpace(surname))
+        return Sanitize(surname);
+    }
+
+    /// <summary>
+    /// Имя папки из email: берётся часть до собачки. Запасной путь, когда фамилию
+    /// транслитерировать не удалось — например имя записано только латиницей со знаками
+    /// или вообще отсутствует.
+    /// </summary>
+    public static string FromEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return "";
+        }
+
+        var localPart = email.Trim().Split('@', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+
+        return Sanitize(localPart);
+    }
+
+    /// <summary>
+    /// Имя папки: сначала пробуем фамилию, потом email. Именно в этом порядке —
+    /// папка с фамилией понятна человеку, который будет настраивать источник ODBC
+    /// на машине с GoLabel2, а a-morozov из адреса читается хуже.
+    /// </summary>
+    public static string FromNameOrEmail(string? name, string? email)
+    {
+        var fromName = FromName(name);
+        return string.IsNullOrEmpty(fromName) ? FromEmail(email) : fromName;
+    }
+
+    private static string Sanitize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
         {
             return "";
         }
 
         var sb = new StringBuilder();
 
-        foreach (var ch in surname.ToLowerInvariant())
+        foreach (var ch in value.ToLowerInvariant())
         {
             if (Translit.TryGetValue(ch, out var replacement))
             {
@@ -65,7 +99,7 @@ public static class SlugGenerator
             {
                 sb.Append(ch);
             }
-            // остальное отбрасываем молча: точки, кавычки и прочее в путях не нужны
+            // остальное отбрасываем: точки, кавычки, пробелы в путях не нужны
         }
 
         return sb.ToString().Trim('-', '_');

@@ -17,42 +17,17 @@ public partial class Labels
     private List<LabelClientDto> Clients { get; set; } = new();
 
     private string NewName { get; set; } = "";
-    private string NewSlug { get; set; } = "";
-
-    /// <summary>Правил ли папку руками. Если да — больше не перебиваем её из имени.</summary>
-    private bool SlugTouched { get; set; }
-
-    private string SlugHint => SlugTouched
-        ? "Латиница, цифры, дефис, подчёркивание"
-        : "Подставляется из фамилии; можно поправить";
-
-    /// <summary>
-    /// Папка буфера выводится из фамилии транслитерацией. Кириллица в пути и в имени
-    /// сетевой шары для GoLabel2 неуместна, поэтому именно латиница.
-    /// </summary>
-    private void OnNameChanged(string value)
-    {
-        NewName = value;
-
-        if (!SlugTouched)
-        {
-            NewSlug = SlugGenerator.FromName(value);
-        }
-    }
-
-    private void OnSlugChanged(string value)
-    {
-        NewSlug = value;
-
-        // Пустое поле означает «снова выводить из имени»: так опечатку можно откатить,
-        // просто стерев содержимое.
-        SlugTouched = !string.IsNullOrWhiteSpace(value);
-    }
+    private string NewEmail { get; set; } = "";
 
     // Ключ показываем отдельной плашкой: в таблице его быть не должно, иначе он утечёт
     // в чей-нибудь скриншот при разборе совсем другого вопроса.
     private string? ShownKey { get; set; }
+
     private string ShownKeyFor { get; set; } = "";
+
+    private string SecretHint => Kc.HasClientSecret
+        ? "Сохранён. Пустое поле — оставить как есть"
+        : "Не задан";
 
     private KeycloakSettingsDto Kc { get; set; } = new();
 
@@ -86,12 +61,11 @@ public partial class Labels
         Busy = true;
         try
         {
-            var key = await ClientsAppService.CreateAsync(NewName, NewSlug);
+            var key = await ClientsAppService.CreateAsync(NewName, NewEmail);
             ShownKeyFor = $"Ключ для «{NewName}»";
             ShownKey = key;
             NewName = "";
-            NewSlug = "";
-            SlugTouched = false;
+            NewEmail = "";
             await LoadAsync();
             await Notify.Success("Учётная запись создана");
         }

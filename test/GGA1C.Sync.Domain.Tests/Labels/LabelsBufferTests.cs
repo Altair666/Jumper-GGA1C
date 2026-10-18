@@ -48,6 +48,30 @@ public class LabelsBufferTests : IDisposable
         SlugGenerator.FromName(name).ShouldBe(expected);
     }
 
+    [Theory]
+    [InlineData("a.morozov@test.local", "amorozov")]
+    [InlineData("tester@test.local", "tester")]
+    [InlineData("p_ivanov@mp-lab.ru", "p_ivanov")]
+    [InlineData("", "")]
+    [InlineData(null, "")]
+    public void Имя_папки_выводится_из_email(string? email, string expected)
+    {
+        SlugGenerator.FromEmail(email).ShouldBe(expected);
+    }
+
+    [Theory]
+    // фамилия в приоритете: папка с фамилией понятнее тому, кто настраивает ODBC
+    [InlineData("Иванов Пётр", "p.ivanov@mp-lab.ru", "ivanov")]
+    // из имени выжать нечего - берём email
+    [InlineData("...", "p.ivanov@mp-lab.ru", "pivanov")]
+    [InlineData("", "tester@test.local", "tester")]
+    // нет ни того, ни другого - пусто, вызывающий обязан сказать об этом человеку
+    [InlineData("", "", "")]
+    public void Имя_папки_из_фамилии_или_почты(string? name, string? email, string expected)
+    {
+        SlugGenerator.FromNameOrEmail(name, email).ShouldBe(expected);
+    }
+
     [Fact]
     public void Буфер_создаётся_в_папке_учётки()
     {

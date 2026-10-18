@@ -17,8 +17,12 @@ public interface ILabelClientsAppService : IApplicationService
 {
     Task<List<LabelClientDto>> GetListAsync();
 
-    /// <summary>Создать учётку. Ключ возвращается в открытом виде один раз - при создании.</summary>
-    Task<string> CreateAsync(string name, string slug);
+    /// <summary>
+    /// Создать учётку. Ключ возвращается в открытом виде один раз — при создании.
+    /// Папка буфера не передаётся: она выводится из фамилии, а если из неё выжать нечего —
+    /// из email. Спрашивать её у человека незачем, а ошибиться в пути на диске легко.
+    /// </summary>
+    Task<string> CreateAsync(string name, string? email);
 
     Task<string> RegenerateKeyAsync(int id);
 

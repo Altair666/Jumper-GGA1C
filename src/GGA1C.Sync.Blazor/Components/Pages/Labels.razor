@@ -17,8 +17,8 @@
                       Style="font-family: monospace;" />
         <MudText Typo="Typo.caption">
             Выделить и скопировать, затем вставить в настройках виджета (⚙) в поле API Key.
-            Кнопки копирования нет намеренно: браузерный буфер обмена доступен только
-            на https, а сервис работает по http — кнопка молча не срабатывала бы.
+            Кнопки копирования нет намеренно: браузерный буфер обмена работает только
+            на https, а сервис — по http, и кнопка молча не срабатывала бы.
         </MudText>
     </MudAlert>
 }
@@ -36,35 +36,42 @@
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudTextField @bind-Value="Kc.Realm" Label="Реалм" T="string"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Пространство со своими людьми" />
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudTextField @bind-Value="Kc.ClientId" Label="Клиент" T="string"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Программа, а не человек" />
             </MudItem>
             <MudItem xs="12" md="6">
                 <MudTextField @bind-Value="Kc.ClientSecret" Label="Секрет клиента" T="string"
                               InputType="InputType.Password"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="@(Kc.HasClientSecret ? "Сохранён. Пустое поле — оставить как есть" : "Не задан")" />
-            </MudItem>
-            <MudItem xs="12" md="6" Class="d-flex align-center gap-2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@Busy"
-                           StartIcon="@Icons.Material.Filled.Save"
-                           OnClick="SaveKeycloakAsync">Сохранить</MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Info" Disabled="@Busy"
-                           StartIcon="@Icons.Material.Filled.NetworkCheck"
-                           OnClick="TestKeycloakAsync">Проверить связь</MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Success" Disabled="@Busy"
-                           StartIcon="@Icons.Material.Filled.Sync"
-                           OnClick="SyncKeycloakAsync">Синхронизировать</MudButton>
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(Kc.HasClientSecret ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.ErrorOutline)"
+                              AdornmentColor="@(Kc.HasClientSecret ? Color.Success : Color.Warning)"
+                              HelperText="@SecretHint" />
             </MudItem>
         </MudGrid>
 
+        <MudStack Row="true" Spacing="2" Class="mt-3 flex-wrap">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium"
+                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveKeycloakAsync">Сохранить</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.NetworkCheck"
+                       OnClick="TestKeycloakAsync">Проверить связь</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Sync"
+                       OnClick="SyncKeycloakAsync">Синхронизировать</MudButton>
+        </MudStack>
+
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
             Клиенту в Keycloak нужна включённая служебная учётная запись и роль
-            <code>view-users</code> из <code>realm-management</code> — без неё токен выдаётся,
-            а список пользователей отвечает 403. Чужие пароли при этом не нужны и не хранятся.
+            <code>view-users</code> из <code>realm-management</code>: без неё токен выдаётся,
+            а список пользователей отвечает 403. Пароли сотрудников при этом не нужны —
+            хаб предъявляет свой секрет и умеет только читать список.
         </MudAlert>
 
         @if (KcTest != null)
@@ -104,40 +111,46 @@
 
 <MudCard Class="mb-4">
     <MudCardContent>
-        <MudText Typo="Typo.h6" Class="mb-3">Новая учётная запись</MudText>
-        <MudGrid Spacing="2" Class="align-center">
-            <MudItem xs="12" md="5">
-                <MudTextField Value="@NewName" ValueChanged="@OnNameChanged" T="string"
-                              Label="Имя" Immediate="true"
+        <MudText Typo="Typo.h6" Class="mb-1">Добавить учётную запись вручную</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Нужно только тем, кого нет в Keycloak. Папка буфера подбирается сама —
+            из фамилии, а если из неё ничего не выходит, из email.
+        </MudText>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="NewName" Label="Имя" T="string"
                               Placeholder="Иванов Пётр"
                               Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
-            <MudItem xs="12" md="4">
-                <MudTextField Value="@NewSlug" ValueChanged="@OnSlugChanged" T="string"
-                              Label="Папка буфера" Immediate="true"
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="NewEmail" Label="Email" T="string"
+                              Placeholder="p.ivanov@mp-lab.ru"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                              HelperText="@SlugHint" />
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@Busy"
-                           StartIcon="@Icons.Material.Filled.PersonAdd"
-                           OnClick="CreateAsync">Создать и выдать ключ</MudButton>
+                              HelperText="Нужен, чтобы ключ попадал в виджет сам" />
             </MudItem>
         </MudGrid>
+
+        <MudStack Row="true" Spacing="2" Class="mt-3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium"
+                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.PersonAdd"
+                       OnClick="CreateAsync">Создать и выдать ключ</MudButton>
+        </MudStack>
     </MudCardContent>
 </MudCard>
 
 <MudCard>
     <MudCardContent>
-        <MudGrid Spacing="2" Class="align-center mb-3">
-            <MudItem><MudText Typo="Typo.h6">Учётные записи</MudText></MudItem>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h6">Учётные записи</MudText>
+            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">
+                @Clients.Count
+            </MudChip>
             <MudSpacer />
-            <MudItem>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy"
-                           StartIcon="@Icons.Material.Filled.Refresh"
-                           OnClick="LoadAsync">Обновить</MudButton>
-            </MudItem>
-        </MudGrid>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Medium"
+                       Disabled="@Busy" StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadAsync">Обновить</MudButton>
+        </MudStack>
 
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
             У каждой учётки свой ключ и свой файл буфера, поэтому синхронизация одного
@@ -162,7 +175,7 @@
                     <MudTh>Файл буфера</MudTh>
                     <MudTh>Использован</MudTh>
                     <MudTh>Включена</MudTh>
-                    <MudTh></MudTh>
+                    <MudTh Style="width: 160px;">Действия</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Имя">@context.Name</MudTd>
@@ -182,18 +195,20 @@
                                    ValueChanged="@(v => ToggleAsync(context, v))" />
                     </MudTd>
                     <MudTd>
-                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
-                                       Title="Показать ключ" Disabled="@Busy"
-                                       OnClick="@(() => RevealAsync(context))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Autorenew" Size="Size.Small"
-                                       Color="Color.Warning" Title="Перевыпустить ключ" Disabled="@Busy"
-                                       OnClick="@(() => RegenerateAsync(context))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.DeleteSweep" Size="Size.Small"
-                                       Title="Очистить буфер" Disabled="@Busy"
-                                       OnClick="@(() => ClearBufferAsync(context))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
-                                       Color="Color.Error" Title="Удалить учётку" Disabled="@Busy"
-                                       OnClick="@(() => DeleteAsync(context))" />
+                        <MudStack Row="true" Spacing="0">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                                           Title="Показать ключ" Disabled="@Busy"
+                                           OnClick="@(() => RevealAsync(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Autorenew" Size="Size.Small"
+                                           Color="Color.Warning" Title="Перевыпустить ключ" Disabled="@Busy"
+                                           OnClick="@(() => RegenerateAsync(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.DeleteSweep" Size="Size.Small"
+                                           Title="Очистить буфер" Disabled="@Busy"
+                                           OnClick="@(() => ClearBufferAsync(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                           Color="Color.Error" Title="Удалить учётку" Disabled="@Busy"
+                                           OnClick="@(() => DeleteAsync(context))" />
+                        </MudStack>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
