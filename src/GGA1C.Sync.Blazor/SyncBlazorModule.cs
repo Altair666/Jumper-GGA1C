@@ -308,5 +308,6 @@ public class SyncBlazorModule : AbpModule
         // Работник сам проверяет на каждом тике, включена ли автосинхронизация и заданы ли
         // адреса, поэтому регистрируем его безусловно - настройка правится в интерфейсе.
         await context.AddBackgroundWorkerAsync<GGA1C.Sync.Sync.AutoSyncWorker>();
+        await context.AddBackgroundWorkerAsync<GGA1C.Sync.Keycloak.KeycloakSyncWorker>();
     }
 }

@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
+using GGA1C.Sync.Connections;
+using GGA1C.Sync.Keycloak;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
 
@@ -31,4 +33,19 @@ public interface ILabelClientsAppService : IApplicationService
 
     /// <summary>Очистить буфер учётки, не трогая саму учётку.</summary>
     Task ClearBufferAsync(int id);
+
+    // ── Keycloak ──────────────────────────────────────────────────────────────
+
+    Task<KeycloakSettingsDto> GetKeycloakSettingsAsync();
+
+    Task SaveKeycloakSettingsAsync(KeycloakSettingsDto input);
+
+    /// <summary>Проверить связь: получить токен служебной учётки и прочитать пользователей.</summary>
+    Task<ConnectionTestResultDto> TestKeycloakAsync();
+
+    /// <summary>
+    /// Сверить учётки со списком пользователей Keycloak: завести новых с ключами,
+    /// отключить тех, у кого сняли доступ, включить обратно тех, кому вернули.
+    /// </summary>
+    Task<KeycloakSyncReport> SyncFromKeycloakAsync();
 }

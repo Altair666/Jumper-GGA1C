@@ -330,6 +330,10 @@ namespace GGA1C.Sync.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("CreatorId");
 
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("INTEGER");
 
@@ -346,6 +350,14 @@ namespace GGA1C.Sync.Migrations
                     b.Property<string>("KeyPrefix")
                         .IsRequired()
                         .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("KeycloakSub")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("KeycloakUsername")
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastModificationTime")
@@ -369,9 +381,18 @@ namespace GGA1C.Sync.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("SyncDisabledAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("SyncedAt")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("KeyHash")
+                        .IsUnique();
+
+                    b.HasIndex("KeycloakSub")
                         .IsUnique();
 
                     b.HasIndex("Slug")

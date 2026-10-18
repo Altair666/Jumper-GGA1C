@@ -41,6 +41,24 @@ public static class SyncSettings
         public const string Password = OneCPrefix + ".Password";
     }
 
+    public static class Keycloak
+    {
+        private const string KeycloakPrefix = Prefix + ".Keycloak";
+
+        /// <summary>Базовый адрес Keycloak, без /realms. Например http://kc.example.local:8080</summary>
+        public const string BaseUrl = KeycloakPrefix + ".BaseUrl";
+
+        public const string Realm = KeycloakPrefix + ".Realm";
+
+        /// <summary>
+        /// Клиент со включённой служебной учётной записью (client credentials).
+        /// Ему нужна роль view-users из realm-management, иначе Admin API ответит 403.
+        /// </summary>
+        public const string ClientId = KeycloakPrefix + ".ClientId";
+
+        public const string ClientSecret = KeycloakPrefix + ".ClientSecret";
+    }
+
     public const string AutoSyncEnabled = Prefix + ".AutoSyncEnabled";
     public const string IntervalMinutes = Prefix + ".IntervalMinutes";
 

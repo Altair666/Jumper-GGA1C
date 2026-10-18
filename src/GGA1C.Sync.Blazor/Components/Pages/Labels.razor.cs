@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
+using GGA1C.Sync.Connections;
+using GGA1C.Sync.Keycloak;
 using GGA1C.Sync.Labels;
 using Microsoft.AspNetCore.Components;
 
@@ -52,11 +54,18 @@ public partial class Labels
     private string? ShownKey { get; set; }
     private string ShownKeyFor { get; set; } = "";
 
+    private KeycloakSettingsDto Kc { get; set; } = new();
+
+    private ConnectionTestResultDto? KcTest { get; set; }
+
+    private KeycloakSyncReport? KcReport { get; set; }
+
     private bool Busy { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
+        Kc = await ClientsAppService.GetKeycloakSettingsAsync();
     }
 
     private async Task LoadAsync()
@@ -187,6 +196,56 @@ public partial class Labels
             await ClientsAppService.DeleteAsync(client.Id);
             await LoadAsync();
             await Notify.Success("Учётная запись удалена");
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task SaveKeycloakAsync()
+    {
+        Busy = true;
+        try
+        {
+            await ClientsAppService.SaveKeycloakSettingsAsync(Kc);
+
+            // Перечитываем: секрет в ответе приходит пустым, зато обновится флаг
+            // «сохранён», и поле не останется с набранным значением.
+            Kc = await ClientsAppService.GetKeycloakSettingsAsync();
+
+            await Notify.Success("Настройки Keycloak сохранены");
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task TestKeycloakAsync()
+    {
+        Busy = true;
+        KcTest = null;
+        KcReport = null;
+        try
+        {
+            KcTest = await ClientsAppService.TestKeycloakAsync();
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task SyncKeycloakAsync()
+    {
+        Busy = true;
+        KcTest = null;
+        KcReport = null;
+        try
+        {
+            KcReport = await ClientsAppService.SyncFromKeycloakAsync();
+            await LoadAsync();
         }
         finally
         {

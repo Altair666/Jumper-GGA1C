@@ -1,6 +1,8 @@
 ﻿@page "/labels"
 @attribute [Authorize]
 @using GGA1C.Sync.Labels
+@using GGA1C.Sync.Keycloak
+@using GGA1C.Sync.Connections
 @inherits SyncComponentBase
 
 <MudText Typo="Typo.h5" Class="mb-4">Grist → GoLabel2</MudText>
@@ -20,6 +22,85 @@
         </MudText>
     </MudAlert>
 }
+
+<MudCard Class="mb-4">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Учётные записи из Keycloak</MudText>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="5">
+                <MudTextField @bind-Value="Kc.BaseUrl" Label="Адрес Keycloak" T="string"
+                              Placeholder="http://192.168.88.238:8080"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Без /realms" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="Kc.Realm" Label="Реалм" T="string"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="Kc.ClientId" Label="Клиент" T="string"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="Kc.ClientSecret" Label="Секрет клиента" T="string"
+                              InputType="InputType.Password"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="@(Kc.HasClientSecret ? "Сохранён. Пустое поле — оставить как есть" : "Не задан")" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex align-center gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@Busy"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveKeycloakAsync">Сохранить</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Info" Disabled="@Busy"
+                           StartIcon="@Icons.Material.Filled.NetworkCheck"
+                           OnClick="TestKeycloakAsync">Проверить связь</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Success" Disabled="@Busy"
+                           StartIcon="@Icons.Material.Filled.Sync"
+                           OnClick="SyncKeycloakAsync">Синхронизировать</MudButton>
+            </MudItem>
+        </MudGrid>
+
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+            Клиенту в Keycloak нужна включённая служебная учётная запись и роль
+            <code>view-users</code> из <code>realm-management</code> — без неё токен выдаётся,
+            а список пользователей отвечает 403. Чужие пароли при этом не нужны и не хранятся.
+        </MudAlert>
+
+        @if (KcTest != null)
+        {
+            <MudAlert Class="mt-3" Severity="@(KcTest.Ok ? Severity.Success : Severity.Error)"
+                      Variant="Variant.Outlined">@KcTest.Message</MudAlert>
+        }
+
+        @if (KcReport != null)
+        {
+            <MudAlert Class="mt-3" Severity="@(KcReport.Ok ? Severity.Success : Severity.Error)"
+                      Variant="Variant.Outlined">
+                @if (!KcReport.Ok)
+                {
+                    <MudText Typo="Typo.body2">@KcReport.Message</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">
+                        Проверено: @KcReport.Checked · создано: @KcReport.Created ·
+                        обновлено: @KcReport.Updated · привязано: @KcReport.Linked ·
+                        отключено: @KcReport.Disabled · включено: @KcReport.Restored
+                        @if (KcReport.SkippedWithoutEmail > 0)
+                        {
+                            <text> · без email: @KcReport.SkippedWithoutEmail</text>
+                        }
+                    </MudText>
+                    @foreach (var line in KcReport.Details)
+                    {
+                        <MudText Typo="Typo.caption" Class="d-block">@line</MudText>
+                    }
+                }
+            </MudAlert>
+        }
+    </MudCardContent>
+</MudCard>
 
 <MudCard Class="mb-4">
     <MudCardContent>

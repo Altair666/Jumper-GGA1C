@@ -152,6 +152,14 @@ public class SyncDbContext :
             b.Property(x => x.KeyHash).HasMaxLength(64).IsRequired();
             b.Property(x => x.KeyPrefix).HasMaxLength(16).IsRequired();
             b.Property(x => x.KeyEncrypted).HasMaxLength(512);
+
+            // Связь с Keycloak держится по sub: email и логин человек меняет, sub - нет.
+            // Индекс уникальный, но допускает несколько NULL - учётки, заведённые руками,
+            // sub не имеют.
+            b.HasIndex(x => x.KeycloakSub).IsUnique();
+            b.Property(x => x.KeycloakSub).HasMaxLength(64);
+            b.Property(x => x.KeycloakUsername).HasMaxLength(128);
+            b.Property(x => x.Email).HasMaxLength(256);
         });
 
         builder.Entity<RequestLogItem>(b =>

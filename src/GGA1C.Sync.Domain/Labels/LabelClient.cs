@@ -46,4 +46,31 @@ public class LabelClient : AuditedEntity<int>
 
     /// <summary>Когда ключом последний раз успешно пользовались. Помогает найти мёртвые учётки.</summary>
     public DateTime? LastUsedAt { get; set; }
+
+    // ── Связь с Keycloak ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Идентификатор пользователя в Keycloak (sub). Связь держим именно по нему, а не по
+    /// email или логину: email и имя человек меняет, sub — нет. Пусто у учёток, заведённых
+    /// руками.
+    /// </summary>
+    public string? KeycloakSub { get; set; }
+
+    public string? KeycloakUsername { get; set; }
+
+    /// <summary>
+    /// Email из Keycloak. Нужен не для связи, а для правил доступа в Grist: именно по
+    /// user.Email Grist отдаёт виджету строку с его ключом.
+    /// </summary>
+    public string? Email { get; set; }
+
+    /// <summary>
+    /// Когда учётку отключила синхронизация, а не человек. Различать обязательно: иначе
+    /// следующая же синхронизация включит обратно того, кого администратор выключил руками,
+    /// и отзыв доступа молча отменится.
+    /// </summary>
+    public DateTime? SyncDisabledAt { get; set; }
+
+    /// <summary>Когда последний раз сверялись с Keycloak.</summary>
+    public DateTime? SyncedAt { get; set; }
 }

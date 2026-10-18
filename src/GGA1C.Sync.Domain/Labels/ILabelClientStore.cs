@@ -36,4 +36,23 @@ public interface ILabelClientStore
 
     /// <summary>Отметить успешное использование ключа.</summary>
     Task TouchAsync(int id);
+
+    // ── Для сверки с Keycloak ─────────────────────────────────────────────────
+
+    /// <summary>Найти по идентификатору пользователя Keycloak (sub) — основная связь.</summary>
+    Task<LabelClient?> FindBySubAsync(string sub);
+
+    /// <summary>
+    /// Найти по email. Нужно один раз: чтобы привязать к Keycloak учётку, которую до
+    /// этого завели руками, а не плодить вторую на того же человека.
+    /// </summary>
+    Task<LabelClient?> FindByEmailAsync(string email);
+
+    Task UpdateAsync(LabelClient client);
+
+    /// <summary>
+    /// Свободное имя папки на основе предложенного: при совпадении добавляет число.
+    /// Две фамилии Иванов — обычное дело, и второй не должен ломать синхронизацию.
+    /// </summary>
+    Task<string> MakeUniqueSlugAsync(string baseSlug);
 }

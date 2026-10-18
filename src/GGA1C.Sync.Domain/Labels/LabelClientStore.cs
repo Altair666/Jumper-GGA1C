@@ -140,6 +140,57 @@ public class LabelClientStore : DomainService, ILabelClientStore
         await _repo.UpdateAsync(client, autoSave: true);
     }
 
+    public async Task<LabelClient?> FindBySubAsync(string sub)
+    {
+        if (string.IsNullOrWhiteSpace(sub))
+        {
+            return null;
+        }
+
+        return await _repo.FindAsync(x => x.KeycloakSub == sub);
+    }
+
+    public async Task<LabelClient?> FindByEmailAsync(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return null;
+        }
+
+        var normalized = email.Trim().ToLowerInvariant();
+        var query = await _repo.GetQueryableAsync();
+
+        return query.FirstOrDefault(x => x.Email != null && x.Email.ToLower() == normalized);
+    }
+
+    public async Task UpdateAsync(LabelClient client)
+    {
+        await _repo.UpdateAsync(client, autoSave: true);
+    }
+
+    public async Task<string> MakeUniqueSlugAsync(string baseSlug)
+    {
+        var query = await _repo.GetQueryableAsync();
+        var taken = query.Select(x => x.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!taken.Contains(baseSlug))
+        {
+            return baseSlug;
+        }
+
+        for (var n = 2; n < 1000; n++)
+        {
+            var candidate = baseSlug + n;
+            if (!taken.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new BusinessException("GGA1C.Sync:CannotMakeUniqueSlug")
+            .WithData("message", $"Не удалось подобрать свободное имя папки для «{baseSlug}»");
+    }
+
     /// <summary>40 знаков hex — тот же вид, что выдавала прежняя версия сервиса,
     /// чтобы уже прописанные в виджетах ключи не выглядели инородно.</summary>
     private static string GenerateKey()

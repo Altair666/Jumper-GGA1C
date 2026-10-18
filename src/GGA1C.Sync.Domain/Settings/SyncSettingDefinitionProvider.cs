@@ -29,6 +29,11 @@ public class SyncSettingDefinitionProvider : SettingDefinitionProvider
             new SettingDefinition(SyncSettings.OneC.User, isVisibleToClients: false),
             new SettingDefinition(SyncSettings.OneC.Password, isVisibleToClients: false, isEncrypted: true),
 
+            new SettingDefinition(SyncSettings.Keycloak.BaseUrl, isVisibleToClients: false),
+            new SettingDefinition(SyncSettings.Keycloak.Realm, isVisibleToClients: false),
+            new SettingDefinition(SyncSettings.Keycloak.ClientId, isVisibleToClients: false),
+            new SettingDefinition(SyncSettings.Keycloak.ClientSecret, isVisibleToClients: false, isEncrypted: true),
+
             new SettingDefinition(SyncSettings.AutoSyncEnabled, "false", isVisibleToClients: false),
             new SettingDefinition(SyncSettings.IntervalMinutes, "60", isVisibleToClients: false),
             new SettingDefinition(SyncSettings.DefaultSyncAction, "Skip", isVisibleToClients: false)

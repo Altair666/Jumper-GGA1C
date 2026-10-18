@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Settings;
 using Volo.Abp.Threading;
+using Volo.Abp.Uow;
 
 namespace GGA1C.Sync.Sync;
 
@@ -13,8 +14,9 @@ namespace GGA1C.Sync.Sync;
 /// Автоматическая синхронизация Altium → 1С по расписанию.
 ///
 /// Перенесено с BackgroundService на штатный механизм ABP: тот сам заводит область
-/// внедрения зависимостей и единицу работы на каждый тик, тогда как прежняя версия
-/// создавала scope руками. Интервал перечитывается из настроек на каждом тике — поэтому
+/// внедрения зависимостей на каждый тик, тогда как прежняя версия создавала scope руками.
+/// А вот единицу работы он НЕ создаёт — её приходится открывать самому, иначе репозитории
+/// обращаются к уже закрытому контексту. Интервал перечитывается из настроек на каждом тике — поэтому
 /// смена расписания в интерфейсе подхватывается без перезапуска сервиса.
 ///
 /// Когда подключим Elsa, этот работник станет триггером процесса, а сами шаги переедут
@@ -61,13 +63,21 @@ public class AutoSyncWorker : AsyncPeriodicBackgroundWorkerBase
         await configurator.ApplyAllAsync();
 
         var sync = workerContext.ServiceProvider.GetRequiredService<SyncService>();
+        var uowManager = workerContext.ServiceProvider.GetRequiredService<IUnitOfWorkManager>();
 
         logger.LogInformation("Автосинхронизация запущена");
 
         try
         {
+            // Единицу работы открываем сами - см. пояснение в KeycloakSyncWorker:
+            // фоновый работник её не создаёт, и репозитории падают с ObjectDisposedException.
+            using var uow = uowManager.Begin(requiresNew: true);
+
             await sync.SyncFoldersAsync();
             await sync.SyncComponentsAsync();
+
+            await uow.CompleteAsync();
+
             logger.LogInformation("Автосинхронизация завершена");
         }
         catch (Exception ex)

@@ -1,9 +1,13 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using GGA1C.Sync.Connections;
+using GGA1C.Sync.Keycloak;
+using GGA1C.Sync.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp;
 using Volo.Abp.Application.Services;
+using Volo.Abp.SettingManagement;
 
 namespace GGA1C.Sync.Labels;
 
@@ -15,11 +19,22 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 {
     private readonly ILabelClientStore _clients;
     private readonly ILabelsBufferFactory _buffers;
+    private readonly ISettingManager _settingManager;
+    private readonly KeycloakClient _keycloak;
+    private readonly KeycloakAccountSync _keycloakSync;
 
-    public LabelClientsAppService(ILabelClientStore clients, ILabelsBufferFactory buffers)
+    public LabelClientsAppService(
+        ILabelClientStore clients,
+        ILabelsBufferFactory buffers,
+        ISettingManager settingManager,
+        KeycloakClient keycloak,
+        KeycloakAccountSync keycloakSync)
     {
         _clients = clients;
         _buffers = buffers;
+        _settingManager = settingManager;
+        _keycloak = keycloak;
+        _keycloakSync = keycloakSync;
     }
 
     public async Task<List<LabelClientDto>> GetListAsync()
@@ -108,5 +123,58 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         }
 
         _buffers.For(client.Slug).ClearAll();
+    }
+
+    // ── Keycloak ──────────────────────────────────────────────────────────────
+
+    public async Task<KeycloakSettingsDto> GetKeycloakSettingsAsync()
+    {
+        var secret = await Get(SyncSettings.Keycloak.ClientSecret);
+
+        return new KeycloakSettingsDto
+        {
+            BaseUrl = await Get(SyncSettings.Keycloak.BaseUrl),
+            Realm = await Get(SyncSettings.Keycloak.Realm),
+            ClientId = await Get(SyncSettings.Keycloak.ClientId),
+
+            // Секрет наружу не отдаём - только факт, что он задан
+            ClientSecret = "",
+            HasClientSecret = !string.IsNullOrEmpty(secret)
+        };
+    }
+
+    public async Task SaveKeycloakSettingsAsync(KeycloakSettingsDto input)
+    {
+        await Set(SyncSettings.Keycloak.BaseUrl, input.BaseUrl?.TrimEnd('/') ?? "");
+        await Set(SyncSettings.Keycloak.Realm, input.Realm ?? "");
+        await Set(SyncSettings.Keycloak.ClientId, input.ClientId ?? "");
+
+        // Пустое поле означает "оставить прежний секрет", иначе каждое сохранение формы
+        // стирало бы секрет, которого в ней и не было.
+        if (!string.IsNullOrWhiteSpace(input.ClientSecret))
+        {
+            await Set(SyncSettings.Keycloak.ClientSecret, input.ClientSecret);
+        }
+    }
+
+    public async Task<ConnectionTestResultDto> TestKeycloakAsync()
+    {
+        var (ok, message) = await _keycloak.TestAsync();
+        return new ConnectionTestResultDto { Ok = ok, Message = message };
+    }
+
+    public async Task<KeycloakSyncReport> SyncFromKeycloakAsync()
+    {
+        return await _keycloakSync.SyncAsync();
+    }
+
+    private async Task<string> Get(string name)
+    {
+        return await _settingManager.GetOrNullGlobalAsync(name) ?? "";
+    }
+
+    private async Task Set(string name, string value)
+    {
+        await _settingManager.SetGlobalAsync(name, value ?? "");
     }
 }
