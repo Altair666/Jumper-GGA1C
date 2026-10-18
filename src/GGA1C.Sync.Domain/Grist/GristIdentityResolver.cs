@@ -114,7 +114,12 @@ public class GristIdentityResolver : DomainService
             var table = await GetTableAsync();
             var emails = await ReadEmailsAsync(apiKey: apiKey);
 
-            return (true, $"Документ доступен, таблица «{table}» читается, людей в ней: {emails.Count}");
+            // Строк видно столько, сколько отдаёт правило доступа - обычно одну, свою,
+            // даже владельцу документа. Это признак того, что правило работает, поэтому
+            // так и пишем: иначе «людей в таблице: 1» выглядит как потеря данных.
+            return (true,
+                $"Документ доступен, таблица «{table}» читается. Правило доступа отдало " +
+                $"строк: {emails.Count} — каждый видит только свою, это и нужно");
         }
         catch (Exception ex)
         {
