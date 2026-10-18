@@ -67,6 +67,79 @@ dotnet run --no-launch-profile -c Release --urls http://0.0.0.0:5080
 
 Вход: `admin` / `1q2w3E*` (стандартная сеялка ABP).
 
+## Стенд работает по https (сделано 18.10.2026)
+
+**Зачем.** Виджет в Grist считает PKCE-хеш через `crypto.subtle`, а он доступен только в
+защищённом контексте. Для фрейма это значит: защищённым должен быть и сам фрейм, **и все
+страницы над ним**, то есть сам Grist. По http вход падал с
+`Cannot read properties of undefined (reading 'digest')`, и обойти это адресом виджета или
+сертификатом только на хабе нельзя — родительская страница всё равно http.
+
+| Адрес | Что отдаёт | Чем терминируется TLS |
+|---|---|---|
+| `https://192.168.88.238` | Grist | IIS, сайт `grist-https` → `http://127.0.0.1:8484` |
+| `https://192.168.88.238:8443` | Keycloak | IIS, сайт `kc-https` → `http://127.0.0.1:8080` |
+| `https://192.168.88.238:5443` | хаб и виджет | сам Kestrel, сертификатом из переменных окружения |
+
+Старые http-адреса (`:8484`, `:8080`, `:5080`) живут: ими ходят скрипты стенда. Хаб с http
+теперь отвечает 307 на https, Grist по http уводит на тот же вход.
+
+**Сертификат** самоподписанный, с SAN на `192.168.88.238`, `127.0.0.1`, `localhost` и имя
+машины; срок 5 лет. Лежит в `C:\GGA1C\tls\` — `gga1c-stand.pfx` (пароль `gga1c-stand`, нужен
+Kestrel) и `gga1c-stand.crt` (PEM, для доверия). Внесён в доверенные корневые этой машины.
+**На другой машине** браузер будет ругаться, пока не импортируешь `gga1c-stand.crt` в
+«Доверенные корневые центры сертификации».
+
+**Хаб запускается с сертификатом:**
+
+```
+cd src\GGA1C.Sync.Blazor
+set StringEncryption__DefaultPassPhrase=<из C:\GGA1C\stringencryption.key>
+set ASPNETCORE_Kestrel__Certificates__Default__Path=C:\GGA1C\tls\gga1c-stand.pfx
+set ASPNETCORE_Kestrel__Certificates__Default__Password=gga1c-stand
+dotnet run --no-launch-profile -c Release --urls "https://0.0.0.0:5443;http://0.0.0.0:5080"
+```
+
+**Grist** (`/opt/grist/grist-up.sh`): `APP_HOME_URL=https://192.168.88.238`,
+`GRIST_OIDC_SP_HOST=https://192.168.88.238`,
+`GRIST_OIDC_IDP_ISSUER=https://192.168.88.238:8443/realms/test`. Плюс в контейнер
+монтируется `/opt/grist/stand-ca.crt` и задаётся `NODE_EXTRA_CA_CERTS` — **без этого Grist
+не поднимается вообще**: node не доверяет самоподписанному сертификату, discovery OIDC
+отваливается по таймауту, и контейнер уходит в перезапуск (симптом в логе:
+`RestartShell: initial spawn failed`).
+
+**Keycloak** (`/opt/keycloak-stack/docker-compose.yml`): `KC_PROXY_HEADERS=xforwarded` и
+`KC_HOSTNAME=https://192.168.88.238:8443`. Без первого Keycloak не верит
+`X-Forwarded-Proto` и выдаёт discovery с http-адресами (проверено), а issuer в токене тогда
+не совпадает с тем, что ждёт хаб. Теперь issuer — `https://192.168.88.238:8443/realms/test`,
+и настройка хаба `Sync.Keycloak.BaseUrl` указывает туда же.
+
+**IIS.** Два сайта на физических папках `C:\inetpub\grist-proxy` и `C:\inetpub\kc-proxy`,
+правила ARR в их `web.config` (образец взят у сайта Docmost). Две ловушки:
+- серверные переменные `HTTP_X_FORWARDED_*` надо **разрешить сайту**
+  (`appcmd set config <сайт> -section:system.webServer/rewrite/allowedServerVariables
+  /+[name='HTTP_X_FORWARDED_PROTO'] /commit:apphost`), иначе IIS отдаёт
+  **500.50 URL Rewrite Module Error** и ничего больше не говорит;
+- `X-Forwarded-For` от ARR содержит порт (`IP:порт`), поэтому во всех правилах он
+  переопределяется на `{REMOTE_ADDR}` — на Docmost это в своё время ломало вход.
+
+**Брандмауэр.** Добавлены входящие правила на 443, 8443 и 5443 («GGA1C stand https N»).
+Без правила на 8443 Grist из контейнера не доставал до Keycloak: запрос просто истекал.
+
+**Правки клиентов Keycloak:** у `grist` добавлен `https://192.168.88.238/*`, у
+`gga1c-widget` — `https://192.168.88.238:5443/widget_report_grist/*` и соответствующие
+web origins. Старые http-адреса оставлены на время перехода.
+
+**Настройки виджета в документе** (секция 70): адрес
+`https://192.168.88.238:5443/widget_report_grist/index.html`,
+`syncServerUrl=https://192.168.88.238:5443`,
+`syncKcIssuer=https://192.168.88.238:8443/realms/test`, ключ пуст.
+
+**Грабля bash, на которой я уже спотыкнулся:** комментарий нельзя вставлять внутрь команды
+с переносами строк (`docker run ... \`). Оболочка обрывает команду на комментарии, и
+`grist-up.sh` падал с `docker run requires at least 1 argument`. Пояснения — только перед
+командой.
+
 ## Данные и секреты
 
 **База ABP — `C:\GGA1C\Sync.db`**, вне репозитория и вне папки сборки, чтобы переживать
