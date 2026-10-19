@@ -220,6 +220,23 @@ public class LabelClientStore : DomainService, ILabelClientStore
         return string.IsNullOrWhiteSpace(entered) ? null : _encryption.Encrypt(entered.Trim());
     }
 
+    public async Task SetPrintCredentialsAsync(int id, string login, string password)
+    {
+        var client = await _repo.GetAsync(id);
+
+        client.PrintLogin = login;
+        client.PrintPasswordEncrypted = _encryption.Encrypt(password);
+
+        await _repo.UpdateAsync(client, autoSave: true);
+    }
+
+    public async Task<string?> RevealPrintPasswordAsync(int id)
+    {
+        var client = await _repo.GetAsync(id);
+
+        return Decrypt(client.PrintPasswordEncrypted);
+    }
+
     public async Task<AccountCredentials> RevealCredentialsAsync(int id)
     {
         var client = await _repo.GetAsync(id);

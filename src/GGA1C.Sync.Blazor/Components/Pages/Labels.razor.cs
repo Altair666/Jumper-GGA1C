@@ -86,47 +86,6 @@ public partial class Labels
         }
     }
 
-    private async Task IssuePrintLoginAsync(LabelClientDto client)
-    {
-        var confirmed = string.IsNullOrEmpty(client.PrintLogin) || await Message.Confirm(
-            $"Логин печати «{client.PrintLogin}» уже выдан. Выдать новый пароль? " +
-            "Старый сразу перестанет работать, и в GoLabel II на машине с принтером " +
-            "придётся вписать новый.");
-
-        if (!confirmed)
-        {
-            return;
-        }
-
-        Busy = true;
-        try
-        {
-            var password = await ClientsAppService.IssuePrintLoginAsync(client.Id);
-
-            ShownKeyFor = $"Пароль печати для «{client.Name}» (логин {ClientLogin(client)})";
-            ShownKey = password;
-
-            await LoadAsync();
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
-    /// <summary>
-    /// Логин печати — почта человека; пока он не выдан, показываем, каким он будет.
-    /// </summary>
-    private static string ClientLogin(LabelClientDto client)
-    {
-        if (!string.IsNullOrEmpty(client.PrintLogin))
-        {
-            return client.PrintLogin;
-        }
-
-        return string.IsNullOrEmpty(client.Email) ? "lbl_" + client.Slug : client.Email;
-    }
-
     private async Task RevealAsync(LabelClientDto client)
     {
         var key = await ClientsAppService.RevealKeyAsync(client.Id);
@@ -262,9 +221,13 @@ public partial class Labels
 
     // ── Учётные данные во внешних системах ────────────────────────────────────
 
+    /// <summary>Виден ли пароль MySQL: его, в отличие от прочих, разрешено смотреть.</summary>
+    private bool PrintPasswordShown { get; set; }
+
     private async Task OpenCredsAsync(LabelClientDto client)
     {
         Busy = true;
+        PrintPasswordShown = false;
         try
         {
             Creds = await ClientsAppService.GetCredentialsAsync(client.Id);
@@ -273,6 +236,59 @@ public partial class Labels
         {
             Busy = false;
         }
+    }
+
+    /// <summary>
+    /// Показать или снова скрыть пароль MySQL. При показе значение подтягивается с сервера:
+    /// в карточку он приходит точками, чтобы не уезжать в браузер без спроса.
+    /// </summary>
+    private async Task TogglePrintPasswordAsync()
+    {
+        if (Creds == null)
+        {
+            return;
+        }
+
+        if (PrintPasswordShown)
+        {
+            PrintPasswordShown = false;
+            Creds.PrintPassword = new string('\u2022', Creds.PrintPassword.Length);
+            return;
+        }
+
+        Busy = true;
+        try
+        {
+            var password = await ClientsAppService.RevealPrintPasswordAsync(Creds.Id);
+
+            if (string.IsNullOrEmpty(password))
+            {
+                await Notify.Warn("Пароль ещё не задан — сгенерируйте и сохраните");
+                return;
+            }
+
+            Creds.PrintPassword = password;
+            PrintPasswordShown = true;
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    /// <summary>
+    /// Новый пароль только подставляется в поле — применяется он при сохранении карточки,
+    /// чтобы случайное нажатие не отрезало человеку печать.
+    /// </summary>
+    private void GeneratePrintPassword()
+    {
+        if (Creds == null)
+        {
+            return;
+        }
+
+        Creds.PrintPassword = ClientsAppService.GeneratePrintPassword();
+        PrintPasswordShown = true;
     }
 
     private async Task SaveCredsAsync()
@@ -291,6 +307,7 @@ public partial class Labels
             // «задан», и поля не останутся с набранными значениями.
             Creds = await ClientsAppService.GetCredentialsAsync(Creds.Id);
 
+            PrintPasswordShown = false;
             await LoadAsync();
             await Notify.Success("Учётные данные сохранены");
         }

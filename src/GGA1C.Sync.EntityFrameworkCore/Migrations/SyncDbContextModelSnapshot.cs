@@ -400,6 +400,9 @@ namespace GGA1C.Sync.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("varchar(32)");
 
+                    b.Property<string>("PrintPasswordEncrypted")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(64)

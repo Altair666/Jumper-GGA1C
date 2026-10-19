@@ -84,6 +84,43 @@
                 </MudText>
             </MudStack>
 
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Доступ к базе печати (GoLabel II)</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Логин — почта человека, он же появляется сам при сверке с Keycloak с паролем
+                по умолчанию <code>1234</code>. Этот пароль человек вписывает в GoLabel, поэтому
+                его, в отличие от остальных, можно посмотреть и продиктовать.
+            </MudText>
+
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="6">
+                    <MudTextField Value="@Creds.PrintLogin" Label="Логин MySQL" T="string"
+                                  ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Adornment="@Mark(Filled(Creds.PrintLogin))"
+                                  AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                                  AdornmentColor="Color.Success"
+                                  HelperText="Меняется вместе с почтой" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudTextField @bind-Value="Creds.PrintPassword" Label="Пароль MySQL"
+                                      T="string" Class="flex-grow-1"
+                                      InputType="@(PrintPasswordShown ? InputType.Text : InputType.Password)"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      HelperText="@(PrintPasswordShown ? "Виден — можно диктовать" : "Точки — сохранённый пароль")" />
+                        <MudIconButton Icon="@(PrintPasswordShown
+                                               ? Icons.Material.Filled.VisibilityOff
+                                               : Icons.Material.Filled.Visibility)"
+                                       Title="Показать пароль" Disabled="@Busy"
+                                       OnClick="TogglePrintPasswordAsync" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Autorenew" Color="Color.Warning"
+                                       Title="Сгенерировать новый пароль" Disabled="@Busy"
+                                       OnClick="GeneratePrintPassword" />
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
                 Пароль PDM приходится хранить потому, что PDM не умеет ни SAML, ни OIDC —
                 через Keycloak в него не войти, а действовать от имени человека без его
@@ -195,10 +232,6 @@
                                            Color="Color.Primary" Title="Учётные данные Altium и PDM"
                                            Disabled="@Busy"
                                            OnClick="@(() => OpenCredsAsync(context))" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Print" Size="Size.Small"
-                                           Color="Color.Primary"
-                                           Title="Выдать логин печати для GoLabel II" Disabled="@Busy"
-                                           OnClick="@(() => IssuePrintLoginAsync(context))" />
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
                                            Title="Показать ключ" Disabled="@Busy"
                                            OnClick="@(() => RevealAsync(context))" />

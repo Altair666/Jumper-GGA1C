@@ -25,16 +25,53 @@ public class KeycloakAccountSync : DomainService
 {
     private readonly KeycloakClient _keycloak;
     private readonly ILabelClientStore _clients;
+    private readonly IPrintLoginService _printLogins;
     private readonly ILogger<KeycloakAccountSync> _log;
 
     public KeycloakAccountSync(
         KeycloakClient keycloak,
         ILabelClientStore clients,
+        IPrintLoginService printLogins,
         ILogger<KeycloakAccountSync> log)
     {
         _keycloak = keycloak;
         _clients = clients;
+        _printLogins = printLogins;
         _log = log;
+    }
+
+    /// <summary>
+    /// Готовит человеку доступ к базе печати: логин — его почта, пароль по умолчанию
+    /// (1234), права — только на представление своих строк. Делается при появлении учётки,
+    /// чтобы администратору не приходилось нажимать ещё одну кнопку; сменить пароль можно
+    /// в карточке.
+    ///
+    /// Недоступная база не должна ронять сверку: человек в хабе уже есть, доступ к печати
+    /// доберём при следующей сверке или вручную в карточке.
+    /// </summary>
+    private async Task EnsurePrintLoginAsync(LabelClient client, KeycloakSyncReport report)
+    {
+        if (!client.IsEnabled || string.IsNullOrWhiteSpace(client.Email) ||
+            !string.IsNullOrWhiteSpace(client.PrintLogin))
+        {
+            return;
+        }
+
+        try
+        {
+            var login = await _printLogins.EnsureAsync(
+                client.Slug, client.Email, PrintLoginDefaults.Password);
+
+            await _clients.SetPrintCredentialsAsync(
+                client.Id, login, PrintLoginDefaults.Password);
+
+            report.Details.Add($"{client.Name}: логин печати {login}, пароль по умолчанию");
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Логин печати для {Name} не создан", client.Name);
+            report.Details.Add($"{client.Name}: логин печати не создан ({ex.Message})");
+        }
     }
 
     public async Task<KeycloakSyncReport> SyncAsync()
@@ -140,6 +177,8 @@ public class KeycloakAccountSync : DomainService
 
         await _clients.UpdateAsync(client);
 
+        await EnsurePrintLoginAsync(client, report);
+
         report.Created++;
 
         if (string.IsNullOrWhiteSpace(user.Email))
@@ -200,6 +239,9 @@ public class KeycloakAccountSync : DomainService
 
         client.SyncedAt = now;
         await _clients.UpdateAsync(client);
+
+        // Учётка могла появиться до того, как завели базу печати - доберём здесь.
+        await EnsurePrintLoginAsync(client, report);
 
         if (changed)
         {

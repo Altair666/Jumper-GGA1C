@@ -51,10 +51,15 @@ public class MySqlPrintLoginService : IPrintLoginService, ITransientDependency
             : Normalize(Prefix + slug);
     }
 
-    public async Task<string> IssueAsync(string slug, string? email)
+    public async Task<string> EnsureAsync(string slug, string? email, string password)
     {
         var login = LoginFor(slug, email);
-        var password = GeneratePassword();
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            throw new BusinessException("GGA1C.Sync:EmptyPrintPassword")
+                .WithData("message", "Пароль для доступа к базе печати не может быть пустым");
+        }
 
         await EnsureViewAsync();
 
@@ -70,9 +75,9 @@ public class MySqlPrintLoginService : IPrintLoginService, ITransientDependency
         // Права только на представление: таблица с чужими строками человеку недоступна.
         await ExecuteAsync(db, $"GRANT SELECT ON {Database()}.{ViewName} TO '{login}'@'%'");
 
-        _log.LogInformation("Выдан логин печати {Login}", login);
+        _log.LogInformation("Логин печати {Login} готов", login);
 
-        return password;
+        return login;
     }
 
     public async Task DropAsync(string? login)
@@ -207,7 +212,7 @@ WHERE c.PrintLogin = LEFT(
                               || c is '_' or '.' or '-' or '@');
     }
 
-    private static string GeneratePassword()
+    public string GeneratePassword()
     {
         // Без похожих друг на друга знаков: пароль диктуют и вписывают руками в GoLabel.
         const string alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";

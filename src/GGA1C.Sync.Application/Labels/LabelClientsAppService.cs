@@ -139,18 +139,9 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
     }
 
-    public async Task<string> IssuePrintLoginAsync(int id)
+    public async Task<string?> RevealPrintPasswordAsync(int id)
     {
-        var client = await _clients.FindAsync(id)
-            ?? throw new BusinessException("GGA1C.Sync:ClientNotFound")
-                .WithData("message", "Учётная запись не найдена");
-
-        var password = await _printLogins.IssueAsync(client.Slug, client.Email);
-
-        client.PrintLogin = _printLogins.LoginFor(client.Slug, client.Email);
-        await _clients.UpdateAsync(client);
-
-        return password;
+        return await _clients.RevealPrintPasswordAsync(id);
     }
 
     public async Task ClearBufferAsync(int id)
@@ -249,6 +240,9 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             // видно, и поле можно стереть, чтобы удалить пароль.
             AltiumPassword = SecretMask.For(secrets.AltiumPassword),
             PdmPassword = SecretMask.For(secrets.PdmPassword),
+            PrintLogin = client.PrintLogin ?? _printLogins.LoginFor(client.Slug, client.Email),
+            PrintPassword = SecretMask.For(await _clients.RevealPrintPasswordAsync(id)),
+            HasPrintPassword = !string.IsNullOrEmpty(client.PrintPasswordEncrypted),
             HasAltiumPassword = !string.IsNullOrEmpty(client.AltiumPasswordEncrypted),
             HasPdmPassword = !string.IsNullOrEmpty(client.PdmPasswordEncrypted),
             UpdatedAt = client.CredentialsUpdatedAt
@@ -264,6 +258,27 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
                 input.AltiumPassword,
                 input.PdmLogin,
                 input.PdmPassword));
+
+        // Пароль MySQL меняем только если в поле ввели новое значение: точки означают
+        // «оставить как есть», как и у прочих секретов.
+        if (!SecretMask.IsMask(input.PrintPassword) &&
+            !string.IsNullOrWhiteSpace(input.PrintPassword))
+        {
+            var client = await _clients.FindAsync(input.Id)
+                ?? throw new BusinessException("GGA1C.Sync:ClientNotFound")
+                    .WithData("message", "Учётная запись не найдена");
+
+            var login = await _printLogins.EnsureAsync(
+                client.Slug, client.Email, input.PrintPassword.Trim());
+
+            await _clients.SetPrintCredentialsAsync(input.Id, login, input.PrintPassword.Trim());
+        }
+    }
+
+    /// <summary>Случайный пароль для кнопки «сгенерировать» в карточке.</summary>
+    public string GeneratePrintPassword()
+    {
+        return _printLogins.GeneratePassword();
     }
 
     // ── Keycloak ──────────────────────────────────────────────────────────────

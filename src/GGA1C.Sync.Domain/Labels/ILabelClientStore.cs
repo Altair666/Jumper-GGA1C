@@ -69,4 +69,10 @@ public interface ILabelClientStore
     /// человека.
     /// </summary>
     Task<AccountCredentials> RevealCredentialsAsync(int id);
+
+    /// <summary>Запомнить логин и пароль MySQL (пароль шифруется).</summary>
+    Task SetPrintCredentialsAsync(int id, string login, string password);
+
+    /// <summary>Пароль MySQL в открытом виде — для кнопки «показать» в карточке.</summary>
+    Task<string?> RevealPrintPasswordAsync(int id);
 }

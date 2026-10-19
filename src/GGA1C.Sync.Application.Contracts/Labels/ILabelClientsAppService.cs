@@ -41,11 +41,11 @@ public interface ILabelClientsAppService : IApplicationService
     /// <summary>Очистить буфер учётки, не трогая саму учётку.</summary>
     Task ClearBufferAsync(int id);
 
-    /// <summary>
-    /// Выдать (или сменить) логин печати в MySQL — им GoLabel II забирает этикетки.
-    /// Пароль возвращается один раз, в базе хаба он не хранится.
-    /// </summary>
-    Task<string> IssuePrintLoginAsync(int id);
+    /// <summary>Пароль MySQL в открытом виде — кнопка «глаз» в карточке учётных данных.</summary>
+    Task<string?> RevealPrintPasswordAsync(int id);
+
+    /// <summary>Случайный пароль для кнопки «сгенерировать» рядом с полем.</summary>
+    string GeneratePrintPassword();
 
     // ── Буферы ────────────────────────────────────────────────────────────────
 

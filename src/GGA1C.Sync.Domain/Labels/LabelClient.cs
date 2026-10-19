@@ -107,6 +107,14 @@ public class LabelClient : AuditedEntity<int>
     /// </summary>
     public string? PrintLogin { get; set; }
 
+    /// <summary>
+    /// Пароль этого человека к MySQL, зашифрованный ключом StringEncryption. В отличие от
+    /// ключа виджета и паролей Altium/PDM, его **можно посмотреть** в карточке: человек
+    /// вписывает его в GoLabel на машине с принтером, и администратору приходится его
+    /// диктовать. По умолчанию при создании учётки ставится 1234 — меняется там же.
+    /// </summary>
+    public string? PrintPasswordEncrypted { get; set; }
+
     /// <summary>Когда учётные данные последний раз меняли. Видно в интерфейсе, чтобы было
     /// понятно, не устарел ли пароль после смены в домене.</summary>
     public DateTime? CredentialsUpdatedAt { get; set; }

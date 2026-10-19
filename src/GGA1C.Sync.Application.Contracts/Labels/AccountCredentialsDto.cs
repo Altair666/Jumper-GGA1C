@@ -28,6 +28,21 @@ public class AccountCredentialsDto
 
     public bool HasPdmPassword { get; set; }
 
+    /// <summary>
+    /// Логин MySQL для GoLabel II — это почта человека. Поле только для чтения: меняется
+    /// вместе с почтой.
+    /// </summary>
+    public string PrintLogin { get; set; } = "";
+
+    /// <summary>
+    /// Пароль MySQL. В отличие от остальных, его можно посмотреть кнопкой «глаз»: человек
+    /// вписывает его в GoLabel руками. Здесь приходит маской, настоящее значение отдаёт
+    /// отдельный вызов.
+    /// </summary>
+    public string PrintPassword { get; set; } = "";
+
+    public bool HasPrintPassword { get; set; }
+
     /// <summary>Когда данные меняли последний раз — чтобы видеть, не устарел ли пароль.</summary>
     public DateTime? UpdatedAt { get; set; }
 }
