@@ -101,6 +101,10 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             await _clients.UpdateAsync(client);
         }
 
+        // Доступ к базе печати заводим сразу, как и при сверке с Keycloak: логин - почта,
+        // а если её нет, имя папки с приставкой lbl_. Нажимать ничего не нужно.
+        await EnsurePrintLoginQuietlyAsync(client);
+
         return key;
     }
 
@@ -137,6 +141,32 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
         await _clients.DeleteAsync(id);
 
+    }
+
+    /// <summary>
+    /// Создаёт пользователя MySQL с паролем по умолчанию и запоминает его. Недоступная база
+    /// не должна ронять создание учётки: человек уже заведён, доступ доберётся при сверке
+    /// или при сохранении карточки.
+    /// </summary>
+    private async Task EnsurePrintLoginQuietlyAsync(LabelClient client)
+    {
+        if (!string.IsNullOrWhiteSpace(client.PrintLogin))
+        {
+            return;
+        }
+
+        try
+        {
+            var login = await _printLogins.EnsureAsync(
+                client.Slug, client.Email, PrintLoginDefaults.Password);
+
+            await _clients.SetPrintCredentialsAsync(
+                client.Id, login, PrintLoginDefaults.Password);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Логин печати для {Name} не создан", client.Name);
+        }
     }
 
     public async Task<string?> RevealPrintPasswordAsync(int id)
