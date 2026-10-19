@@ -37,6 +37,12 @@ public class MySqlPrintLoginService : IPrintLoginService, ITransientDependency
     /// </summary>
     private const string ProbeViewName = "administrable_role_authorizations";
 
+    /// <summary>
+    /// Процедура, которая закрывает прежние сессии человека в момент его нового
+    /// подключения. Вызывается сервером из <c>init_connect</c>, то есть по событию входа.
+    /// </summary>
+    private const string KillProcedureName = "kill_old_sessions";
+
     private readonly IConfiguration _configuration;
     private readonly ILogger<MySqlPrintLoginService> _log;
 
@@ -83,6 +89,10 @@ public class MySqlPrintLoginService : IPrintLoginService, ITransientDependency
 
         // И на заглушку - см. пояснение к EnsureViewAsync.
         await ExecuteAsync(db, $"GRANT SELECT ON {Database()}.{ProbeViewName} TO '{login}'@'%'");
+
+        // Право вызвать уборку своих прежних сессий: её запускает сам сервер при входе.
+        await ExecuteAsync(db,
+            $"GRANT EXECUTE ON PROCEDURE {Database()}.{KillProcedureName} TO '{login}'@'%'");
 
         _log.LogInformation("Логин печати {Login} готов", login);
 
@@ -156,6 +166,72 @@ CREATE OR REPLACE SQL SECURITY DEFINER VIEW {ProbeViewName} AS
 SELECT NULL AS GRANTEE, NULL AS GRANTEE_HOST, NULL AS ROLE_NAME,
        NULL AS ROLE_HOST, NULL AS IS_GRANTABLE, NULL AS IS_DEFAULT, NULL AS IS_MANDATORY
 FROM DUAL WHERE FALSE");
+
+        await EnsureKillProcedureAsync(db);
+    }
+
+    /// <summary>
+    /// Процедура, закрывающая прежние сессии человека при его новом подключении.
+    ///
+    /// GoLabel II на каждое обновление открывает новое соединение и прежнее бросает.
+    /// Ограничить его <c>MAX_USER_CONNECTIONS</c> нельзя — сервер тогда откажет НОВОМУ
+    /// соединению, то есть сломает само обновление. Поэтому прежние закрываются в момент
+    /// появления нового: сервер вызывает эту процедуру из <c>init_connect</c>.
+    ///
+    /// Права берутся от создателя (<c>SQL SECURITY DEFINER</c>), поэтому печатающему
+    /// достаточно права на вызов — видеть и закрывать чужие сессии ему не нужно.
+    ///
+    /// Обработчик ошибок обязателен: если вызванная из <c>init_connect</c> процедура
+    /// падает, MySQL разрывает подключение, и человек просто не войдёт. С обработчиком
+    /// любая неудача уборки молча игнорируется.
+    ///
+    /// Саму настройку <c>init_connect</c> хаб не трогает: для неё нужно право менять
+    /// глобальные переменные, а выдавать его приложению ради одной строки неразумно.
+    /// Делается один раз при установке, см. HANDOFF.
+    /// </summary>
+    private async Task EnsureKillProcedureAsync(MySqlConnection db)
+    {
+        await ExecuteAsync(db, $"DROP PROCEDURE IF EXISTS {Database()}.{KillProcedureName}");
+
+        await ExecuteAsync(db, $@"
+CREATE PROCEDURE {Database()}.{KillProcedureName}()
+SQL SECURITY DEFINER
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE pid BIGINT;
+    DECLARE me VARCHAR(288);
+
+    DECLARE old_sessions CURSOR FOR
+        SELECT ID
+        FROM information_schema.PROCESSLIST
+        WHERE USER = me
+          AND ID <> CONNECTION_ID()
+          AND COMMAND = 'Sleep';
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+    DECLARE CONTINUE HANDLER FOR SQLEXCEPTION BEGIN END;
+
+    SET me = LEFT(SESSION_USER(),
+                  LENGTH(SESSION_USER())
+                  - LENGTH(SUBSTRING_INDEX(SESSION_USER(), '@', -1)) - 1);
+
+    OPEN old_sessions;
+
+    read_loop: LOOP
+        FETCH old_sessions INTO pid;
+
+        IF done = 1 THEN
+            LEAVE read_loop;
+        END IF;
+
+        SET @kill_sql = CONCAT('KILL CONNECTION ', pid);
+        PREPARE kill_stmt FROM @kill_sql;
+        EXECUTE kill_stmt;
+        DEALLOCATE PREPARE kill_stmt;
+    END LOOP;
+
+    CLOSE old_sessions;
+END");
     }
 
     public async Task<bool> ExistsAsync(string? login)
