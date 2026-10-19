@@ -31,6 +31,12 @@ public class MySqlPrintLoginService : IPrintLoginService, ITransientDependency
     private const int MaxLoginLength = 32;
     private const string ViewName = "my_labels";
 
+    /// <summary>
+    /// Пустая заглушка под запрос, который GoLabel II шлёт при обновлении данных.
+    /// Имя не наше: так называется первое представление information_schema.
+    /// </summary>
+    private const string ProbeViewName = "administrable_role_authorizations";
+
     private readonly IConfiguration _configuration;
     private readonly ILogger<MySqlPrintLoginService> _log;
 
@@ -74,6 +80,9 @@ public class MySqlPrintLoginService : IPrintLoginService, ITransientDependency
 
         // Права только на представление: таблица с чужими строками человеку недоступна.
         await ExecuteAsync(db, $"GRANT SELECT ON {Database()}.{ViewName} TO '{login}'@'%'");
+
+        // И на заглушку - см. пояснение к EnsureViewAsync.
+        await ExecuteAsync(db, $"GRANT SELECT ON {Database()}.{ProbeViewName} TO '{login}'@'%'");
 
         _log.LogInformation("Логин печати {Login} готов", login);
 
@@ -130,6 +139,23 @@ WHERE c.PrintLogin = LEFT(
   AND c.IsEnabled = 1";
 
         await ExecuteAsync(db, sql);
+
+        // GoLabel II при обновлении читает список таблиц и пробует прочитать одно из
+        // системных имён БЕЗ указания схемы - проверено по журналу запросов MySQL:
+        //
+        //   SELECT ... FROM INFORMATION_SCHEMA.TABLES
+        //   SELECT * from administrable_role_authorizations      <- без имени базы
+        //
+        // MySQL ищет это имя в нашей базе, не находит и отвечает "SELECT command denied"
+        // (так он отвечает и когда объекта нет - чтобы не раскрывать содержимое базы).
+        // Оператор видит окно с ошибкой на каждое обновление. Спрятать information_schema
+        // нельзя - она видна всем по устройству СУБД, поэтому подставляем пустышку с тем
+        // же именем: запрос проходит молча и возвращает ноль строк.
+        await ExecuteAsync(db, $@"
+CREATE OR REPLACE SQL SECURITY DEFINER VIEW {ProbeViewName} AS
+SELECT NULL AS GRANTEE, NULL AS GRANTEE_HOST, NULL AS ROLE_NAME,
+       NULL AS ROLE_HOST, NULL AS IS_GRANTABLE, NULL AS IS_DEFAULT, NULL AS IS_MANDATORY
+FROM DUAL WHERE FALSE");
     }
 
     public async Task<bool> ExistsAsync(string? login)

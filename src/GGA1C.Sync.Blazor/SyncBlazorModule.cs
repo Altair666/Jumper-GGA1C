@@ -340,5 +340,10 @@ public class SyncBlazorModule : AbpModule
         // адреса, поэтому регистрируем его безусловно - настройка правится в интерфейсе.
         await context.AddBackgroundWorkerAsync<GGA1C.Sync.Sync.AutoSyncWorker>();
         await context.AddBackgroundWorkerAsync<GGA1C.Sync.Keycloak.KeycloakSyncWorker>();
+
+        // GoLabel II на каждое обновление открывает новое подключение и прежнее не
+        // закрывает - прибираем за ним, иначе на несколько рабочих мест упрёмся в
+        // max_connections.
+        await context.AddBackgroundWorkerAsync<GGA1C.Sync.Labels.PrintConnectionWorker>();
     }
 }
