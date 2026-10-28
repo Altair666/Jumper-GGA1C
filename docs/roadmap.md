@@ -29,7 +29,14 @@
 в `my.ini`, перезапуск MySQL и правка `MySqlPrintLoginService` (в MySQL 9 плагина уже нет).
 
 ### П1. Баг: окно входа Keycloak при синхронизации из виджета
-**Статус:** не начато · **Зависит от:** П0
+**Статус:** в работе (разбор 2026-10-28, ждёт согласия на правку реалма и правки виджета) · **Зависит от:** П0
+**Выяснилось** (`docs/printing/p1-keycloak-popup.md`): тихий вход отказывает, потому что
+сессии Keycloak к моменту синхронизации уже нет — SSO Session Idle реалма 30 мин, а сессия
+Grist живёт 90 дней и Keycloak не продлевает; виджет продлевает `refresh_token` (тоже 30 мин)
+только по нажатию; `KEYCLOAK_IDENTITY` сессионная, после перезапуска браузера её нет. Куки
+во фрейм доходят (`SameSite=None; Secure`, все три адреса — один сайт). Предложено: поднять
+SSO Idle/Max реалма, фоновое продление и разбор `error=login_required` в виджете (промпт —
+в разборе); хаб не трогаем.
 **Читать:** `docs/printing/decisions.md` (раздел «Баг»), `docs/platform/accounts.md`,
 `docs/platform/stand.md` (Keycloak), код виджета `C:\widget_report_grist\index.html` (только
 чтение, ~2600–2680), `Domain/Keycloak/KeycloakTokenVerifier.cs`.
