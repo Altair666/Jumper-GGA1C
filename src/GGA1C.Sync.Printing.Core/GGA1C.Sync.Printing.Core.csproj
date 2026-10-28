@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\common.props" />
+
+  <!-- Ядро печати без привязки к принтеру и без System.Drawing: значения для задания и
+       договор «шаблон -> байты принтера». Реализация для GoLabel/EZPL — Printing.GoLabel. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>GGA1C.Sync.Printing</RootNamespace>
+  </PropertyGroup>
+
+</Project>

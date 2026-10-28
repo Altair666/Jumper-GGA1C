@@ -19,6 +19,8 @@
     
     
     <Project Path="src/GGA1C.Sync.HttpApi/GGA1C.Sync.HttpApi.csproj" />
+    <Project Path="src/GGA1C.Sync.Printing.Core/GGA1C.Sync.Printing.Core.csproj" />
+    <Project Path="src/GGA1C.Sync.Printing.GoLabel/GGA1C.Sync.Printing.GoLabel.csproj" />
     
     
     
