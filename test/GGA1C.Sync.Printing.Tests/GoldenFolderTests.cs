@@ -1,3 +1,4 @@
+using System.Xml;
 using System.Xml.Linq;
 using Shouldly;
 using Xunit;
@@ -80,7 +81,12 @@ public class GoldenFolderTests
     [MemberData(nameof(GoldenNames))]
     public void Golden_template_has_no_database_credentials(string name)
     {
-        var doc = XDocument.Load(Path.Combine(Golden.Root, name, "template.ezpx"));
+        // Настоящие шаблоны GoLabel содержат ссылку на символ 0 (`<Description>&#x0;…`), а она
+        // недопустима в XML 1.0 — без CheckCharacters = false чтение падает.
+        using var reader = XmlReader.Create(
+            Path.Combine(Golden.Root, name, "template.ezpx"),
+            new XmlReaderSettings { CheckCharacters = false });
+        var doc = XDocument.Load(reader);
         foreach (var field in new[] { "UserID", "Password" })
         {
             foreach (var element in doc.Descendants(field))
