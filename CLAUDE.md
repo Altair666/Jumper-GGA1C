@@ -72,6 +72,11 @@ cd src\GGA1C.Sync.Blazor && dotnet run --no-launch-profile -c Release --urls "ht
   или документы. Два агента в одном участке кода дают баги, даже при «несвязанных» задачах.
 - **Сделал коммит — сразу пуш `main`**, не спрашивая (`GIT_TERMINAL_PROMPT=0 git push origin
   main`, чтобы без учётных данных падал, а не висел). Перед пушем — сборка и тесты.
+- **Живая схема проекта** — https://claude.ai/artifact/Dm1hmtUDMhaavNtNwR4wTy (блоки `nodes`,
+  связи `edges`, пожелания `inbox`; читать и писать инструментом `ArtifactData`). Изменил
+  промпт (`CLAUDE.md`, `docs/summary.md`, `docs/roadmap.md`) или структуру — новый блок, связь,
+  смена статуса задачи — **в той же сессии обнови схему**. В начале сессии прочитай `inbox`:
+  непрочитанные пожелания перенеси в промпт или задачи и пометь `done: true` с ответом.
 
 ## Грабли кода (каждая уже стоила времени)
 
@@ -110,3 +115,4 @@ cd src\GGA1C.Sync.Blazor && dotnet run --no-launch-profile -c Release --urls "ht
 | Печать: текущий поток Grist → MySQL → GoLabel | `docs/printing/golabel-mysql.md` |
 | SolidWorks / PDM | `docs/solidworks/README.md` |
 | Altium ↔ 1С, реверс API Altium, тупики | `docs/altium-1c/README.md` |
+| Схема блоков и связей (живая, правится пользователем) | артефакт по ссылке выше |
