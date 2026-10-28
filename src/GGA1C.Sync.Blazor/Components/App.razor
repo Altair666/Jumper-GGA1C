@@ -4,6 +4,7 @@
 @using Volo.Abp.AspNetCore.Components.Server.MudBlazorBasicTheme.Bundling
 @using Volo.Abp.AspNetCore.Components.Web.Theming.MudBlazor.Bundling
 @inject IHostEnvironment Env
+@inject Volo.Abp.Ui.Branding.IBrandingProvider BrandingProvider
 @{
     var rtl = CultureHelper.IsRtl ? "rtl" : string.Empty;
 }
@@ -14,7 +15,9 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GGA1C.Sync.Blazor</title>
+    @* Вкладка браузера - имя сервера (настройка Sync.Ui.ServerName); страницы с PageHeader
+       дописывают своё «Заголовок | имя». *@
+    <title>@BrandingProvider.AppName</title>
     <base href="/" />
 
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />

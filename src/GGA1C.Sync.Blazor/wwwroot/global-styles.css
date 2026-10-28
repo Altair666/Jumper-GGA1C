@@ -6,3 +6,24 @@ body {
     --lpx-logo: url('/images/logo/leptonx/logo-light.png');
     --lpx-logo-icon: url('/images/logo/leptonx/logo-light-thumbnail.png');
 }
+/* Бренд на страницах входа (Themes/LeptonXLite/Layouts/Account.cshtml): значок слева, имя
+   справа, вся пара по центру колонки. Штатно LeptonX ставит имя под значок. */
+.sync-login-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .75rem;
+}
+
+.sync-login-brand .lpx-brand-logo.lpx-login-logo {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.sync-login-brand .lpx-brand-name.lpx-login-name {
+    flex: 0 1 auto;
+    width: auto;
+    margin: 0;
+    padding: 0 !important;
+    text-align: left;
+}

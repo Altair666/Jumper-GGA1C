@@ -1,14 +1,20 @@
 @page
-@* Копия штатной Login.cshtml из Volo.Abp.Account.Web 10.7.0 с одним отличием: внешний вход
-   (кнопка «Keycloak») стоит первым — крупная, во всю ширину, в стиле основной кнопки «Войти»,
-   а внизу её больше нет. Локальный вход по паролю (аварийный admin) остался под ней.
-   Модель — штатная LoginModel; ABP разрешает её через DI, и приходит наш SyncLoginModel.
+@* Копия штатной Login.cshtml из Volo.Abp.Account.Web 10.7.0. Отличия:
+   - одна карточка вместо двух: верхнюю карточку раскладки (смена языка, сообщения) страница
+     забирает к себе - ViewData["Sync.HeaderInCard"], см. Themes/LeptonXLite/Layouts/Account.cshtml;
+     смена языка стоит там же, где была в верхней карточке, - справа вверху;
+   - внешний вход (кнопка «Keycloak») - первой строкой, на месте бывшего выбора арендатора,
+     с теми же классами, что у кнопки «Войти» (btn btn-primary btn-lg), внизу её больше нет;
+   - локальный вход по паролю (аварийный admin) - под разделителем.
+   Модель - штатная LoginModel; ABP разрешает её через DI, и приходит наш SyncLoginModel.
    При обновлении ABP сверить с оригиналом:
    modules/account/src/Volo.Abp.Account.Web/Pages/Account/Login.cshtml *@
 @using Microsoft.AspNetCore.Mvc.Localization
 @using Volo.Abp.Account.Localization
 @using Volo.Abp.Account.Settings
 @using Volo.Abp.Account.Web.Pages.Account;
+@using Volo.Abp.AspNetCore.Mvc.UI.Alerts
+@using Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite.Themes.LeptonXLite.Components.PageAlerts
 @using Volo.Abp.AspNetCore.Mvc.UI.Theming;
 @using Volo.Abp.Identity;
 @using Volo.Abp.Settings
@@ -16,9 +22,11 @@
 @inject IHtmlLocalizer<AccountResource> L
 @inject IThemeManager ThemeManager
 @inject Volo.Abp.Settings.ISettingProvider SettingProvider
+@inject IAlertManager AlertManager
 
 @{
     Layout = ThemeManager.CurrentTheme.GetAccountLayout();
+    ViewData["Sync.HeaderInCard"] = true;
 }
 
 @section scripts
@@ -37,14 +45,25 @@
 }
 
 <div class="card mt-3 shadow-sm rounded">
-    <div class="card-body p-5">
+    @* Отступы карточки - как у бывшей верхней (card-body), чтобы смена языка стояла на
+       прежнем месте; остальное содержимое добирает до прежних p-5 своим px-4 pb-4. *@
+    <div class="card-body">
+        <div class="d-flex justify-content-end">
+            <partial name="/Themes/LeptonXLite/Layouts/_LanguageSwitch.cshtml" />
+        </div>
+    <div class="px-4 pb-4 pt-3">
+        @if (AlertManager.Alerts.Any())
+        {
+            @await Component.InvokeAsync(typeof(PageAlertsViewComponent))
+        }
+
         @if (Model.VisibleExternalProviders.Any())
         {
             <form asp-page="./Login" asp-page-handler="ExternalLogin" asp-route-returnUrl="@Model.ReturnUrl" asp-route-returnUrlHash="@Model.ReturnUrlHash" method="post"
                   class="d-grid gap-2" id="ExternalLoginForm">
                 @foreach (var provider in Model.VisibleExternalProviders)
                 {
-                    <button type="submit" class="btn btn-primary btn-lg py-3" name="provider" value="@provider.AuthenticationScheme" title="@L["LogInUsingYourProviderAccount", provider.DisplayName]">@provider.DisplayName</button>
+                    <button type="submit" class="btn btn-primary btn-lg" name="provider" value="@provider.AuthenticationScheme" title="@L["LogInUsingYourProviderAccount", provider.DisplayName]">@provider.DisplayName</button>
                 }
             </form>
 
@@ -108,5 +127,6 @@
             </div>
         }
 
+    </div>
     </div>
 </div>

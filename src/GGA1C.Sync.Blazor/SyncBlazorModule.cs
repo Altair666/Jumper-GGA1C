@@ -39,7 +39,9 @@ using System.Threading.Tasks;
 using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Modularity;
 using Volo.Abp.Security.Claims;
+using Volo.Abp.SettingManagement.Blazor.MudBlazor;
 using Volo.Abp.SettingManagement.Blazor.MudBlazor.Server;
+using GGA1C.Sync.Blazor.Settings;
 using Volo.Abp.Swashbuckle;
 using Volo.Abp.TenantManagement.Blazor.MudBlazor.Server;
 using Volo.Abp.OpenIddict;
@@ -221,6 +223,12 @@ public class SyncBlazorModule : AbpModule
         Configure<AbpNavigationOptions>(options =>
         {
             options.MenuContributors.Add(new SyncMenuContributor());
+        });
+
+        // «Администрирование → Настройки → Хаб»: имя сервера (Sync.Ui.ServerName).
+        Configure<SettingManagementComponentOptions>(options =>
+        {
+            options.Contributors.Add(new HubSettingComponentContributor());
         });
     }
 

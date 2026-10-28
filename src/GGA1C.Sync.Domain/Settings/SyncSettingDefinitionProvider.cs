@@ -39,6 +39,8 @@ public class SyncSettingDefinitionProvider : SettingDefinitionProvider
 
             new SettingDefinition(SyncSettings.Setup.FirstAdminCreatedAt, isVisibleToClients: false),
 
+            new SettingDefinition(SyncSettings.Ui.ServerName, SyncSettings.Ui.DefaultServerName, isVisibleToClients: false),
+
             new SettingDefinition(SyncSettings.AutoSyncEnabled, "false", isVisibleToClients: false),
             new SettingDefinition(SyncSettings.IntervalMinutes, "60", isVisibleToClients: false),
             new SettingDefinition(SyncSettings.DefaultSyncAction, "Skip", isVisibleToClients: false)

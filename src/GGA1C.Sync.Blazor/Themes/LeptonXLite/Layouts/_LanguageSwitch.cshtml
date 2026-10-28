@@ -1,0 +1,37 @@
+@* Выпадающий список языков из штатной раскладки входа LeptonX Lite (разметка один в один).
+   Нужен в двух местах: в верхней карточке раскладки Account.cshtml и в карточке Login.cshtml,
+   которая забирает его к себе. Один язык - ничего не выводит. *@
+@using System.Net
+@using Microsoft.AspNetCore.Http.Extensions
+@using Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite.Languages
+@inject ThemeLanguageInfoProvider ThemeLanguageInfoProvider
+@{
+    var languageInfo = await ThemeLanguageInfoProvider.GetLanguageSwitchViewComponentModelAsync();
+    var returnUrl = WebUtility.UrlEncode(Context.Request.GetEncodedPathAndQuery());
+}
+@if (languageInfo.Languages.Count > 1)
+{
+    <div class="dropdown btn-group ms-auto" aria-labelledby="languageDropdown">
+
+        <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-translate me-1"></i> @languageInfo.CurrentLanguage.DisplayName
+        </button>
+
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton1" style="">
+            @{
+                var seen = new HashSet<string>();
+                var options = languageInfo.Languages
+                    .Select(language => seen.Add(language.TwoLetterISOLanguageName)
+                        ? (Language: language, Code: language.TwoLetterISOLanguageName.ToUpper())
+                        : (Language: language, Code: language.CultureName.ToUpper()))
+                    .ToList();
+            }
+            @foreach (var option in options)
+            {
+                <li>
+                    <a href="@Url.Content($"~/Abp/Languages/Switch?culture={option.Language.CultureName}&uiCulture={option.Language.UiCultureName}&returnUrl={returnUrl}")" class="dropdown-item" data-lpx-language-option="@option.Code">@option.Language.DisplayName / @option.Code</a>
+                </li>
+            }
+        </ul>
+    </div>
+}

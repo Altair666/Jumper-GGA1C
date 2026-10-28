@@ -76,6 +76,21 @@ public static class SyncSettings
         public const string LoginClientSecret = KeycloakPrefix + ".LoginClientSecret";
     }
 
+    public static class Ui
+    {
+        /// <summary>
+        /// Имя сервера в заголовках: шапка главного меню, страница входа, вкладка браузера.
+        /// Меняет администратор (право Sync.Admin) в «Администрирование → Настройки → Хаб».
+        /// Пусто или равно значению по умолчанию — строки в базе нет.
+        /// </summary>
+        public const string ServerName = Prefix + ".Ui.ServerName";
+
+        /// <summary>Прежняя надпись бренда (AppName из локализации).</summary>
+        public const string DefaultServerName = "Sync";
+
+        public const int MaxServerNameLength = 64;
+    }
+
     public static class Setup
     {
         /// <summary>

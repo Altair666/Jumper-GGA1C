@@ -1,0 +1,55 @@
+@* Вкладка «Хаб» на странице «Администрирование → Настройки» (/setting-management).
+   Видна только с правом Sync.Admin - см. HubSettingComponentContributor. *@
+@using GGA1C.Sync.Settings
+@using GGA1C.Sync.Ui
+@inherits SyncComponentBase
+@inject IUiSettingsAppService UiSettings
+
+<MudStack Spacing="3" Style="max-width: 520px;">
+    <MudTextField @bind-Value="ServerName" T="string" Label="Имя сервера"
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  MaxLength="@SyncSettings.Ui.MaxServerNameLength"
+                  HelperText="@($"Надпись в шапке меню, на странице входа и во вкладке браузера. Пусто — «{SyncSettings.Ui.DefaultServerName}». Видно после перезагрузки страницы.")" />
+    <div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="Busy" OnClick="SaveAsync">
+            Сохранить
+        </MudButton>
+    </div>
+</MudStack>
+
+@code {
+    private string? ServerName { get; set; }
+
+    private bool Busy { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            ServerName = await UiSettings.GetServerNameAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        Busy = true;
+        try
+        {
+            await UiSettings.SetServerNameAsync(ServerName);
+            ServerName = await UiSettings.GetServerNameAsync();
+            await Notify.Success("Имя сервера сохранено. Перезагрузите страницу, чтобы увидеть его в шапке.");
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+}
