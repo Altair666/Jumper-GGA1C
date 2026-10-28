@@ -44,4 +44,14 @@ public interface IPrintLoginService
 
     /// <summary>Есть ли такой логин в базе. Нужно интерфейсу: показать, выдан он или нет.</summary>
     Task<bool> ExistsAsync(string? login);
+
+    /// <summary>
+    /// Один раз войти этим логином по TLS, чтобы MySQL положил его пароль в кэш.
+    ///
+    /// GoLabel II ходит в базу с <c>SslMode=none</c> и не берёт RSA-ключ сервера, а без этого
+    /// <c>caching_sha2_password</c> пускает только по кэшу. Кэш пустеет при перезапуске MySQL
+    /// и при <c>ALTER USER</c> — после этого GoLabel получает «authentication method
+    /// caching_sha2_password failed», пока кто-нибудь не войдёт этим логином по TLS.
+    /// </summary>
+    Task WarmUpAsync(string login, string password);
 }

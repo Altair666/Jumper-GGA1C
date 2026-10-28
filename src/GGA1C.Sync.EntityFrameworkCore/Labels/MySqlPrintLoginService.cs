@@ -94,9 +94,35 @@ public class MySqlPrintLoginService : IPrintLoginService, ITransientDependency
         await ExecuteAsync(db,
             $"GRANT EXECUTE ON PROCEDURE {Database()}.{KillProcedureName} TO '{login}'@'%'");
 
+        // ALTER USER выше сбросил этому логину кэш пароля - без входа по TLS GoLabel его
+        // не пустит. Учётку это не ломает, поэтому неудача - только предупреждение.
+        try
+        {
+            await WarmUpAsync(login, password);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Не удалось положить в кэш пароль логина печати {Login}", login);
+        }
+
         _log.LogInformation("Логин печати {Login} готов", login);
 
         return login;
+    }
+
+    public async Task WarmUpAsync(string login, string password)
+    {
+        // Pooling=false: соединение должно закрыться сразу, а не остаться спящим в пуле.
+        var builder = new MySqlConnectionStringBuilder(ConnectionString())
+        {
+            UserID = Normalize(login),
+            Password = password,
+            SslMode = MySqlSslMode.Required,
+            Pooling = false
+        };
+
+        await using var connection = new MySqlConnection(builder.ConnectionString);
+        await connection.OpenAsync();
     }
 
     public async Task DropAsync(string? login)

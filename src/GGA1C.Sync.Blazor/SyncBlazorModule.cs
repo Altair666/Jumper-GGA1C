@@ -369,5 +369,25 @@ public class SyncBlazorModule : AbpModule
         // закрывает - прибираем за ним, иначе на несколько рабочих мест упрёмся в
         // max_connections.
         await context.AddBackgroundWorkerAsync<GGA1C.Sync.Labels.PrintConnectionWorker>();
+
+        // После перезапуска MySQL GoLabel не входит, пока пароль его логина не в кэше
+        // сервера (см. PrintLoginCacheWarmer). Заполняем в фоне: недоступный MySQL не должен
+        // задерживать запуск хаба.
+        var services = context.ServiceProvider;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = services.CreateScope();
+                await scope.ServiceProvider
+                    .GetRequiredService<GGA1C.Sync.Labels.PrintLoginCacheWarmer>()
+                    .WarmAllAsync();
+            }
+            catch (Exception ex)
+            {
+                services.GetRequiredService<ILogger<SyncBlazorModule>>()
+                    .LogWarning(ex, "Не удалось положить в кэш MySQL пароли логинов печати");
+            }
+        });
     }
 }
