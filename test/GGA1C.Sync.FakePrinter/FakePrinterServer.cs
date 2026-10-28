@@ -79,14 +79,23 @@ public sealed class FakePrinterServer : IDisposable
 
         await using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
         {
-            int read;
-            while ((read = await stream.ReadAsync(buffer, cancellationToken)) > 0)
+            try
             {
-                await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-                if (_reply)
+                int read;
+                while ((read = await stream.ReadAsync(buffer, cancellationToken)) > 0)
                 {
-                    await ReplyAsync(stream, buffer.AsSpan(0, read).ToArray(), cancellationToken);
+                    await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    if (_reply)
+                    {
+                        await ReplyAsync(stream, buffer.AsSpan(0, read).ToArray(), cancellationToken);
+                    }
                 }
+            }
+            catch (IOException)
+            {
+                // GoLabel рвёт соединение, когда не дождался ответа на опрос принтера
+                // (^XGET, ~S,OFFSETX и т.п.). Принятое сохраняем, слушать продолжаем —
+                // иначе один обрыв останавливал весь фейк-принтер.
             }
         }
 
