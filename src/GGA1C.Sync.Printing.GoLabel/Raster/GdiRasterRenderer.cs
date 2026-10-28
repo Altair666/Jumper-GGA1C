@@ -23,6 +23,9 @@ public sealed class GdiRasterRenderer : IRasterRenderer
             case "Image":
                 RenderImage((EzpxRasterShape)request.Shape, request.OffsetX, request.OffsetY, output);
                 break;
+            case "BarCode":
+                RenderBarCode((EzpxBarCode)request.Shape, request.OffsetX, request.OffsetY, request.Job, output);
+                break;
             case "Ellipse":
                 RenderEllipse((EzpxRasterShape)request.Shape, request.OffsetX, request.OffsetY, output);
                 break;
@@ -103,6 +106,18 @@ public sealed class GdiRasterRenderer : IRasterRenderer
             }
         }
         Raster1Bit.WriteQ(output, (int)(x + shape.X), (int)(y + shape.Y), canvas);
+    }
+
+    /// <summary>BarCode.PrintBmpBarcode: пустые данные — ничего не печатается.</summary>
+    private static void RenderBarCode(EzpxBarCode b, float x, float y, EzplJob job, EzplWriter output)
+    {
+        string data = job.FillPrintingData(b, bformat: false);
+        if (data == " ")
+        {
+            return;
+        }
+        using var bitmap = Code39Raster.Render(b, data);
+        Raster1Bit.WriteQ(output, b.XInPixel + (int)x, b.YInPixel + (int)y, bitmap);
     }
 
     private static bool Bool(XElement? e) => e != null && XmlConvert.ToBoolean(e.Value);

@@ -21,6 +21,8 @@ public class GoLabelPortTests
         // бикубикой в 64-битном gdiplus.dll даёт 1–4 точки мимо, в 32-битном (как у GoLabel) — 0
         // (docs/printing/p5-plan.md, «Шаг 3»).
         "gkv3-vm-product",
+        // шаг 4: Code39 растром
+        "gkv1-vm-box", "gkv3-vm-box",
     ];
 
     /// <summary>Печать из базы — шаг 6: без снимка данных команды наклеек не сверить.</summary>

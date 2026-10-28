@@ -315,6 +315,14 @@ public static class EzpxReader
         b.CheckDigitType = Enum(e.Element("CheckDigitType"), CheckDigitType.MOD_43);
         b.CustomizeGuardBar = Bool(e.Element("CustomizeGuardBar"), false);
         b.GuardBarHeight = Float(e.Element("GuardBarHeight"), 0f);
+        b.Offset = Float(e.Attribute("Offset"), 1f);
+        if ((string?)e.Attribute("FontCmd") is { } fontCmd)
+        {
+            string[] parts = fontCmd.TrimEnd('\r', '\n').Split(',');
+            string style = parts.Length > 2 ? parts[2] : "";
+            int flags = (style.Contains('B') ? 1 : 0) | (style.Contains('I') ? 2 : 0) | (style.Contains('U') ? 4 : 0) | (style.Contains('S') ? 8 : 0);
+            b.CaptionFont = (parts[0], XmlConvert.ToSingle(parts[1].Trim()), (System.Drawing.FontStyle)flags);
+        }
         return b;
     }
 

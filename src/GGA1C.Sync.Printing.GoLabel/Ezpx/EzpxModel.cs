@@ -342,6 +342,12 @@ public sealed class EzpxBarCode : EzpxGraphic
     public bool CustomizeGuardBar { get; set; }
     public float GuardBarHeight { get; set; }
 
+    /// <summary>Отступ подписи от полос, точки (атрибут Offset).</summary>
+    public float Offset { get; set; } = 1f;
+
+    /// <summary>Шрифт подписи Windows из FontCmd: семейство, размер в пунктах, стиль (B=1, I=2, U=4, S=8).</summary>
+    public (string Family, float Size, System.Drawing.FontStyle Style) CaptionFont { get; set; } = ("Microsoft Sans Serif", 17f, System.Drawing.FontStyle.Regular);
+
     // BarCode._HeightInPixel и др.: единицы объекта — точки (GraphicShape.UnitType = Dot).
     public int HeightInPixel => (int)Math.Round(Height, 0);
     public int WidthInPixel => (int)Math.Round(Width, 0);
