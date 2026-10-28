@@ -29,7 +29,6 @@
     <Project Path="test/GGA1C.Sync.EntityFrameworkCore.Tests/GGA1C.Sync.EntityFrameworkCore.Tests.csproj" />
     <Project Path="test/GGA1C.Sync.HttpApi.Client.ConsoleTestApp/GGA1C.Sync.HttpApi.Client.ConsoleTestApp.csproj" />
     
-    <Project Path="test/GGA1C.Sync.FakePrinter/GGA1C.Sync.FakePrinter.csproj" />
     <Project Path="test/GGA1C.Sync.Printing.Tests/GGA1C.Sync.Printing.Tests.csproj" />
     <Project Path="test/GGA1C.Sync.TestBase/GGA1C.Sync.TestBase.csproj" />
     

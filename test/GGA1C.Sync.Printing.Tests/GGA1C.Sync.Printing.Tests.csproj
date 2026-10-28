@@ -17,10 +17,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\GGA1C.Sync.FakePrinter\GGA1C.Sync.FakePrinter.csproj" />
-  </ItemGroup>
-
   <!-- Эталоны «.ezpx -> байты GoLabel» в репозиторий не кладём: они лежат на стенде,
        путь — переменная GGA1C_GOLDEN_DIR (по умолчанию C:\GGA1C\golden), см. README.md. -->
 

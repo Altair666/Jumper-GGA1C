@@ -1,7 +1,5 @@
 # Тесты печати и эталоны GoLabel
 
-- `FakePrinterServerTests` — фейк-принтер (`test/GGA1C.Sync.FakePrinter`) пишет пришедшие байты
-  один в один. Байты генерирует сам, от эталонов не зависит.
 - `GoldenFolderTests` — раскладка эталонов «`.ezpx` → байты, которые GoLabel отправил в
   принтер». Основа побайтовых тестов порта ядра GoLabel (П5) и проверки транспорта (П4).
 
@@ -38,11 +36,11 @@
 
 ## Как добавить эталон
 
-1. Собрать фейк-принтер: `dotnet build test\GGA1C.Sync.FakePrinter -c Release`.
+1. Собрать фейк-принтер: `dotnet build C:\gg1ac\.local-tools\fake-printer\src -c Release -o C:\GGA1C\fake-printer` (утилита вне git).
 2. Снять сценарием стенда (вне git) `C:\gg1ac\.local-tools\golden\capture.ps1`:
    ```
    .\capture.ps1 -Template <путь>.ezpx -Name <имя> `
-                 -FakePrinterDll <репо>\test\GGA1C.Sync.FakePrinter\bin\Release\net10.0\GGA1C.Sync.FakePrinter.dll `
+                 -FakePrinterDll C:\GGA1C\fake-printer\GGA1C.Sync.FakePrinter.dll `
                  [-DataCsv <данные>.csv] -ExtraArgs '-S0','<счётчик>','-V00','<переменная>'
    ```
    Пишет в `C:\GGA1C\golden\<имя>` (другое место — `-GoldenRoot`). Печатает с копии шаблона,
