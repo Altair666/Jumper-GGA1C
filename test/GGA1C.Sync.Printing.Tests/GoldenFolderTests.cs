@@ -17,9 +17,14 @@ public static class Golden
     public static string Root =>
         Environment.GetEnvironmentVariable(EnvironmentVariable) is { Length: > 0 } dir ? dir : DefaultRoot;
 
+    /// <summary>Папка для присланных шаблонов, ещё не снятых в эталоны, — не эталон.</summary>
+    public const string IncomingFolder = "incoming";
+
     public static IReadOnlyList<string> Names =>
         Directory.Exists(Root)
-            ? Directory.GetDirectories(Root).Select(Path.GetFileName).OfType<string>().Order(StringComparer.Ordinal).ToList()
+            ? Directory.GetDirectories(Root).Select(Path.GetFileName).OfType<string>()
+                .Where(name => !string.Equals(name, IncomingFolder, StringComparison.OrdinalIgnoreCase))
+                .Order(StringComparer.Ordinal).ToList()
             : [];
 
     public static string? SkipReason =>
