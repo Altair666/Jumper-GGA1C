@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using GGA1C.Sync.Localization;
 using GGA1C.Sync.MultiTenancy;
 using GGA1C.Sync.Permissions;
+using Volo.Abp.Authorization.Permissions;
 using Volo.Abp.Identity.Blazor.MudBlazor;
 using Volo.Abp.SettingManagement.Blazor.MudBlazor.Menus;
 using Volo.Abp.TenantManagement.Blazor.MudBlazor.Navigation;
@@ -69,6 +70,18 @@ public class SyncMenuContributor : IMenuContributor
                 order: 3,
                 requiredPermissionName: SyncPermissions.Admin
             )
+        );
+
+        // Своя карточка учётных данных - всем вошедшим, без права Sync.Admin.
+        context.Menu.Items.Insert(
+            4,
+            new ApplicationMenuItem(
+                SyncMenus.MyCredentials,
+                "Мои учётные данные",
+                "/my-credentials",
+                icon: "fas fa-user-lock",
+                order: 4
+            ).RequireAuthenticated()
         );
 
         if (MultiTenancyConsts.IsEnabled)

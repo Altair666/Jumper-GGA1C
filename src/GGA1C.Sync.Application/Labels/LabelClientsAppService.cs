@@ -30,6 +30,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     private readonly KeycloakClient _keycloak;
     private readonly KeycloakAccountSync _keycloakSync;
     private readonly HubUserAccess _hubUsers;
+    private readonly AccountCredentialsEditor _credentials;
 
     public LabelClientsAppService(
         ILabelClientStore clients,
@@ -39,9 +40,11 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         ISettingManager settingManager,
         KeycloakClient keycloak,
         KeycloakAccountSync keycloakSync,
-        HubUserAccess hubUsers)
+        HubUserAccess hubUsers,
+        AccountCredentialsEditor credentials)
     {
         _hubUsers = hubUsers;
+        _credentials = credentials;
         _clients = clients;
         _labels = labels;
         _printLogins = printLogins;
@@ -260,57 +263,12 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
 
     public async Task<AccountCredentialsDto> GetCredentialsAsync(int id)
     {
-        var client = await _clients.FindAsync(id)
-            ?? throw new BusinessException("GGA1C.Sync:ClientNotFound")
-                .WithData("message", "Учётная запись не найдена");
-
-        // Расшифровка нужна ровно для длины маски - дальше открытые значения не уходят.
-        var secrets = await _clients.RevealCredentialsAsync(id);
-
-        return new AccountCredentialsDto
-        {
-            Id = client.Id,
-            Name = client.Name,
-            AltiumLogin = client.AltiumLogin ?? "",
-            PdmLogin = client.PdmLogin ?? "",
-
-            // Вместо паролей - маски той же длины: значения наружу не уходят, но длину
-            // видно, и поле можно стереть, чтобы удалить пароль.
-            AltiumPassword = SecretMask.For(secrets.AltiumPassword),
-            PdmPassword = SecretMask.For(secrets.PdmPassword),
-            PrintLogin = client.PrintLogin ?? _printLogins.LoginFor(client.Slug, client.Email),
-            PrintPassword = SecretMask.For(await _clients.RevealPrintPasswordAsync(id)),
-            HasPrintPassword = !string.IsNullOrEmpty(client.PrintPasswordEncrypted),
-            HasAltiumPassword = !string.IsNullOrEmpty(client.AltiumPasswordEncrypted),
-            HasPdmPassword = !string.IsNullOrEmpty(client.PdmPasswordEncrypted),
-            UpdatedAt = client.CredentialsUpdatedAt
-        };
+        return await _credentials.GetAsync(id);
     }
 
     public async Task SaveCredentialsAsync(AccountCredentialsDto input)
     {
-        await _clients.SetCredentialsAsync(
-            input.Id,
-            new AccountCredentials(
-                input.AltiumLogin,
-                input.AltiumPassword,
-                input.PdmLogin,
-                input.PdmPassword));
-
-        // Пароль MySQL меняем только если в поле ввели новое значение: точки означают
-        // «оставить как есть», как и у прочих секретов.
-        if (!SecretMask.IsMask(input.PrintPassword) &&
-            !string.IsNullOrWhiteSpace(input.PrintPassword))
-        {
-            var client = await _clients.FindAsync(input.Id)
-                ?? throw new BusinessException("GGA1C.Sync:ClientNotFound")
-                    .WithData("message", "Учётная запись не найдена");
-
-            var login = await _printLogins.EnsureAsync(
-                client.Slug, client.Email, input.PrintPassword.Trim());
-
-            await _clients.SetPrintCredentialsAsync(input.Id, login, input.PrintPassword.Trim());
-        }
+        await _credentials.SaveAsync(input.Id, input);
     }
 
     /// <summary>Случайный пароль для кнопки «сгенерировать» в карточке.</summary>

@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using GGA1C.Sync.Labels;
 using Volo.Abp.Application.Services;
 
 namespace GGA1C.Sync.Accounts;
@@ -7,6 +8,23 @@ namespace GGA1C.Sync.Accounts;
 public interface IMyAccountAppService : IApplicationService
 {
     Task<MyAccountDto> GetAsync();
+
+    // ── Мои учётные данные во внешних системах ────────────────────────────────
+    // Та же карточка, что у администратора на /labels, но без id: учётка всегда своя —
+    // найденная по sub текущего пользователя (AbpUserLogins, провайдер Keycloak). Id из
+    // запроса не читается, иначе человек мог бы подставить чужой.
+
+    /// <summary>Своя карточка: логины и маски паролей. Нет своей учётки — понятная ошибка.</summary>
+    Task<AccountCredentialsDto> GetCredentialsAsync();
+
+    /// <summary>Сохранить свою карточку. <c>input.Id</c> игнорируется.</summary>
+    Task SaveCredentialsAsync(AccountCredentialsDto input);
+
+    /// <summary>Свой пароль печати (MySQL) в открытом виде — кнопка «глаз».</summary>
+    Task<string?> RevealPrintPasswordAsync();
+
+    /// <summary>Случайный пароль печати; применяется только сохранением карточки.</summary>
+    string GeneratePrintPassword();
 }
 
 public class MyAccountDto

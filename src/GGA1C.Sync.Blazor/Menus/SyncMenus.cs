@@ -8,6 +8,7 @@ public class SyncMenus
 
     public const string Keycloak = Prefix + ".Keycloak";
     public const string Altium1C = Prefix + ".Altium1C";
+    public const string MyCredentials = Prefix + ".MyCredentials";
 
     //Add your menu items here...
 
