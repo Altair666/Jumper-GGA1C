@@ -34,7 +34,9 @@ cd src\GGA1C.Sync.DbMigrator && dotnet run -c Release
 cd src\GGA1C.Sync.Blazor && dotnet run --no-launch-profile -c Release --urls "https://0.0.0.0:5443;http://0.0.0.0:5080"
 ```
 
-Вход в хаб пока локальный: `admin` (сеялка ABP). Стенд — `docs/platform/stand.md`.
+Вход в хаб: сотрудники — кнопкой «Keycloak» (клиент `gga1c-hub`), аварийный — локальный `admin`
+по паролю; на чистой базе первого администратора создаёт `/setup`. Подробности —
+`docs/platform/p7-keycloak-login.md`, стенд — `docs/platform/stand.md`.
 
 ## Правила проекта
 
@@ -73,6 +75,10 @@ cd src\GGA1C.Sync.Blazor && dotnet run --no-launch-profile -c Release --urls "ht
 
 ## Грабли кода (каждая уже стоила времени)
 
+- **Запуск хаба из worktree** (`C:\gg1ac-wt\...`): там нет `openiddict.pfx` и `wwwroot/libs`
+  (оба в `.gitignore`) — без первого хаб не стартует, без второго страница входа отдаёт 500.
+  Скопировать из `C:\gg1ac\src\GGA1C.Sync.Blazor\` до запуска. Второй экземпляр на общей
+  базе — с `Workers__Enabled=false` и по `https://localhost:<порт>` (куки не различают порты).
 - **`--no-launch-profile` обязателен**: без него `dotnet run` берёт адрес из
   `launchSettings.json` (`https://localhost:44397` — по нему и видно, что флаг забыли) и молча
   игнорирует `--urls` и `ASPNETCORE_URLS`.

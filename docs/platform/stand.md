@@ -61,7 +61,9 @@ Issuer — `https://192.168.88.238:8443/realms/test`, настройка хаб�
 
 Клиенты: у `grist` добавлен `https://192.168.88.238:8444/*`, у `gga1c-widget` —
 `https://192.168.88.238:5443/widget_report_grist/*` и web origins. Старые http-адреса оставлены
-на время перехода.
+на время перехода. `gga1c-hub` (с 28.10.2026) — вход людей в сам хаб: confidential, PKCE,
+redirect `https://192.168.88.238:5443/signin-oidc` и `https://localhost:5444/signin-oidc`
+(dev), секрет — `C:\GGA1C\keycloak-hub-secret.txt` (см. `docs/platform/p7-keycloak-login.md`).
 
 Настройки виджета в документе (секция 70): адрес
 `https://192.168.88.238:5443/widget_report_grist/index.html`,

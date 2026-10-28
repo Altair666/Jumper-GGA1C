@@ -1,243 +1,154 @@
-# П7. Вход в хаб через Keycloak — разведка и план
+# П7. Вход в хаб через Keycloak
 
-Разведка 2026-10-28, кода нет. Карточка — `docs/roadmap.md`, П7. Проверено чтением кода
-ветки `main` (`a17aea2`), декомпиляцией пакетов ABP 10.7.0 из кэша NuGet (`ilspycmd`) и
-чтением клиентов реалма `test` через admin API (только GET). Что не проверено — помечено
-«не проверено».
+Разведка, план и реализация — 2026-10-28, ветка `feat/p7-keycloak-login`. Что не проверено —
+помечено «не проверено».
 
-## Как устроено сейчас
+## Как устроено
 
-- `SyncBlazorModule` подключает `AbpAccountWebOpenIddictModule`: сам хаб — сервер OpenIddict,
-  вход — Razor-страница `/Account/Login` (тема LeptonX Lite), кука Identity
-  (`IdentityConstants.ApplicationScheme`). `ConfigureAuthentication` только перекидывает
-  Bearer на валидацию OpenIddict и включает `IsDynamicClaimsEnabled`. Внешних схем входа нет.
-- В `OpenIddictDataSeedContributor` заводится только клиент Swagger. Пользователь один —
-  `admin` из сеялки ABP.
-- **Страницы `/labels`, `/keycloak`, `/altium-1c` закрыты только `[Authorize]`**, а
-  `ConnectionsAppService` и `LabelClientsAppService` — только `[Authorize]`; своих разрешений
-  в `SyncPermissions` нет. Сейчас это безопасно, потому что вошедший один — `admin`. **Как
-  только войдёт любой человек из Keycloak, он увидит ключи, пароли печати и настройки
-  Keycloak/Altium.** Значит, П7 без разрешения на админ-страницы делать нельзя.
-- **Уже сейчас открыта самостоятельная регистрация.** `Abp.Account.IsSelfRegistrationEnabled`
-  по умолчанию `true` (декомпиляция `AccountSettingDefinitionProvider`), в `AbpSettings`
-  переопределений `Abp.Account.*` нет (запрос к базе), и `GET
-  https://192.168.88.238:5443/Account/Register` на живом стенде отдаёт 200 с формой
-  «Username / Email address». Значит, любой в сети может завести себе локальную учётку и с ней
-  попасть на страницы под `[Authorize]`. Саму регистрацию (POST) не пробовал — не проверено,
-  что она проходит до конца, но препятствий в коде не видно. Закрыть — в шаге 1 плана.
-- Главная (`Index.razor`) — заглушка шаблона ABP; «кто я» нигде не показывается.
-- Личность из Keycloak уже используется в другом месте: `KeycloakTokenVerifier` проверяет
-  токен виджета (`gga1c-widget`) по JWKS реалма; адрес и реалм берёт из настроек
-  `Sync.Keycloak.BaseUrl` / `Realm`.
-- Люди — `LabelClient` с `KeycloakSub`; их заводит и выключает сверка `KeycloakAccountSync`
-  (раз в час, `KeycloakSyncWorker`). Отдельного метода «сверить одного человека» нет —
-  создание (`CreateFromUserAsync`) приватное.
+**Кнопка «Keycloak» на странице входа.** Схема OpenID Connect с именем `Keycloak`
+(`Blazor/Login/KeycloakLoginScheme.cs`) регистрируется **при старте** из настроек: адрес и
+реалм — `Sync.Keycloak.BaseUrl` / `Realm` (как у сверки), клиент и секрет —
+`Sync.Keycloak.LoginClientId` / `LoginClientSecret` (секрет шифруется). Не задано — схемы нет,
+хаб работает с одним локальным входом, в журнале строка «Вход через Keycloak выключен».
+Правка на странице `/keycloak` (раздел «Вход людей в хаб») применяется **после перезапуска**.
+Поток — код + PKCE, клиент confidential, ответ Keycloak приходит `form_post` на `/signin-oidc`.
+Пакет OpenIdConnect приходит от ABP, нового NuGet нет.
 
-## Что даёт ABP 10.7 для внешнего входа (проверено декомпиляцией)
+Почему при старте, а не в `ConfigureServices`: настройки живут в базе, а схема OIDC без
+адреса и клиента роняла бы проверку параметров на каждом запросе.
 
-- Кнопка на странице входа появляется сама: `LoginModel.GetExternalProviders()` берёт все схемы
-  с непустым `DisplayName`. Достаточно `AddOpenIdConnect("Keycloak", "Keycloak", ...)` с
-  `SignInScheme = IdentityConstants.ExternalScheme`.
-- Пакет `Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.11 **уже приходит
-  транзитивно** от `Volo.Abp.AspNetCore` 10.7.0 (nuspec) — нового NuGet не нужно.
-- Штатный `OnGetExternalLoginCallbackAsync` (в `LoginModel`; `OpenIddictSupportedLoginModel`
-  его не переопределяет, она регистрируется как `[ExposeServices(typeof(LoginModel))]`):
-  1. `ExternalLoginSignInAsync(provider, sub)` — если связь в `AbpUserLogins` есть, входит;
-  2. иначе ищет пользователя **по email** и молча привязывает к нему внешний вход;
-  3. иначе уводит на `/Account/Register?IsExternalLogin=true`, а регистрация требует
-     включённой самостоятельной регистрации и нажатия кнопки человеком.
+**Свой колбэк** (`Blazor/Pages/Account/SyncLoginModel.cs` подменяет модель страницы входа ABP
+через DI, разметка штатная). Штатный колбэк ABP 10.7 (проверено декомпиляцией) ищет
+пользователя по **email** и молча привязывает, а незнакомого шлёт на регистрацию — нам не
+годится. Наш порядок:
 
-  Для нас пункт 2 опасен (связь у нас по `sub`, не по email; email в Keycloak правится, и
-  `lmp.admin` носит почту владельца), пункт 3 не нужен. Поэтому колбэк **переопределяем**:
-  свой класс-наследник `OpenIddictSupportedLoginModel` с
-  `[ExposeServices(typeof(LoginModel), typeof(OpenIddictSupportedLoginModel))]` и
-  `[Dependency(ReplaceServices = true)]`, переопределён только
-  `OnGetExternalLoginCallbackAsync`. Разметку страницы не трогаем.
-- `AbpSignInManager.PreSignInCheck` возвращает `NotAllowed`, если `IdentityUser.IsActive =
-  false`; колбэк на это отвечает «Cannot proceed because user is not allowed!».
-- Кука проверяется `AbpSecurityStampValidator` (зарегистрирован в
-  `AbpIdentityAspNetCoreModule`): смена штампа безопасности выкидывает сессию при следующей
-  проверке (интервал `SecurityStampValidatorOptions.ValidationInterval`, по умолчанию в
-  ASP.NET Core — 30 минут; не проверено на стенде).
-- Динамические утверждения (`IdentityDynamicClaimsPrincipalContributor`) выкидывают сессию
-  только если пользователь **удалён**; `IsActive = false` они не проверяют.
-- Для проверки сессий (`IIdentitySessionChecker`) в `Volo.Abp.Identity.Domain` нашлась только
-  заглушка `NullIdentitySessionChecker`; что именно зарегистрировано в хабе — не проверено,
-  на этот механизм не опираемся.
+1. `sub` из внешнего входа; имя, почта, логин — из утверждений токена.
+2. Учётка из сверки (`LabelClient`) по `sub`; нет — заводится сразу
+   (`KeycloakAccountSync.EnsureForLoginAsync`, та же логика, что у часовой сверки, включая
+   выдачу логина печати **новому** человеку).
+3. Учётка отключена — отказ «Ваша учётка в хабе отключена».
+4. Пользователь хаба по записи `AbpUserLogins` (`Keycloak`, `sub`); нет — создаётся без
+   пароля. **По логину или почте к существующему не привязывается** — совпадение даёт отказ с
+   текстом, а не чужую учётку. Есть — обновляются имя, фамилия, почта.
+5. Неактивного пользователя (`AbpSignInManager.PreSignInCheck`) не впускаем — отказ «Вход в
+   хаб для вас закрыт».
+6. Вход, запись в журнал безопасности, возврат по `ReturnUrl`.
 
-## Связь пользователя ABP с `LabelClient`
+Отказ показывается на странице входа красной плашкой. Локальный вход (`admin` по паролю)
+остаётся — это аварийный вход.
 
-Новых столбцов не нужно: связь — запись в `AbpUserLogins` (провайдер `Keycloak`, ключ = `sub`),
-а `LabelClient` ищется по тому же `sub` (`ILabelClientStore.FindBySubAsync`). В колбэке:
+**Отзыв доступа.** `HubUserAccess.SetActiveAsync(sub, bool)` ставит пользователю хаба
+`IsActive` и меняет штамп безопасности. Вызывается сверкой (доступ снят в Keycloak / человек
+пропал из Keycloak / доступ вернули) и ручным включением-выключением учётки на `/labels`.
+Кука сверяется со штампом раз в **2 минуты** (`SecurityStampValidatorOptions` в
+`SyncBlazorModule`). Итог: открытая сессия гаснет через «до часа сверки + до 2 минут» —
+пользователь согласился, что пока этого достаточно.
 
-1. `sub` из внешнего входа (`ExternalLoginInfo.ProviderKey` — это `ClaimTypes.NameIdentifier`,
-   куда обработчик OIDC кладёт `sub`; не проверено на стенде).
-2. `LabelClient` по `sub`. Нет — сверить одного человека (вынести из `KeycloakAccountSync`
-   публичный метод «завести/обновить по `KeycloakUser`»; данные — из утверждений токена или
-   одним запросом `GET /admin/realms/test/users/{sub}` служебной учёткой `gga1c-sync`). Не
-   вышло (нет фамилии для папки и т.п.) — отказ с понятным текстом.
-3. `LabelClient.IsEnabled = false` — отказ («учётка отключена в хабе»), даже если Keycloak
-   пустил.
-4. Пользователь ABP по `FindByLoginAsync("Keycloak", sub)`. Нет — создать
-   (`UserName` = `preferred_username`, `Email` из токена, `Name`/`Surname` из
-   `given_name`/`family_name`, без пароля) и `AddLoginAsync`. Есть — обновить имя и почту.
-   **По email к существующему не привязывать** (иначе `lmp.admin` с почтой владельца мог бы
-   оказаться привязан к чужой учётке).
-5. `SignInAsync`, сброс кэша динамических утверждений, возврат по `ReturnUrl`.
+**Право `Sync.Admin`** — на `/labels`, `/keycloak`, `/altium-1c`, `LabelClientsAppService`,
+`ConnectionsAppService` и пункты меню. Роль `admin` получает его засевом DbMigrator (ABP
+выдаёт ей все права). Сотрудник из Keycloak без ролей видит главную с карточкой «Вы вошли как»,
+админ-страницы уводят на `/Account/AccessDenied`. Приём от виджета (`GristLabelsController`,
+`LabelsAppService`) не тронут — он анонимный и опознаёт по токену виджета.
 
-Локальный `admin` не трогается: форма логина/пароля остаётся (`Abp.Account.EnableLocalLogin`
-по умолчанию включён), это и есть аварийный вход.
+**«Вы вошли как»** — карточка на главной (`Index.razor`, `MyAccountAppService`): пользователь
+хаба, почта, способ входа, учётка из Keycloak, папка буфера, логин печати, состояние учётки.
 
-## «Отключён в Keycloak»
+**Второй экземпляр:** `Workers__Enabled=false` выключает фоновых работников (сверка,
+автосинхронизация, уборка сессий GoLabel).
 
-- **При входе.** Отключённому Keycloak не выдаёт код — штатное поведение Keycloak (на стенде
-  не проверено: проверка требует выключить учётку в реалме, это правка Keycloak). Второй
-  рубеж — шаг 3 колбэка: `LabelClient.IsEnabled`.
-- **В открытой сессии.** Сверка (`KeycloakAccountSync`) при отключении `LabelClient` ставит
-  связанному `IdentityUser` `IsActive = false` и меняет штамп безопасности; при возврате
-  доступа сверкой — `IsActive = true`. Кука умирает на ближайшей проверке штампа; интервал
-  проверки сократить до нескольких минут. Итоговая задержка — до часа сверки плюс интервал.
-  Если это много — отдельным решением: чаще сверять или проверять человека в Keycloak при
-  проверке куки.
-- **Blazor Server.** Уже открытый «контур» (circuit) живёт на состоянии входа, полученном при
-  подключении, и куку повторно не проверяет; в `Volo.Abp.AspNetCore.Components.Server`/`.Web`
-  своего перепроверяющего `AuthenticationStateProvider` не нашлось (поиск по именам классов,
-  другие сборки не смотрел). Для П7 достаточно, что следующая
-  загрузка страницы уже не пустит; периодическая перепроверка контура — по желанию (не
-  проверено).
-- Выход из хаба гасит только куку хаба; сессия Keycloak остаётся, и повторный вход пройдёт без
-  пароля. Полный выход (end_session Keycloak) — по желанию, нужен post-logout redirect URI.
+## Регистрация и первый администратор (как в Docmost)
 
-## Клиент Keycloak
+- Самостоятельной регистрации нет: значение по умолчанию `Abp.Account.IsSelfRegistrationEnabled`
+  переопределено на `false` (`Application/Settings/AccountDefaultsSettingDefinitionProvider.cs`).
+  На стенде, кроме того, лежит явная строка `False` в `AbpSettings` (поставил пользователь) —
+  не мешает, не дублируется.
+- Штатная сеялка ABP больше **не создаёт `admin` с паролем `1q2w3E*`**
+  (`Domain/Identity/NoDefaultAdminDataSeedContributor.cs`; DbMigrator не передаёт пароль).
+  Существующих пользователей это не касается — `admin` на стенде как был.
+- **`/setup`** (`Blazor/Pages/Setup.cshtml`, логика — `Domain/Identity/FirstAdminSetup.cs`)
+  открыта, пока нет отметки `Sync.Setup.FirstAdminCreatedAt` **и** в роли `admin` никого нет.
+  Форма: логин, почта, пароль дважды (политика паролей ABP). Создаёт роль `admin` (если её
+  нет), пользователя, ставит отметку — после этого `/setup` отвечает 404. Отметку не снять из
+  интерфейса: даже если всех администраторов удалить, страница не откроется, пока строку не
+  сотрут в базе. Пока `/setup` открыта, `/Account/Login` уводит на неё (не проверено вживую —
+  на стенде она закрыта).
+- **Проверка на чистой базе** (на живой администратор уже есть):
+  1. создать пустую базу MySQL, например `gga1c_setup` (нужны права root — согласовать);
+  2. `ConnectionStrings__Default` на неё, запустить DbMigrator — в `AbpUsers` пусто, в
+     `AbpPermissionGrants` есть права роли `admin`;
+  3. запустить хаб на ней (отдельный порт), открыть `/Account/Login` — уводит на `/setup`;
+  4. разные пароли — «Пароли не совпадают»; слабый — ошибка политики ABP;
+  5. создать — вход этим логином на `/Account/Login`, видны админ-страницы;
+  6. `/setup` → 404; снять у пользователя роль `admin` — `/setup` всё равно 404;
+  7. `DELETE FROM AbpSettings WHERE Name='Sync.Setup.FirstAdminCreatedAt'` при отсутствии
+     администраторов — `/setup` снова открыта (это и есть «только через базу»).
 
-Клиенты реалма `test` (прочитано admin API 2026-10-28):
+  Автотестами покрыто: администратор создаётся через `FirstAdminSetup` и попадает в роль,
+  после этого страница закрыта и второй не создаётся (`FirstAdminSetupTests`).
 
-| Клиент | Тип | Потоки | Redirect URI |
-|---|---|---|---|
-| `gga1c-sync` | confidential | только служебная учётка | нет |
-| `gga1c-widget` | public, PKCE S256 | standard flow | `…:5443/widget_report_grist/*` и http-варианты |
-| `grist` | confidential | standard + служебная | `https://192.168.88.238:8444/*`, … |
-| `docmost`, `test-app` | чужие | | |
+## Клиент Keycloak `gga1c-hub` (реалм `test`)
 
-Таймауты реалма: простой SSO-сессии 1800 с, максимум 36000 с, access token 300 с.
+Создан 2026-10-28 с согласия пользователя: confidential, Standard flow, PKCE S256, без Direct
+grants и служебной учётки. Redirect URI: `https://192.168.88.238:5443/signin-oidc`,
+`https://localhost:5444/signin-oidc`; post-logout: `https://192.168.88.238:5443/*`,
+`https://localhost:5444/*`; клиентские scope по умолчанию реалма (среди них `profile`,
+`email`). Секрет — `C:\GGA1C\keycloak-hub-secret.txt`. В базу стенда клиент и секрет засеяны
+DbMigrator из `Keycloak__LoginClientId` / `Keycloak__LoginClientSecret`.
 
-**Нужен новый клиент**, переиспользовать нельзя: `gga1c-sync` — служебная учётка с
-`view-users`, включать ей браузерный вход значит смешать роли одного секрета;
-`gga1c-widget` — публичный, его `azp` принимает `KeycloakTokenVerifier`, и redirect URI у него
-открыт только под виджет. Предлагаемые настройки (создать — после согласия):
+Прежних клиентов переиспользовать нельзя: `gga1c-sync` — служебная учётка с `view-users` без
+браузерного входа, `gga1c-widget` — публичный, его `azp` принимает `KeycloakTokenVerifier`.
 
-- `clientId`: `gga1c-hub`, confidential (Client authentication ON), Standard flow ON, Direct
-  access grants OFF, Service accounts OFF, PKCE S256;
-- Valid redirect URIs: `https://192.168.88.238:5443/signin-oidc`, для dev —
-  `https://localhost:5444/signin-oidc` (и при нужде `https://192.168.88.238:5444/signin-oidc`);
-- Valid post logout redirect URIs: `https://192.168.88.238:5443/*`, `https://localhost:5444/*`;
-- Web origins: не нужны (поток идёт через сервер);
-- scope: `openid profile email`;
-- секрет — в файл вне репозитория (по образцу `/opt/grist/gga1c-sync-secret.txt`), в хаб —
-  переменной окружения.
+## Миграции и база
 
-## Настройки хаба
+Схема не менялась: `dotnet ef migrations has-pending-model-changes` — «No changes», в
+`__EFMigrationsHistory` те же три миграции. DbMigrator на общей базе добавил только строки:
+`Sync.Keycloak.LoginClientId`, `Sync.Keycloak.LoginClientSecret` (шифрованная), грант
+`Sync.Admin` роли `admin`. Логины печати в MySQL не трогались (`mysql.user.password_last_changed`
+у всех — 19.10.2026).
 
-Адрес и реалм — существующие `Sync.Keycloak.BaseUrl` / `Realm`. Новые:
-`Sync.Keycloak.LoginClientId`, `Sync.Keycloak.LoginClientSecret` (шифруется), засев из
-`Keycloak__LoginClientId` / `Keycloak__LoginClientSecret` тем же
-`KeycloakSettingsDataSeedContributor`. Настройки ABP хранятся в `AbpSettings`
-(ключ-значение) — **миграции не нужно**. Параметры OIDC читаются при первом обращении к схеме;
-правка в UI применяется после перезапуска (так проще и предсказуемее, чем перечитывать
-discovery на ходу).
+## Dev-экземпляр рядом с живым
 
-## Миграции и пакеты
-
-- **NuGet:** не нужен (см. выше). Если всё же захочется явной ссылки на
-  `Microsoft.AspNetCore.Authentication.OpenIdConnect` — это новый пакет, спросить.
-- **Миграции БД:** не нужны. `AbpUserLogins`, `AbpUsers`, `AbpSettings`,
-  `AbpPermissionGrants` уже созданы миграцией `Initial`. Выдача нового разрешения роли `admin` —
-  строка данных (засев), не схема.
-
-## Разрешение на админ-страницы
-
-Минимум, без которого вход людей открывает им всё: разрешение `Sync.Admin` в
-`SyncPermissionDefinitionProvider`; `/labels`, `/keycloak`, `/altium-1c`,
-`ConnectionsAppService`, `LabelClientsAppService` — `[Authorize(SyncPermissions.Admin)]`;
-пункты меню — `requiredPermissionName`. Роль `admin` получает его засевом: ABP-шный
-`PermissionDataSeedContributor` выдаёт роли `admin` все определённые разрешения (проверено
-декомпиляцией), а засев в хабе запускает только DbMigrator (`SyncDbMigrationService`; сам
-хаб при старте не сеет — проверено поиском). Человек из Keycloak без ролей видит только главную.
-
-## Dev-проверка, не трогая живой стенд
-
-Живой хаб — PID 13068, `C:\gg1ac\src\GGA1C.Sync.Blazor\bin\Release\...`, порты 5443/5080.
-Порты 5444/5081 свободны (проверено `Get-NetTCPConnection`).
+Свой worktree, общая база, `https://localhost:5444` / `http://...:5081`. Переменные — как в
+`C:\GGA1C\start-hub.ps1`, плюс `Workers__Enabled=false`:
 
 ```
-cd C:\gg1ac-wt\p7\src\GGA1C.Sync.Blazor
-# переменные — как в CLAUDE.md: ConnectionStrings__Default, StringEncryption__DefaultPassPhrase,
-# ASPNETCORE_Kestrel__Certificates__Default__Path / __Password
-# плюс Keycloak__LoginClientId / Keycloak__LoginClientSecret (если засев ещё не прошёл)
-dotnet run --no-launch-profile -c Debug --urls "https://0.0.0.0:5444;http://0.0.0.0:5081"
+dotnet run --no-launch-profile --no-build -c Release --urls "https://0.0.0.0:5444;http://0.0.0.0:5081"
 ```
 
-Грабли общей базы и одного хоста:
+Грабли:
 
-- **В worktree нет `openiddict.pfx`** (он в `.gitignore`, лежит только в
-  `C:\gg1ac\src\GGA1C.Sync.Blazor\` — проверено). Без `ASPNETCORE_ENVIRONMENT=Development`
-  модуль берёт `AddProductionEncryptionAndSigningCertificate("openiddict.pfx", …)` — файл
-  скопировать в `C:\gg1ac-wt\p7\src\GGA1C.Sync.Blazor\` перед запуском (в git он не попадёт).
+- **Куки не различают порты.** Хаб на `192.168.88.238:5443` и `:5444` перезаписывают куки
+  друг друга. Dev открывать по `https://localhost:5444` (в SAN сертификата стенда есть
+  `localhost`) — другой хост, свои куки.
+- **В свежем worktree нет `openiddict.pfx` и `wwwroot/libs`** (оба в `.gitignore`). Без pfx
+  хаб в Production не стартует, без libs страница входа отдаёт 500 «The 'wwwroot/libs' folder
+  does not exist or empty». Скопировать оба из `C:\gg1ac\src\GGA1C.Sync.Blazor\` **до
+  запуска**: результат проверки libs запоминается, после копирования нужен перезапуск.
+- Ответ Keycloak — `form_post` (самоотправляющаяся форма с заглавными тегами). Скриптовый
+  клиент должен сам отправить её на `/signin-oidc`.
 
-- **Куки не различают порты.** Хаб на `192.168.88.238:5443` и на `192.168.88.238:5444`
-  пишут куку с тем же именем — вход в один перезаписывает куку другого (а прочесть чужую
-  куку они, вероятно, не смогут: ключи Data Protection по умолчанию привязаны к каталогу
-  приложения — не проверено). Поэтому dev открывать по
-  **`https://localhost:5444`** (в SAN сертификата `gga1c-stand.crt` есть `localhost` —
-  проверено) — другой хост, свои
-  куки. Отсюда redirect URI `https://localhost:5444/signin-oidc`.
-- **Фоновые работники запустятся дважды** на одной базе (сверка Keycloak, автосинхронизация
-  Altium, уборка сессий GoLabel). Сверка идемпотентна; на время dev-проверки лучше выключить
-  работников в dev-экземпляре флагом конфигурации (не проверено, нужна правка
-  `OnPostApplicationInitializationAsync`).
-- Засев (`KeycloakSettingsDataSeedContributor`, разрешения) идёт через DbMigrator — он пишет
-  в общую базу, то есть и для живого стенда. Новые настройки безвредны для живого хаба
-  (старый код их не читает), но запуск DbMigrator всё равно согласовать.
-- Пользователи ABP, созданные при dev-входе, — в общей базе; живой хаб их увидит в
-  «Пользователях», но войти ими не сможет (у него нет схемы Keycloak).
+## Проверено на dev-экземпляре (2026-10-28)
 
-## План (после «ок»)
+Скриптом, повторяющим браузер (страница входа → кнопка Keycloak → форма Keycloak → `form_post`):
 
-1. **Разрешение `Sync.Admin`** — `Application.Contracts/Permissions/SyncPermissions.cs`,
-   `SyncPermissionDefinitionProvider.cs`; атрибуты в `Blazor/Components/Pages/Labels.razor`,
-   `KeycloakPage.razor`, `Altium1C.razor`, `Application/Connections/ConnectionsAppService.cs`,
-   `Application/Labels/LabelClientsAppService.cs`; меню `Blazor/Menus/SyncMenuContributor.cs`;
-   выключить самостоятельную регистрацию (`Abp.Account.IsSelfRegistrationEnabled = false`
-   засевом настройки в Domain).
-2. **Настройки клиента входа** — `Domain/Settings/SyncSettings.cs`,
-   `SyncSettingDefinitionProvider.cs`, `Domain/Keycloak/KeycloakSettingsDataSeedContributor.cs`;
-   поля на странице `/keycloak` (`KeycloakPage.razor(.cs)`, `KeycloakSettingsDto`).
-3. **Схема OIDC** — `Blazor/SyncBlazorModule.cs` (`ConfigureAuthentication`:
-   `AddOpenIdConnect("Keycloak", "Keycloak", …)`, `SignInScheme = ExternalScheme`, code + PKCE,
-   `GetClaimsFromUserInfoEndpoint`, scope `openid profile email`; параметры — из настроек через
-   `IConfigureNamedOptions<OpenIdConnectOptions>` в новом файле `Blazor/Keycloak/`).
-4. **Свой колбэк входа** — новый `Blazor/Pages/Account/SyncLoginModel.cs` (наследник
-   `OpenIddictSupportedLoginModel`, только `OnGetExternalLoginCallbackAsync`, шаги из раздела
-   «Связь»); для заведения по `sub` — публичный метод в `Domain/Keycloak/KeycloakAccountSync.cs`
-   (+ `KeycloakClient.GetUserAsync(sub)`).
-5. **Отзыв доступа** — `KeycloakAccountSync`: при отключении/включении `LabelClient`
-   переключать `IdentityUser.IsActive` и штамп; `ValidationInterval` — в `SyncBlazorModule`.
-6. **«Видит себя»** — карточка на `Blazor/Components/Pages/Index.razor(.cs)`: имя, логин,
-   почта, папка буфера и состояние `LabelClient`.
-7. **Проверка** — dev-экземпляр на `https://localhost:5444`: вход `a.morozov` → видит себя и
-   не видит админ-страниц; `admin` по паролю — видит всё; отключённый в Keycloak (выключает
-   пользователь или по его согласию) — не входит; после сверки открытая сессия гаснет.
-   `dotnet build -c Release`, `dotnet test`.
-
-## Что нужно согласовать до кода
-
-1. Создать клиента `gga1c-hub` в реалме `test` с настройками выше (правка Keycloak).
-2. Ввести разрешение `Sync.Admin`, закрыть им админ-страницы и выключить самостоятельную
-   регистрацию (выходит за букву карточки, но без этого вход людей открывает им секреты, а
-   регистрация открыта уже сейчас).
-3. Новые настройки `Sync.Keycloak.LoginClientId` / `LoginClientSecret` и запуск DbMigrator на
-   общей базе (засев настроек и разрешений; схема не меняется).
-4. Человек без `LabelClient` при входе: заводить на лету (предложение) или отказывать до
-   ближайшей сверки.
-5. Задержка отзыва в открытой сессии «до часа + интервал проверки куки» — достаточно, или
-   нужна частая сверка.
+- `a.morozov`: вход, на главной «Вы вошли как», учётка «Морозов Алексей», папка `morozov`,
+  логин печати; в `AbpUsers` создан `a.morozov` с именем и фамилией из Keycloak, в
+  `AbpUserLogins` — `Keycloak` + его `sub`; `/labels`, `/keycloak`, `/altium-1c` →
+  `AccessDenied`; `/setup` → 404.
+- `tester`: вход; затем учётка выключена в хабе (`IsEnabled=0`) — вход отклонён плашкой «Ваша
+  учётка в хабе отключена»; после проверки включена обратно.
+- Открытая сессия `tester`: в базе пользователю поставлены `IsActive=0` и новый штамп — ровно
+  то, что пишет `HubUserAccess` (сам код покрыт `HubUserAccessTests`), — сессия погасла через
+  87 с; новый вход — «Вход в хаб для вас закрыт». Затем `IsActive=1` вернули.
+- `/Account/Register` формы регистрации не показывает. На стенде это обеспечивает и строка
+  `False` в базе, поэтому само переопределение значения по умолчанию вживую не проверено.
+- **Не проверено:** вход пользователя, отключённого **в самом Keycloak**, — нужно выключить
+  учётку в реалме, а это правка Keycloak, не согласованная. Ожидается отказ ещё на странице
+  Keycloak; второй рубеж — шаги 3 и 5 колбэка. Как проверить: выключить `tester` в админке
+  Keycloak, войти им на `https://localhost:5444` — должен остаться на странице Keycloak с
+  ошибкой; включить обратно.
+- **Не проверено:** вход `admin` по паролю после изменений (пароль у владельца стенда); грант
+  `Sync.Admin` роли `admin` в базе есть. Ручное выключение учётки кнопкой на `/labels` вживую
+  не нажимали (нужен админ).
+- Живой хаб (5443) изменений не получит, пока ветку не сольют и хаб не перезапустят; после
+  перезапуска на 5443 появится кнопка Keycloak — настройки уже в базе.
