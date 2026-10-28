@@ -34,6 +34,10 @@ public class SyncSettingDefinitionProvider : SettingDefinitionProvider
             new SettingDefinition(SyncSettings.Keycloak.ClientId, isVisibleToClients: false),
             new SettingDefinition(SyncSettings.Keycloak.ClientSecret, isVisibleToClients: false, isEncrypted: true),
             new SettingDefinition(SyncSettings.Keycloak.WidgetClientId, "gga1c-widget", isVisibleToClients: false),
+            new SettingDefinition(SyncSettings.Keycloak.LoginClientId, isVisibleToClients: false),
+            new SettingDefinition(SyncSettings.Keycloak.LoginClientSecret, isVisibleToClients: false, isEncrypted: true),
+
+            new SettingDefinition(SyncSettings.Setup.FirstAdminCreatedAt, isVisibleToClients: false),
 
             new SettingDefinition(SyncSettings.AutoSyncEnabled, "false", isVisibleToClients: false),
             new SettingDefinition(SyncSettings.IntervalMinutes, "60", isVisibleToClients: false),

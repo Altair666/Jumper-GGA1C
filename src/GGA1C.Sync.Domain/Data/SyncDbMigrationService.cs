@@ -100,10 +100,9 @@ public class SyncDbMigrationService : ITransientDependency
     {
         Logger.LogInformation($"Executing {(tenant == null ? "host" : tenant.Name + " tenant")} database seed...");
 
-        await _dataSeeder.SeedAsync(new DataSeedContext(tenant?.Id)
-            .WithProperty(IdentityDataSeedContributor.AdminEmailPropertyName, IdentityDataSeedContributor.AdminEmailDefaultValue)
-            .WithProperty(IdentityDataSeedContributor.AdminPasswordPropertyName, IdentityDataSeedContributor.AdminPasswordDefaultValue)
-        );
+        // Администратора с паролем по умолчанию не заводим (см. NoDefaultAdminDataSeedContributor):
+        // первого создаёт человек на странице /setup.
+        await _dataSeeder.SeedAsync(new DataSeedContext(tenant?.Id));
     }
 
     private bool AddInitialMigrationIfNotExist()

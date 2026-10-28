@@ -42,6 +42,8 @@ public class KeycloakSettingsDataSeedContributor : IDataSeedContributor, ITransi
         seeded += await SeedIfEmpty(SyncSettings.Keycloak.Realm, _configuration["Keycloak:Realm"]);
         seeded += await SeedIfEmpty(SyncSettings.Keycloak.ClientId, _configuration["Keycloak:ClientId"]);
         seeded += await SeedIfEmpty(SyncSettings.Keycloak.ClientSecret, _configuration["Keycloak:ClientSecret"]);
+        seeded += await SeedIfEmpty(SyncSettings.Keycloak.LoginClientId, _configuration["Keycloak:LoginClientId"]);
+        seeded += await SeedIfEmpty(SyncSettings.Keycloak.LoginClientSecret, _configuration["Keycloak:LoginClientSecret"]);
 
         if (seeded > 0)
         {

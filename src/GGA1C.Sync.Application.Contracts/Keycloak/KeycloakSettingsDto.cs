@@ -29,4 +29,15 @@ public class KeycloakSettingsDto
     public string ClientSecret { get; set; } = "";
 
     public bool HasClientSecret { get; set; }
+
+    /// <summary>
+    /// Клиент входа людей в сам хаб (confidential). Применяется после перезапуска хаба:
+    /// схема входа собирается при старте.
+    /// </summary>
+    public string LoginClientId { get; set; } = "";
+
+    /// <summary>Маска секрета клиента входа — по тем же правилам, что и <see cref="ClientSecret"/>.</summary>
+    public string LoginClientSecret { get; set; } = "";
+
+    public bool HasLoginClientSecret { get; set; }
 }

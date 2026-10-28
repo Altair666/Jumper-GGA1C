@@ -140,6 +140,17 @@ public class SyncBlazorModule : AbpModule
         {
             options.IsDynamicClaimsEnabled = true;
         });
+
+        // Вход людей через Keycloak (схема добавляется при старте, если настроена).
+        GGA1C.Sync.Blazor.Login.KeycloakLoginScheme.AddServices(context.Services);
+
+        // Как часто кука сверяется со штампом безопасности пользователя. Отключили учётку -
+        // сверка меняет штамп, и открытая сессия гаснет не позже чем через этот интервал
+        // (по умолчанию в ASP.NET Core - 30 минут).
+        context.Services.Configure<Microsoft.AspNetCore.Identity.SecurityStampValidatorOptions>(options =>
+        {
+            options.ValidationInterval = TimeSpan.FromMinutes(2);
+        });
     }
 
     private void ConfigureUrls(IConfiguration configuration)
@@ -336,6 +347,19 @@ public class SyncBlazorModule : AbpModule
     public override async Task OnPostApplicationInitializationAsync(
         ApplicationInitializationContext context)
     {
+        await GGA1C.Sync.Blazor.Login.KeycloakLoginScheme.RegisterAsync(context.ServiceProvider);
+
+        // Второй экземпляр хаба для отладки (свой worktree, общая база) не должен сверять,
+        // синхронизировать и прибирать сессии GoLabel параллельно с живым:
+        // Workers__Enabled=false.
+        var configuration = context.ServiceProvider.GetRequiredService<IConfiguration>();
+        if (!configuration.GetValue("Workers:Enabled", true))
+        {
+            context.ServiceProvider.GetRequiredService<ILogger<SyncBlazorModule>>()
+                .LogWarning("Фоновые работники выключены (Workers:Enabled=false)");
+            return;
+        }
+
         // Работник сам проверяет на каждом тике, включена ли автосинхронизация и заданы ли
         // адреса, поэтому регистрируем его безусловно - настройка правится в интерфейсе.
         await context.AddBackgroundWorkerAsync<GGA1C.Sync.Sync.AutoSyncWorker>();

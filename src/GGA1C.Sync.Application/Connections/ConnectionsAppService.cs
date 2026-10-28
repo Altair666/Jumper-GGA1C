@@ -16,7 +16,7 @@ namespace GGA1C.Sync.Connections;
 // Атрибут нужен и на классе: ABP ищет его на типе реализации, пометки на интерфейсе
 // недостаточно (проверено на сервисе буфера этикеток - эндпоинт оставался анонимным).
 [RemoteService(IsEnabled = false)]
-[Authorize]
+[Authorize(GGA1C.Sync.Permissions.SyncPermissions.Admin)]
 public class ConnectionsAppService : ApplicationService, IConnectionsAppService
 {
     private readonly ISettingManager _settingManager;

@@ -2,6 +2,8 @@
   "culture": "ru",
   "texts": {
     "AppName": "Sync",
+    "Permission:Sync": "Хаб GGA1C.Sync",
+    "Permission:Sync.Admin": "Администрирование хаба",
     "Menu:Home": "Главная",
     "Welcome": "Добро пожаловать",
     "LongWelcomeMessage": "Добро пожаловать в приложение. Этот запущенный проект основан на фреймворке ABP. Для получения дополнительной информации посетите сайт abp.io."

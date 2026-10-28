@@ -1,5 +1,5 @@
 @page "/keycloak"
-@attribute [Authorize]
+@attribute [Authorize(GGA1C.Sync.Permissions.SyncPermissions.Admin)]
 @using GGA1C.Sync.Keycloak
 @inherits SyncComponentBase
 
@@ -64,6 +64,25 @@
                            Disabled="@Busy" StartIcon="@Icons.Material.Filled.Save"
                            Style="@ButtonWidth" OnClick="SaveAsync">Сохранить</MudButton>
             </MudStack>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Вход людей в хаб</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Отдельный клиент (gga1c-hub): им сотрудники входят в сам хаб кнопкой «Keycloak»
+                на странице входа. Сохраняется той же кнопкой, применяется после перезапуска хаба.
+            </MudText>
+
+            <MudTextField @bind-Value="Kc.LoginClientId" Label="Клиент входа" T="string"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="@Mark(Filled(Kc.LoginClientId))"
+                          AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                          AdornmentColor="Color.Success" />
+
+            <MudTextField @bind-Value="Kc.LoginClientSecret" Label="Секрет клиента входа" T="string"
+                          InputType="InputType.Password"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="@Mark(Kc.HasLoginClientSecret)"
+                          AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                          AdornmentColor="Color.Success" />
         </MudStack>
 
         @if (Test != null)

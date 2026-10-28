@@ -26,18 +26,48 @@ public class KeycloakAccountSync : DomainService
     private readonly KeycloakClient _keycloak;
     private readonly ILabelClientStore _clients;
     private readonly IPrintLoginService _printLogins;
+    private readonly HubUserAccess _hubUsers;
     private readonly ILogger<KeycloakAccountSync> _log;
 
     public KeycloakAccountSync(
         KeycloakClient keycloak,
         ILabelClientStore clients,
         IPrintLoginService printLogins,
+        HubUserAccess hubUsers,
         ILogger<KeycloakAccountSync> log)
     {
         _keycloak = keycloak;
         _clients = clients;
         _printLogins = printLogins;
+        _hubUsers = hubUsers;
         _log = log;
+    }
+
+    /// <summary>
+    /// Сверка одного человека — при его входе в хаб. Человек уже есть в Keycloak (тот только
+    /// что выдал ему токен), а сверка могла до него ещё не дойти: она идёт раз в час. Без
+    /// этого новый сотрудник не мог бы войти до следующей сверки.
+    ///
+    /// Данные — из утверждений токена, а не из Admin API: лишний запрос служебной учёткой
+    /// ничего не добавит, а <c>Enabled</c> заведомо истинно — отключённому Keycloak токен не
+    /// выдаёт. Возвращает учётку или null с причиной, если её не из чего собрать.
+    /// </summary>
+    public async Task<(LabelClient? Client, string? Problem)> EnsureForLoginAsync(KeycloakUser user)
+    {
+        var report = new KeycloakSyncReport();
+        var client = await SyncOneAsync(user, report, DateTime.UtcNow);
+
+        foreach (var line in report.Details)
+        {
+            _log.LogInformation("Вход через Keycloak: {Detail}", line);
+        }
+
+        if (client == null)
+        {
+            return (null, report.Details.LastOrDefault() ?? "Учётку не удалось завести");
+        }
+
+        return (client, null);
     }
 
     /// <summary>
@@ -107,29 +137,7 @@ public class KeycloakAccountSync : DomainService
             report.Checked++;
             seenSubs.Add(user.Id);
 
-            var client = await _clients.FindBySubAsync(user.Id);
-
-            // Учётка могла быть заведена руками до подключения Keycloak - привязываем
-            // её по email, чтобы не плодить вторую на того же человека.
-            if (client == null && !string.IsNullOrWhiteSpace(user.Email))
-            {
-                client = await _clients.FindByEmailAsync(user.Email);
-
-                if (client != null)
-                {
-                    client.KeycloakSub = user.Id;
-                    report.Linked++;
-                    report.Details.Add($"Привязана существующая учётка: {client.Name}");
-                }
-            }
-
-            if (client == null)
-            {
-                await CreateFromUserAsync(user, report, now);
-                continue;
-            }
-
-            await UpdateFromUserAsync(client, user, report, now);
+            await SyncOneAsync(user, report, now);
         }
 
         await DisableMissingAsync(seenSubs, report, now);
@@ -142,7 +150,34 @@ public class KeycloakAccountSync : DomainService
         return report;
     }
 
-    private async Task CreateFromUserAsync(KeycloakUser user, KeycloakSyncReport report, DateTime now)
+    private async Task<LabelClient?> SyncOneAsync(KeycloakUser user, KeycloakSyncReport report, DateTime now)
+    {
+        var client = await _clients.FindBySubAsync(user.Id);
+
+        // Учётка могла быть заведена руками до подключения Keycloak - привязываем
+        // её по email, чтобы не плодить вторую на того же человека.
+        if (client == null && !string.IsNullOrWhiteSpace(user.Email))
+        {
+            client = await _clients.FindByEmailAsync(user.Email);
+
+            if (client != null)
+            {
+                client.KeycloakSub = user.Id;
+                report.Linked++;
+                report.Details.Add($"Привязана существующая учётка: {client.Name}");
+            }
+        }
+
+        if (client == null)
+        {
+            return await CreateFromUserAsync(user, report, now);
+        }
+
+        await UpdateFromUserAsync(client, user, report, now);
+        return client;
+    }
+
+    private async Task<LabelClient?> CreateFromUserAsync(KeycloakUser user, KeycloakSyncReport report, DateTime now)
     {
         var baseSlug = SlugGenerator.FromName(user.DisplayName);
 
@@ -156,7 +191,7 @@ public class KeycloakAccountSync : DomainService
             // Фамилия не транслитерируется и логин тоже - папку не из чего собрать.
             // Пропускаем именно этого человека, а не валим всю сверку.
             report.Details.Add($"Пропущен {user.Username}: не удалось составить имя папки");
-            return;
+            return null;
         }
 
         var slug = await _clients.MakeUniqueSlugAsync(baseSlug);
@@ -194,6 +229,8 @@ public class KeycloakAccountSync : DomainService
         {
             report.Details.Add($"Создана учётка {client.Name} (папка {client.Slug})");
         }
+
+        return client;
     }
 
     private async Task UpdateFromUserAsync(
@@ -228,6 +265,7 @@ public class KeycloakAccountSync : DomainService
             client.SyncDisabledAt = now;
             report.Disabled++;
             report.Details.Add($"Отключена учётка {client.Name}: доступ снят в Keycloak");
+            await _hubUsers.SetActiveAsync(client.KeycloakSub, false);
         }
         else if (user.Enabled && !client.IsEnabled && client.SyncDisabledAt != null)
         {
@@ -235,6 +273,7 @@ public class KeycloakAccountSync : DomainService
             client.SyncDisabledAt = null;
             report.Restored++;
             report.Details.Add($"Включена учётка {client.Name}: доступ возвращён в Keycloak");
+            await _hubUsers.SetActiveAsync(client.KeycloakSub, true);
         }
 
         client.SyncedAt = now;
@@ -270,6 +309,7 @@ public class KeycloakAccountSync : DomainService
             client.SyncedAt = now;
 
             await _clients.UpdateAsync(client);
+            await _hubUsers.SetActiveAsync(client.KeycloakSub, false);
 
             report.Disabled++;
             report.Details.Add($"Отключена учётка {client.Name}: пользователя нет в Keycloak");

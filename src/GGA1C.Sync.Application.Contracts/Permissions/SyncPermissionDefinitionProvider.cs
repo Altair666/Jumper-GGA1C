@@ -8,9 +8,8 @@ public class SyncPermissionDefinitionProvider : PermissionDefinitionProvider
 {
     public override void Define(IPermissionDefinitionContext context)
     {
-        var myGroup = context.AddGroup(SyncPermissions.GroupName);
-        //Define your own permissions here. Example:
-        //myGroup.AddPermission(SyncPermissions.MyPermission1, L("Permission:MyPermission1"));
+        var group = context.AddGroup(SyncPermissions.GroupName, L("Permission:Sync"));
+        group.AddPermission(SyncPermissions.Admin, L("Permission:Sync.Admin"));
     }
 
     private static LocalizableString L(string name)

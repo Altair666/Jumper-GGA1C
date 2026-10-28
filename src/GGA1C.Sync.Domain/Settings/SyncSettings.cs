@@ -64,6 +64,26 @@ public static class SyncSettings
         /// человека. Хаб принимает токены лишь этого клиента.
         /// </summary>
         public const string WidgetClientId = KeycloakPrefix + ".WidgetClientId";
+
+        /// <summary>
+        /// Клиент, которым люди входят в сам хаб (confidential, код + PKCE). Отдельный от
+        /// служебного <see cref="ClientId"/>: у того роль view-users и нет браузерного входа,
+        /// смешивать их в одном секрете нельзя. Пусто — входа через Keycloak в хабе нет.
+        /// Читается при старте хаба: после правки нужен перезапуск.
+        /// </summary>
+        public const string LoginClientId = KeycloakPrefix + ".LoginClientId";
+
+        public const string LoginClientSecret = KeycloakPrefix + ".LoginClientSecret";
+    }
+
+    public static class Setup
+    {
+        /// <summary>
+        /// Когда через страницу первого запуска создан администратор. Пока значение пусто и
+        /// в роли admin никого нет, страница /setup открыта; после — закрыта навсегда, и
+        /// открыть её снова можно только стерев строку в AbpSettings.
+        /// </summary>
+        public const string FirstAdminCreatedAt = Prefix + ".Setup.FirstAdminCreatedAt";
     }
 
     public const string AutoSyncEnabled = Prefix + ".AutoSyncEnabled";

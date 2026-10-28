@@ -1,0 +1,47 @@
+@page "/setup"
+@model SetupModel
+@using Volo.Abp.AspNetCore.Mvc.UI.Theming
+@inject IThemeManager ThemeManager
+@{
+    Layout = ThemeManager.CurrentTheme.GetAccountLayout();
+    ViewBag.Title = "Первый запуск";
+}
+
+<div class="card mt-3 shadow-sm rounded">
+    <div class="card-body p-5">
+        <h4>Первый запуск хаба</h4>
+        <p class="text-muted">
+            В хабе ещё нет администратора. Создайте его учётку — после этого страница
+            закроется навсегда. Сотрудники входят через Keycloak, самостоятельной регистрации нет.
+        </p>
+
+        @if (!string.IsNullOrEmpty(Model.Error))
+        {
+            <div class="alert alert-danger">@Model.Error</div>
+        }
+
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label" asp-for="Input.UserName">Логин</label>
+                <input class="form-control" asp-for="Input.UserName" autocomplete="username" />
+                <span class="text-danger" asp-validation-for="Input.UserName"></span>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" asp-for="Input.Email">Почта</label>
+                <input class="form-control" asp-for="Input.Email" type="email" autocomplete="email" />
+                <span class="text-danger" asp-validation-for="Input.Email"></span>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" asp-for="Input.Password">Пароль</label>
+                <input class="form-control" asp-for="Input.Password" type="password" autocomplete="new-password" />
+                <span class="text-danger" asp-validation-for="Input.Password"></span>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" asp-for="Input.PasswordRepeat">Пароль ещё раз</label>
+                <input class="form-control" asp-for="Input.PasswordRepeat" type="password" autocomplete="new-password" />
+                <span class="text-danger" asp-validation-for="Input.PasswordRepeat"></span>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Создать администратора</button>
+        </form>
+    </div>
+</div>

@@ -19,7 +19,7 @@ namespace GGA1C.Sync.Labels;
 // Атрибут нужен и на классе: ABP ищет его на типе реализации, пометки на интерфейсе
 // недостаточно - проверено, эндпоинт оставался анонимным.
 [RemoteService(IsEnabled = false)]
-[Authorize]
+[Authorize(GGA1C.Sync.Permissions.SyncPermissions.Admin)]
 public class LabelClientsAppService : ApplicationService, ILabelClientsAppService
 {
     private readonly ILabelClientStore _clients;
@@ -29,6 +29,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     private readonly ISettingManager _settingManager;
     private readonly KeycloakClient _keycloak;
     private readonly KeycloakAccountSync _keycloakSync;
+    private readonly HubUserAccess _hubUsers;
 
     public LabelClientsAppService(
         ILabelClientStore clients,
@@ -37,8 +38,10 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         LabelsCsvExport csv,
         ISettingManager settingManager,
         KeycloakClient keycloak,
-        KeycloakAccountSync keycloakSync)
+        KeycloakAccountSync keycloakSync,
+        HubUserAccess hubUsers)
     {
+        _hubUsers = hubUsers;
         _clients = clients;
         _labels = labels;
         _printLogins = printLogins;
@@ -121,6 +124,11 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
     public async Task SetEnabledAsync(int id, bool enabled)
     {
         await _clients.SetEnabledAsync(id, enabled);
+
+        // Выключили учётку руками - вход в хаб через Keycloak закрывается вместе с печатью,
+        // уже открытая сессия гаснет на ближайшей проверке куки.
+        var client = await _clients.FindAsync(id);
+        await _hubUsers.SetActiveAsync(client?.KeycloakSub, enabled);
     }
 
     public async Task DeleteAsync(int id)
@@ -319,6 +327,7 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         // только он. ISettingManager отдаёт её как лежит в базе, и маска получалась длиной
         // шифротекста - проверено, 128 точек вместо 86.
         var secret = await SettingProvider.GetOrNullAsync(SyncSettings.Keycloak.ClientSecret) ?? "";
+        var loginSecret = await SettingProvider.GetOrNullAsync(SyncSettings.Keycloak.LoginClientSecret) ?? "";
 
         return new KeycloakSettingsDto
         {
@@ -330,7 +339,11 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             // Вместо секрета - маска той же длины: значение наружу не уходит, но видно,
             // что секрет есть и какой он длины, и поле можно выделить и стереть.
             ClientSecret = SecretMask.For(secret),
-            HasClientSecret = !string.IsNullOrEmpty(secret)
+            HasClientSecret = !string.IsNullOrEmpty(secret),
+
+            LoginClientId = await Get(SyncSettings.Keycloak.LoginClientId),
+            LoginClientSecret = SecretMask.For(loginSecret),
+            HasLoginClientSecret = !string.IsNullOrEmpty(loginSecret)
         };
     }
 
@@ -346,6 +359,13 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
         if (!SecretMask.IsMask(input.ClientSecret))
         {
             await Set(SyncSettings.Keycloak.ClientSecret, input.ClientSecret?.Trim() ?? "");
+        }
+
+        await Set(SyncSettings.Keycloak.LoginClientId, input.LoginClientId?.Trim() ?? "");
+
+        if (!SecretMask.IsMask(input.LoginClientSecret))
+        {
+            await Set(SyncSettings.Keycloak.LoginClientSecret, input.LoginClientSecret?.Trim() ?? "");
         }
     }
 

@@ -1,6 +1,33 @@
 @page "/"
 @inherits SyncComponentBase
 
+@if (Me != null)
+{
+    <MudCard Class="mb-3">
+        <MudCardContent>
+            <MudText Typo="Typo.h6" Class="mb-2">Вы вошли как</MudText>
+            <MudSimpleTable Dense="true" Hover="false" Striped="false" Bordered="false" Elevation="0">
+                <tbody>
+                    <tr><td style="width: 200px;">Пользователь хаба</td><td><b>@Me.UserName</b> @Me.FullName</td></tr>
+                    <tr><td>Почта</td><td>@Me.Email</td></tr>
+                    <tr><td>Вход</td><td>@(Me.ViaKeycloak ? "через Keycloak" : "локальный пароль")</td></tr>
+                    @if (Me.HasAccount)
+                    {
+                        <tr><td>Учётка из Keycloak</td><td>@Me.AccountName (@Me.KeycloakUsername)</td></tr>
+                        <tr><td>Папка буфера</td><td><code>@Me.Slug</code></td></tr>
+                        <tr><td>Логин печати</td><td>@(string.IsNullOrEmpty(Me.PrintLogin) ? "не выдан" : Me.PrintLogin)</td></tr>
+                        <tr><td>Учётка</td><td>@(Me.AccountEnabled ? "включена" : "отключена")</td></tr>
+                    }
+                    else if (Me.ViaKeycloak)
+                    {
+                        <tr><td>Учётка из Keycloak</td><td>не найдена</td></tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudCardContent>
+    </MudCard>
+}
+
 <MudGrid Class="mb-3">
     <MudItem xs="12" md="6">
         <MudCard Style="height: 100%;">
