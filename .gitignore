@@ -230,3 +230,7 @@ src/GGA1C.Sync.Blazor/Logs/*
 src/GGA1C.Sync.Blazor.Tiered/Logs/*
 # Use abp install-libs to restore.
 **/wwwroot/libs/*
+
+# Эталоны GoLabel (П2) в репозиторий не кладём — они в C:\GGA1C\golden
+test/**/golden/
+*.ezpx
