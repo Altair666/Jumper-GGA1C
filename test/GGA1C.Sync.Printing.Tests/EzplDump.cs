@@ -71,22 +71,29 @@ public static class EzplDump
             : $"длина: эталон {expected.Count} команд, порт {actual.Count}; следующая — «{(expected.Count > n ? expected[n] : actual[n])}»";
     }
 
-    /// <summary>Первая расходящаяся команда по байтам; для растров — число расходящихся байт.</summary>
+    /// <summary>
+    /// Расходящиеся команды по байтам (первые пять); для растров — число расходящихся точек.
+    /// </summary>
     public static string FirstByteDifference(byte[] expected, byte[] actual)
     {
         var e = Split(expected);
         var a = Split(actual);
         int n = Math.Min(e.Count, a.Count);
+        var diffs = new List<string>();
         for (int i = 0; i < n; i++)
         {
             if (!e[i].Bytes.AsSpan().SequenceEqual(a[i].Bytes))
             {
                 string detail = e[i].IsRaster && a[i].IsRaster && e[i].Bytes.Length == a[i].Bytes.Length
-                    ? $", байт растра мимо: {e[i].Bytes.Zip(a[i].Bytes).Count(p => p.First != p.Second)}"
+                    ? $", точек растра мимо: {e[i].Bytes.Zip(a[i].Bytes).Sum(p => System.Numerics.BitOperations.PopCount((uint)(p.First ^ p.Second)))}"
                     : "";
-                return $"команда #{i} (смещение {e[i].Offset}): эталон «{e[i].Text}», порт «{a[i].Text}»{detail}";
+                diffs.Add($"#{i} (смещение {e[i].Offset}): эталон «{e[i].Text}», порт «{a[i].Text}»{detail}");
             }
         }
-        return e.Count == a.Count ? "совпадают" : $"длина: эталон {e.Count} команд, порт {a.Count}";
+        if (e.Count != a.Count)
+        {
+            diffs.Add($"длина: эталон {e.Count} команд, порт {a.Count}");
+        }
+        return diffs.Count == 0 ? "совпадают" : $"расходятся {diffs.Count}: " + string.Join("; ", diffs.Take(5));
     }
 }

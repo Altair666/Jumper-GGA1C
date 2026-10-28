@@ -14,7 +14,14 @@ namespace GGA1C.Sync.Printing;
 public class GoLabelPortTests
 {
     /// <summary>Эталоны, которые порт уже собирает целиком (растров Q в них нет или они перенесены).</summary>
-    public static readonly string[] FullyPorted = ["sample2"];
+    public static readonly string[] FullyPorted =
+    [
+        "sample2",
+        // шаг 3: Image, Ellipse. gkv3-product, gkv1-oem-product(-nologo) — нет: уменьшение логотипа
+        // бикубикой в 64-битном gdiplus.dll даёт 1–4 точки мимо, в 32-битном (как у GoLabel) — 0
+        // (docs/printing/p5-plan.md, «Шаг 3»).
+        "gkv3-vm-product",
+    ];
 
     /// <summary>Печать из базы — шаг 6: без снимка данных команды наклеек не сверить.</summary>
     public static readonly string[] FromDatabase = ["gkv3-box-var-mysql"];
