@@ -25,6 +25,8 @@ public class GoLabelPortTests
         "gkv1-vm-box", "gkv3-vm-box",
         // шаг 6: печать из базы (data.csv)
         "gkv3-box-var-mysql",
+        // П5.2: WindowText, многострочный встроенный шрифт, повороты 180/270 командой
+        "test-print-2",
     ];
 
     /// <summary>
@@ -91,7 +93,7 @@ public class GoLabelPortTests
     public const int TextFrameToleranceDots = 2;
 
     /// <summary>Объекты, которые рисуют текст шрифтом Windows растром Q.</summary>
-    public static readonly string[] WindowTextTypes = ["GdiWindowTextBox", "WindowTextBox"];
+    public static readonly string[] WindowTextTypes = ["GdiWindowTextBox", "WindowTextBox", "WindowText"];
 
     /// <summary>
     /// Зачёт с допуском (решения пользователя): строго байт в байт всё, кроме растров Q

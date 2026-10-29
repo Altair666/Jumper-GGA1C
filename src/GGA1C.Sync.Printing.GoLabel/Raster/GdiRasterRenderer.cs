@@ -32,6 +32,17 @@ public sealed class GdiRasterRenderer : IRasterRenderer
             case "WindowTextBox":
                 RenderWindowTextBox((EzpxRasterShape)request.Shape, request.OffsetX, request.OffsetY, request.Job, output);
                 break;
+            case "WindowText":
+            {
+                var shape = (EzpxRasterShape)request.Shape;
+                string data = request.Job.FillPrintingData(shape, bformat: false);
+                var (bitmap, px, py) = WindowTextRaster.Render(shape, data, request.Job.Dpi);
+                using (bitmap)
+                {
+                    Raster1Bit.WriteQ(output, (int)Math.Round(request.OffsetX, 0) + px, (int)Math.Round(request.OffsetY, 0) + py, bitmap);
+                }
+                break;
+            }
             case "Ellipse":
                 RenderEllipse((EzpxRasterShape)request.Shape, request.OffsetX, request.OffsetY, output);
                 break;
