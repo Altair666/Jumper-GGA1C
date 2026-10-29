@@ -16,7 +16,7 @@
 | Подпись Code39 (`gkv1-vm-box`, «4021110124193», GlavkonGOST 24 B) | **Neodynamic** сам (`GetBarcodeImage`); судя по опыту, внутри — GDI+ `DrawString` | `TextRenderingHint.AntiAlias` + `StringFormat.GenericTypographic`, 96 dpi, порог G ≤ 192 | **0 расхождений** (164×22 точки) |
 | `GdiWindowTextBox` (`gkv3-box`, «Лаборатория», Impact 12 → 38 pt) | GDI+ `DrawString` **без явного режима** (`SystemDefault`) | `ClearTypeGridFit` явно | **0 расхождений** (287×45) |
 | то же | | `SystemDefault` на .NET 10 | **602 точки мимо** — `SystemDefault` в процессе .NET 10 даёт не то, что в GoLabel |
-| `Image` (`gkv1-vm-box`, PNG → 135.88×59.56) | GDI+ `DrawImage` бикубикой, порог яркости 127.5, затем G ≤ 192 | тот же конвейер | **6 точек из 8 024 мимо**; x86 и x64 GDI+ дают одно и то же — расхождение в моём упрощении загрузки (`Image.ReDraw`/`SetRectangle`), не в GDI+ (не проверено до конца) |
+| `Image` (`gkv1-vm-box`, PNG → 135.88×59.56) | GDI+ `DrawImage` бикубикой, порог яркости 127.5, затем G ≤ 192 | тот же конвейер | **6 точек из 8 024 мимо**; x86 и x64 GDI+ дают одно и то же — расхождение в моём упрощении загрузки (`Image.ReDraw`/`SetRectangle`), не в GDI+ (не проверено до конца). **Уточнено на шаге 3:** причина — `MakeTransparent(White)`; с ней x86 даёт 0, а x64 у части картинок — 1–13 («Ход реализации») |
 
 Отсюда:
 
@@ -40,7 +40,7 @@
 | Риск | Почему | Как ловить |
 |---|---|---|
 | Раскладка подписи Neodynamic | закрытая библиотека; знаем только результат | подбор по 10 растрам; если не сойдётся — вопрос 4 ниже |
-| Загрузка `Image` (6 точек) | дробный `BoundRect` после `ReDraw`/`SetRectangle` меняет выборку бикубики | шаг 3: повторить порядок загрузки `Image.cs:571–640` дословно |
+| Загрузка `Image` (6 точек) | дробный `BoundRect` после `ReDraw`/`SetRectangle` меняет выборку бикубики | **шаг 3:** причина — `MakeTransparent`; остаток — 64-битный GDI+, допуск по решению 6 |
 | Сглаживание на рабочих местах | GoLabel у оператора может работать без ClearType или с масштабом 125 % — тогда **сам GoLabel** даёт другие байты, чем эталон | вопрос 3; порт фиксирует настройки стенда |
 | Шрифты у учётки хаба | `GlavkonGOST.ttf` установлен **только в профиль `Administrator`** (`HKCU\…\Fonts`); `impact.ttf` — в `C:\Windows\Fonts`. Служба под другой учёткой GlavkonGOST не увидит | **снято 2026-10-29:** шрифт установлен для всех (решение 2); прогон под другой учёткой — шаг 7 |
 | Дробная арифметика | GoLabel — x86 .NET Framework (x87), порт — x64 SSE; пороги `>= 127.5` и `(int)` от `float` | **проявилось на шаге 3**: бикубика 64-битного `gdiplus.dll` расходится с 32-битным на 1–13 точек логотипа («Ход реализации») |
@@ -150,7 +150,7 @@ x86 рисует её как эталон (14868 чёрных точек, сто
 | Порог «толщины шрифта» | `Program.cs:759` `Graphic.FontThick = Settings.Default.FontThick` | в `user.config` стенда значения нет → по умолчанию `0` (`GoLabel/QLabelNet.Properties/Settings.cs:1775`) → `FontThick_Mode.Default` |
 | Значения `-S`/`-V` | `GlobalPrint.cs:782` `CheckSerialPrompt` (дополняет пробелами слева до длины формата), `:709` `CheckVariablePrompt` | окна запроса не переносим — значения даёт хаб |
 | Выкидывание пустых объектов | `GlobalPrint.cs:392–571` `PrintJob_Execute` (удаление — `:570`) | объект нулевого размера без `^` в данных удаляется до печати |
-| Выбор ветки | `GlobalPrint.cs:1168` `RunPrintJobThread`: источник данных → `PrintJob.Print(records)`; иначе `GlobalInfo/GlobalInfo/GlobalInfo.cs:3661` `UseNormalPrint` → `PrintNornal()` или `Print()` | по условиям (`HorAcross>1`, счётчики в тексте шрифтом Windows, подписи) наши шаблоны идут в `Print()` — **не проверено**, подтвердить на шаге 2 |
+| Выбор ветки | `GlobalPrint.cs:1168` `RunPrintJobThread`: источник данных → `PrintJob.Print(records)`; иначе `GlobalInfo/GlobalInfo/GlobalInfo.cs:3661` `UseNormalPrint` → `PrintNornal()` или `Print()` | по условиям (`HorAcross>1`, счётчики в тексте шрифтом Windows, подписи) наши шаблоны идут в `Print()` (**подтверждено на шаге 2**: в эталонах нет команд `C00`) — **не проверено**, подтвердить на шаге 2 |
 | Подготовка | `QLabelSDK/PrintJob.cs:301` `BeforePrintSetup` | при `DrawMode≠0` переносит `Image`/`Ellipse`/… в начало списка; ставит `^XSETCUT,DOUBLECUT,…` в команды начала задания (`:332`) |
 | Шапка | `PrintJob.cs:607` `Print()` → `BeginJobCMDs`, затем `QLabelSDK/Setup.cs:322` `GetCommandEZPL` | `^Q`, `^W`, `^H`, `^P`, `^S`, `^AT`/`^AD`, `^C`, `^R`, `~Q`, `^O`, `^D`, `^E`, `~R` — у всех 15 эталонов |
 | Наклейка | `QLabelSDK/QLabel.cs:3027` `PrintNormalCommandEZPL(lo, st)` | `^L` (`:4358` `SendBeginPage`), `D…`/`T…`, цикл по `HorAcross × VerAcross`, **объекты в обратном порядке**, пропуск вне страницы (`:6651` `OutOfPageArea` — в `gkv-avto-product`, по-видимому, так отпадает `Image` с Y=597: в байтах 3 картинки из 4), `E` (`:4406`) |
@@ -263,6 +263,8 @@ Neodynamic), 5 — один-два, 6 — один, 7 — один: **7–10 з�
 
 ## Вопросы к пользователю
 
+Ответы на 1–5 — раздел «Решения пользователя» выше; открытый вопрос — строка Impact («Ход реализации», шаг 5).
+
 1. **NuGet `System.Drawing.Common` 10.0.x** в `Printing.GoLabel` (проще, `net10.0` остаётся) — или
    `FrameworkReference Microsoft.WindowsDesktop.App` с переводом цепочки проектов на
    `net10.0-windows`? Предлагаю NuGet.
@@ -285,6 +287,6 @@ Neodynamic), 5 — один-два, 6 — один, 7 — один: **7–10 з�
 - Растры: подпись Code39 и строка `GdiWindowTextBox` — отрисовка в PowerShell 5.1 x64 и на .NET 10 (`net10.0-windows`,
   `System.Drawing` из WindowsDesktop 10.0.8) против растров эталона (в PowerShell `SystemDefault` совпал с
   эталоном, на .NET 10 — нет);
-  `Image` — на .NET 10 и в PowerShell 5.1 x64 и x86 (везде те же 6 точек мимо).
+  `Image` — на .NET 10 и в PowerShell 5.1 x64 и x86 (везде те же 6 точек мимо — без `MakeTransparent`; с ней x86 и x64 расходятся, см. шаг 3).
 - Шрифты — `C:\Windows\Fonts`, `HKCU`/`HKLM …\Fonts`; сглаживание — `HKCU\Control Panel\Desktop`;
   `FontThick` — `user.config` GoLabel 2.1.9558.30383 (значения нет → по умолчанию 0).
