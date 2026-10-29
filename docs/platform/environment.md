@@ -9,7 +9,7 @@
 | Пароль `gga1c_app` / root MySQL | `C:\GGA1C\mysql-app.txt`, `mysql-root.txt` |
 | Ключ шифрования настроек | `C:\GGA1C\stringencryption.key` |
 | Сертификат стенда | `C:\GGA1C\tls\` |
-| ~~Выгрузка CSV для GoLabel~~ — убрано 2026-10-29 | была `C:\GGA1C\labels\<папка>\labels.csv` (`Labels:ExportRoot`); папка на диске оставлена |
+| ~~Выгрузка CSV для GoLabel~~ — убрано 2026-10-29 | была `C:\GGA1C\labels\<папка>\labels.csv` (`Labels:ExportRoot`); папка удалена 29.10 по решению пользователя |
 | Значок сайта (П16) | `C:\GGA1C\branding\site-icon.(png|svg|ico)` (`Branding:Folder`; нет файла — значок из сборки) |
 | Файлы шаблонов печати (П9) | `C:\GGA1C\templates\<guid>.ezpx|.pdf` (`Templates:Folder`; в базе — только ссылка; потом — сервис «ФАЙЛ» на NAS) |
 | Бэкапы | `C:\GGA1C\backup\` |

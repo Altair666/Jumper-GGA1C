@@ -359,6 +359,11 @@ public class SyncBlazorModule : AbpModule
     {
         await GGA1C.Sync.Blazor.Login.KeycloakLoginScheme.RegisterAsync(context.ServiceProvider);
 
+        // БАГ-1.2: пароли логинов печати в кэш MySQL — один раз при старте и по событию запуска
+        // службы MySQL (журнал System, 7036), без опроса. Безвредно и для второго экземпляра:
+        // это только вход логинами по TLS. Выключается PrintLogins:CacheWarmup=false.
+        context.ServiceProvider.GetRequiredService<GGA1C.Sync.Blazor.Printing.MySqlStartWatcher>().Start();
+
         // Второй экземпляр хаба для отладки (свой worktree, общая база) не должен сверять,
         // синхронизировать и прибирать сессии GoLabel параллельно с живым:
         // Workers__Enabled=false.
@@ -378,9 +383,6 @@ public class SyncBlazorModule : AbpModule
         // GoLabel II на каждое обновление открывает новое подключение и прежнее не
         // закрывает - прибираем за ним, иначе на несколько рабочих мест упрёмся в
         // max_connections.
-        // Он же кладёт в кэш MySQL пароли логинов печати: на первом тике (сразу при старте
-        // хаба) и после каждого перезапуска MySQL (по Uptime) - иначе GoLabel не входит
-        // (БАГ-1.1, см. PrintLoginCacheWarmer).
         await context.AddBackgroundWorkerAsync<GGA1C.Sync.Labels.PrintConnectionWorker>();
     }
 }

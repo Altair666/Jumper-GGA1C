@@ -8,8 +8,8 @@ using Volo.Abp.Uow;
 namespace GGA1C.Sync.Labels;
 
 /// <summary>
-/// Кладёт в кэш MySQL пароли всех логинов печати — при старте хаба и после перезапуска MySQL
-/// (вызывает <see cref="PrintConnectionWorker"/>, решение — <see cref="MySqlRestartDetector"/>).
+/// Кладёт в кэш MySQL пароли всех логинов печати — при старте хаба и по событию запуска службы
+/// MySQL (БАГ-1.2, MySqlStartWatcher в Blazor: событие 7036 журнала System, без опроса).
 ///
 /// Без этого после перезапуска MySQL GoLabel II не входит в базу вообще: он подключается
 /// с <c>SslMode=none</c>, а <c>caching_sha2_password</c> без TLS пускает только по кэшу
@@ -35,8 +35,8 @@ public class PrintLoginCacheWarmer : ITransientDependency
         _log = log;
     }
 
-    /// <summary>Возвращает, скольким логинам удалось войти.</summary>
-    public async Task<int> WarmAllAsync()
+    /// <summary>Скольким логинам удалось войти и сколько их было.</summary>
+    public async Task<PrintLoginWarmResult> WarmAllAsync()
     {
         var targets = new List<(string Login, string Password)>();
 
@@ -82,6 +82,9 @@ public class PrintLoginCacheWarmer : ITransientDependency
         _log.LogInformation("Пароли логинов печати в кэше MySQL: {Warmed} из {Total}",
             warmed, targets.Count);
 
-        return warmed;
+        return new PrintLoginWarmResult(warmed, targets.Count);
     }
 }
+
+/// <summary>Итог прогрева: вошли <see cref="Warmed"/> логинов из <see cref="Total"/>.</summary>
+public record PrintLoginWarmResult(int Warmed, int Total);
