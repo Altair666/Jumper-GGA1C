@@ -43,8 +43,33 @@ public sealed partial class EzplJob
     /// <summary>Печать из базы (Print(records)): у шаблона есть источник данных.</summary>
     public bool FromRecords => !string.Equals(Label.DataBaseFormat, "None", StringComparison.Ordinal);
 
-    /// <summary>Всё задание целиком — байты, которые GoLabel отправил бы в принтер.</summary>
-    public byte[] Build()
+    /// <summary>
+    /// Всё задание целиком — байты, которые GoLabel отправил бы в принтер. Числа в командах
+    /// не зависят от культуры потока: сборка идёт под инвариантной культурой (GoLabel на стенде —
+    /// ru-RU, в командах у него только целые и float через точку).
+    /// </summary>
+    public byte[] Build() => WithInvariantCulture(BuildCore);
+
+    /// <summary>Шапка — всё до первой наклейки (^L или, при печати из базы, ^C).</summary>
+    public byte[] BuildHeader() => WithInvariantCulture(BuildHeaderCore);
+
+    private static byte[] WithInvariantCulture(Func<byte[]> build)
+    {
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        var uiCulture = System.Globalization.CultureInfo.CurrentUICulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            return build();
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+            System.Globalization.CultureInfo.CurrentUICulture = uiCulture;
+        }
+    }
+
+    private byte[] BuildCore()
     {
         var output = new EzplWriter();
         Prepare();
@@ -66,8 +91,7 @@ public sealed partial class EzplJob
         return output.ToArray();
     }
 
-    /// <summary>Шапка — всё до первой наклейки (^L или, при печати из базы, ^C).</summary>
-    public byte[] BuildHeader()
+    private byte[] BuildHeaderCore()
     {
         var output = new EzplWriter();
         // Значения счётчиков и переменных на шапку не влияют — без них.

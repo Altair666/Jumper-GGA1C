@@ -45,6 +45,15 @@ public sealed class GoldenTheoryAttribute : TheoryAttribute
     }
 }
 
+/// <summary>Fact по эталонам; пропускается с понятным сообщением, если эталонов нет.</summary>
+public sealed class GoldenFactAttribute : FactAttribute
+{
+    public GoldenFactAttribute()
+    {
+        Skip = Golden.SkipReason;
+    }
+}
+
 /// <summary>
 /// Проверяет раскладку эталонов (README.md): у каждого есть шаблон и байты GoLabel, а учётные
 /// данные базы из шаблона вычищены.

@@ -183,6 +183,75 @@ public class GoLabelPortTests
         }
     }
 
+    /// <summary>
+    /// Шаг 7: задание не зависит от культуры потока — ru-RU (стенд), en-US и sv-SE (минус U+2212,
+    /// запятая в дробях) дают те же байты.
+    /// </summary>
+    [GoldenTheory]
+    [MemberData(nameof(CommandGoldens))]
+    public void Bytes_do_not_depend_on_thread_culture(string name)
+    {
+        var reference = BuildWithRasters(name);
+        var saved = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            foreach (var culture in new[] { "ru-RU", "en-US", "sv-SE" })
+            {
+                System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(culture);
+                BuildWithRasters(name).SequenceEqual(reference).ShouldBeTrue($"{name}: другие байты при культуре {culture}");
+                System.Globalization.CultureInfo.CurrentCulture.Name.ShouldBe(culture, "сборка должна вернуть культуру потока");
+            }
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = saved;
+        }
+    }
+
+    /// <summary>
+    /// Шаг 7: общего состояния между заданиями нет — все эталоны, собранные одновременно по
+    /// четыре раза в разных потоках, дают те же байты, что и по одному.
+    /// </summary>
+    [GoldenFact]
+    public void Parallel_jobs_give_same_bytes()
+    {
+        var names = Golden.Names.Except(FromDatabase).ToList();
+        var expected = names.ToDictionary(n => n, BuildWithRasters);
+        var work = names.SelectMany(n => Enumerable.Repeat(n, 4)).ToList();
+        var results = new System.Collections.Concurrent.ConcurrentBag<(string Name, byte[] Bytes)>();
+        Parallel.ForEach(work, new ParallelOptions { MaxDegreeOfParallelism = 8 }, n => results.Add((n, BuildWithRasters(n))));
+        results.Count.ShouldBe(work.Count);
+        foreach (var (n, bytes) in results)
+        {
+            bytes.SequenceEqual(expected[n]).ShouldBeTrue($"{n}: параллельная сборка дала другие байты");
+        }
+    }
+
+    /// <summary>
+    /// Отрицательное смещение сверху (~Q-5) при культуре sv-SE: её знак минуса — U+2212, а
+    /// принтеру нужен ASCII «-». Без инвариантной культуры в EzplJob тест падает.
+    /// </summary>
+    [GoldenFact]
+    public void Negative_numbers_use_ascii_minus_under_any_culture()
+    {
+        var template = LoadTemplate("sample2");
+        template.Setup.TopMargin = -5;
+        var saved = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("sv-SE");
+            string header = Encoding.UTF8.GetString(new EzplJob(template, LoadValues("sample2")).BuildHeader());
+            header.ShouldContain("~Q-5\r\n");
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = saved;
+        }
+    }
+
+    private static byte[] BuildWithRasters(string name) =>
+        new EzplJob(LoadTemplate(name), LoadValues(name), new GoLabel.Raster.GdiRasterRenderer()).Build();
+
     [Fact]
     public void Serial_counter_steps_like_golabel()
     {
