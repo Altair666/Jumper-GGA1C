@@ -198,8 +198,8 @@ public partial class Labels
     private async Task DeleteFolderAsync(BufferContentsDto buffer)
     {
         var confirmed = await Message.Confirm(
-            $"Удалить папку «{buffer.Slug}» вместе с файлом? Учётной записи у неё нет, " +
-            $"этикеток внутри: {buffer.RowCount}.");
+            $"Удалить строки «{buffer.Slug}»? Учётной записи у них нет, " +
+            $"этикеток: {buffer.RowCount}.");
 
         if (!confirmed)
         {
@@ -211,7 +211,7 @@ public partial class Labels
         {
             await ClientsAppService.DeleteBufferFolderAsync(buffer.Slug);
             await LoadBuffersAsync();
-            await Notify.Success("Папка удалена");
+            await Notify.Success("Строки удалены");
         }
         finally
         {

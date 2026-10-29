@@ -11,19 +11,17 @@ namespace GGA1C.Sync.Labels;
 /// Буфер этикеток поверх таблицы <see cref="LabelRow"/> в базе хаба.
 ///
 /// Отбор везде идёт по <see cref="LabelRow.Slug"/>, то есть по учётке: замена буфера одного
-/// оператора не задевает партию другого — ровно то, ради чего раньше держали отдельный файл
-/// на человека. Разница в том, что теперь это проверяет ещё и СУБД: GoLabel II читает не
+/// оператора не задевает партию другого. Это проверяет ещё и СУБД: GoLabel II читает не
 /// таблицу, а представление, отбирающее строки по логину, с которым он подключился.
+/// Выгрузки в CSV больше нет (убрана 2026-10-29, решение пользователя).
 /// </summary>
 public class LabelsStore : DomainService, ILabelsStore
 {
     private readonly IRepository<LabelRow, long> _rows;
-    private readonly LabelsCsvExport _csv;
 
-    public LabelsStore(IRepository<LabelRow, long> rows, LabelsCsvExport csv)
+    public LabelsStore(IRepository<LabelRow, long> rows)
     {
         _rows = rows;
-        _csv = csv;
     }
 
     public async Task<int> CountAsync(string slug)
@@ -85,8 +83,6 @@ public class LabelsStore : DomainService, ILabelsStore
             await _rows.InsertManyAsync(toInsert, autoSave: true);
         }
 
-        await ExportAsync(slug);
-
         return list.Count;
     }
 
@@ -103,14 +99,11 @@ public class LabelsStore : DomainService, ILabelsStore
             return row;
         }).ToList();
 
-        // autoSave обязателен: выгрузка в CSV читает те же строки из базы, а без
-        // сохранения они ещё висят в единице работы, и в файл попадал один заголовок.
+        // autoSave: GoLabel читает строки через представление my_labels другим подключением.
         if (rows.Count > 0)
         {
             await _rows.InsertManyAsync(rows, autoSave: true);
         }
-
-        await ExportAsync(slug);
 
         return rows.Count;
     }
@@ -125,7 +118,6 @@ public class LabelsStore : DomainService, ILabelsStore
         }
 
         await _rows.DeleteAsync(row, autoSave: true);
-        await ExportAsync(slug);
 
         return true;
     }
@@ -134,18 +126,8 @@ public class LabelsStore : DomainService, ILabelsStore
     {
         var count = await CountAsync(slug);
         await _rows.DeleteDirectAsync(x => x.Slug == slug);
-        await ExportAsync(slug);
 
         return count;
-    }
-
-    /// <summary>
-    /// Переписывает файл для GoLabel целиком. Делается после каждой правки буфера: человек
-    /// на рабочем месте не должен ничего обновлять руками - он просто печатает.
-    /// </summary>
-    private async Task ExportAsync(string slug)
-    {
-        _csv.Write(slug, await GetAllAsync(slug));
     }
 
     public async Task<List<LabelsBufferInfo>> GetBuffersAsync()
