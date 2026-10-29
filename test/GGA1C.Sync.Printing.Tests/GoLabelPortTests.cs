@@ -85,40 +85,31 @@ public class GoLabelPortTests
     public const double ImageToleranceShare = 0.005;
 
     /// <summary>
-    /// Зачёт с допуском (решение пользователя): строго байт в байт всё, кроме растров Q из
-    /// объектов Image — у них совпадают заголовок Q, а точек мимо не больше 16 и не больше 0,5 %
-    /// (64-битный gdiplus.dll уменьшает логотипы бикубикой иначе, чем 32-битный у GoLabel).
-    /// Число точек мимо по каждой картинке пишется в вывод теста.
+    /// Допуск для растров текста шрифтом Windows (решение пользователя, вариант «Г»): на сколько
+    /// точек может разойтись ширина и высота рамки чёрных точек надписи.
     /// </summary>
+    public const int TextFrameToleranceDots = 2;
+
+    /// <summary>Объекты, которые рисуют текст шрифтом Windows растром Q.</summary>
+    public static readonly string[] WindowTextTypes = ["GdiWindowTextBox", "WindowTextBox"];
+
     /// <summary>
-    /// Не проходят зачёт: строку шрифтом Impact (GdiWindowTextBox) 64-битный gdiplus.dll рисует
-    /// иначе, чем 32-битный у GoLabel (PowerShell x86 — как эталон, x64 — как порт; 5888 точек).
-    /// Допуск на текст пользователь не давал — открытый вопрос (p5-plan.md).
+    /// Зачёт с допуском (решения пользователя): строго байт в байт всё, кроме растров Q
+    /// (заголовок Q — координаты, ширина в байтах, высота — совпадает всегда):
+    /// <list type="bullet">
+    /// <item>Image («В») — точек мимо не больше 16 и не больше 0,5 % (64-битный gdiplus.dll
+    /// уменьшает логотипы бикубикой иначе, чем 32-битный у GoLabel);</item>
+    /// <item>текст шрифтом Windows («Г», GdiWindowTextBox/WindowTextBox) — ширина и высота рамки
+    /// чёрных точек надписи расходятся не больше чем на 2 точки (строку Impact 64-битный
+    /// gdiplus.dll рисует на точку уже).</item>
+    /// </list>
+    /// Число точек мимо по каждому такому растру пишется в вывод теста.
     /// </summary>
-    public static readonly Dictionary<string, string> OpenGdiPlus64Text = new()
-    {
-        ["gkv-avto-product"] = "Q345,24,",
-        ["gkv-avto-product-ru-korpus"] = "Q378,9,",
-    };
-
-    public static TheoryData<string> ToleranceGoldens() => Data(Golden.Names.Except(FromDatabase).Except(OpenGdiPlus64Text.Keys));
-
-    public static TheoryData<string> OpenGoldens() => Data(Golden.Names.Intersect(OpenGdiPlus64Text.Keys));
+    public static TheoryData<string> ToleranceGoldens() => Data(Golden.Names.Except(FromDatabase));
 
     [GoldenTheory]
     [MemberData(nameof(ToleranceGoldens))]
-    public void Bytes_match_golden_with_image_tolerance(string name) => CompareWithImageTolerance(name, ignoredRaster: null);
-
-    /// <summary>
-    /// Не зачёт, а страховка от регресса для <see cref="OpenGdiPlus64Text"/>: то же сравнение,
-    /// но растр строки Impact пропускается (его число точек мимо — в выводе теста).
-    /// </summary>
-    [GoldenTheory]
-    [MemberData(nameof(OpenGoldens))]
-    public void Open_gdiplus64_text_goldens_match_except_that_raster(string name) =>
-        CompareWithImageTolerance(name, OpenGdiPlus64Text[name]);
-
-    private void CompareWithImageTolerance(string name, string? ignoredRaster)
+    public void Bytes_match_golden_with_raster_tolerance(string name)
     {
         var golden = EzplDump.Split(GoldenBytes(name));
         var renderer = new TaggingRenderer(new GoLabel.Raster.GdiRasterRenderer());
@@ -128,24 +119,21 @@ public class GoLabelPortTests
         var failures = new List<string>();
         for (int i = 0; i < golden.Count; i++)
         {
-            bool image = renderer.Types.TryGetValue(actual[i].Offset, out var type) && type == "Image";
+            renderer.Types.TryGetValue(actual[i].Offset, out var type);
+            bool image = type == "Image";
+            bool windowText = type != null && WindowTextTypes.Contains(type);
+            bool sameRasterHeader = golden[i].IsRaster && actual[i].Text == golden[i].Text && golden[i].Bytes.Length == actual[i].Bytes.Length;
             if (golden[i].Bytes.AsSpan().SequenceEqual(actual[i].Bytes))
             {
-                if (image)
+                if (image || windowText)
                 {
-                    _output.WriteLine($"{name} #{i} {golden[i].Text} (Image): 0 точек мимо");
+                    _output.WriteLine($"{name} #{i} {golden[i].Text} ({type}): 0 точек мимо");
                 }
                 continue;
             }
-            if (ignoredRaster != null && golden[i].Text.StartsWith(ignoredRaster, StringComparison.Ordinal) && actual[i].Text == golden[i].Text
-                && golden[i].Bytes.Length == actual[i].Bytes.Length)
+            if (image && sameRasterHeader)
             {
-                _output.WriteLine($"{name} #{i} {golden[i].Text} ({type}): {golden[i].Bytes.Zip(actual[i].Bytes).Sum(p => System.Numerics.BitOperations.PopCount((uint)(p.First ^ p.Second)))} точек мимо — открытый вопрос 32/64 бит");
-                continue;
-            }
-            if (image && golden[i].IsRaster && actual[i].Text == golden[i].Text && golden[i].Bytes.Length == actual[i].Bytes.Length)
-            {
-                int dots = golden[i].Bytes.Zip(actual[i].Bytes).Sum(p => System.Numerics.BitOperations.PopCount((uint)(p.First ^ p.Second)));
+                int dots = DotsOff(golden[i], actual[i]);
                 string[] header = golden[i].Text[1..].Split(',');
                 int total = int.Parse(header[2]) * 8 * int.Parse(header[3]);
                 _output.WriteLine($"{name} #{i} {golden[i].Text} (Image): {dots} точек мимо из {total}");
@@ -156,12 +144,64 @@ public class GoLabelPortTests
                 failures.Add($"#{i} {golden[i].Text} (Image): {dots} точек мимо — больше допуска");
                 continue;
             }
+            if (windowText && sameRasterHeader)
+            {
+                var g = InkFrame(golden[i]);
+                var a = InkFrame(actual[i]);
+                int dots = DotsOff(golden[i], actual[i]);
+                _output.WriteLine($"{name} #{i} {golden[i].Text} ({type}): {dots} точек мимо; надпись эталона {g.Width}×{g.Height}, порта {a.Width}×{a.Height}");
+                if (Math.Abs(g.Width - a.Width) <= TextFrameToleranceDots && Math.Abs(g.Height - a.Height) <= TextFrameToleranceDots)
+                {
+                    continue;
+                }
+                failures.Add($"#{i} {golden[i].Text} ({type}): надпись {a.Width}×{a.Height} против {g.Width}×{g.Height} у эталона — больше допуска");
+                continue;
+            }
             failures.Add($"#{i} ({type ?? "команда"}): эталон «{golden[i].Text}», порт «{actual[i].Text}»"
-                + (golden[i].IsRaster && golden[i].Bytes.Length == actual[i].Bytes.Length
-                    ? $", точек мимо {golden[i].Bytes.Zip(actual[i].Bytes).Sum(p => System.Numerics.BitOperations.PopCount((uint)(p.First ^ p.Second)))}"
-                    : ""));
+                + (sameRasterHeader ? $", точек мимо {DotsOff(golden[i], actual[i])}" : ""));
         }
         failures.ShouldBeEmpty($"{name}: расходится сверх допуска");
+    }
+
+    private static int DotsOff(EzplDump.Command golden, EzplDump.Command actual) =>
+        golden.Bytes.Zip(actual.Bytes).Sum(p => System.Numerics.BitOperations.PopCount((uint)(p.First ^ p.Second)));
+
+    /// <summary>
+    /// Рамка чёрных точек растра Q (чёрная точка = 1, старший бит — левая точка): ширина и высота
+    /// от первой до последней чёрной точки; без чёрных точек — 0×0.
+    /// </summary>
+    internal static (int Width, int Height) InkFrame(EzplDump.Command raster)
+    {
+        string[] header = raster.Text[1..].Split(',');
+        int rowBytes = int.Parse(header[2]);
+        int rows = int.Parse(header[3]);
+        int start = raster.Text.Length + 1;
+        int minX = int.MaxValue, maxX = -1, minY = int.MaxValue, maxY = -1;
+        for (int y = 0; y < rows; y++)
+        {
+            for (int b = 0; b < rowBytes; b++)
+            {
+                byte v = raster.Bytes[start + y * rowBytes + b];
+                if (v == 0)
+                {
+                    continue;
+                }
+                minY = Math.Min(minY, y);
+                maxY = y;
+                minX = Math.Min(minX, b * 8 + System.Numerics.BitOperations.LeadingZeroCount((uint)v) - 24);
+                maxX = Math.Max(maxX, b * 8 + 7 - System.Numerics.BitOperations.TrailingZeroCount(v));
+            }
+        }
+        return maxX < 0 ? (0, 0) : (maxX - minX + 1, maxY - minY + 1);
+    }
+
+    [Fact]
+    public void Ink_frame_counts_from_first_to_last_black_dot()
+    {
+        // Q0,0,2,3: строка 1 — точки 3..9 (байты 0x1F 0xC0), строки 0 и 2 пустые.
+        byte[] bytes = [.. Encoding.ASCII.GetBytes("Q0,0,2,3"), 10, 0, 0, 0x1F, 0xC0, 0, 0, 13, 10];
+        var raster = EzplDump.Split(bytes).Single();
+        InkFrame(raster).ShouldBe((7, 1));
     }
 
     private readonly Xunit.Abstractions.ITestOutputHelper _output;
