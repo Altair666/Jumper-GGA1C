@@ -263,7 +263,13 @@ MySQL — предупреждение «MySQL перезапущен (Uptime N 
 хабе GoLabel входит без ручных действий в течение одного тика работника (не проверено вживую).
 
 ### П7.2. Учётка 1С в карточке человека
-**Статус:** не начато (решение пользователя 2026-10-29)
+**Статус:** заблокировано — ждёт согласия на миграцию БД (2026-10-29). Без миграции нельзя: учётные
+данные Altium и PDM — столбцы `AppLabelClients` (`LabelClient` — `AuditedEntity<int>`, без
+`ExtraProperties`), других мест под них нет. **Нужна миграция `OneCCredentials`:** в `AppLabelClients`
+два столбца, оба `NULL` — `OneCLogin varchar(128)` и `OneCPasswordEncrypted varchar(512)` (как у
+Altium/PDM); данные не переносятся, откат — удаление столбцов. Дальше по коду: `LabelClient`,
+`AccountCredentials`, `AccountCredentialsDto`, `AccountCredentialsEditor`, `LabelClientStore`,
+`SyncDbContext`, `Labels.razor`, `MyCredentials.razor`, тест `MyCredentialsTests`.
 **Цель:** к учётным данным Altium и SOLIDWORKS PDM добавить логин и пароль 1С — в админской карточке
 и в «Моих учётных данных», с теми же правилами секретов. От имени человека хаб действует во
 внешних системах его учётными данными (PDM не умеет Keycloak).
