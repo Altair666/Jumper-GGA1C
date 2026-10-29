@@ -224,8 +224,14 @@ public sealed partial class EzplJob
     }
 
     /// <summary>
-    /// Шаг строки (Text.advX/advY из DrawInternalTTFont): высота строки шрифта Windows из FontCmd
-    /// (Font.Height, GDI+) размером round(dpi/72 · FontHeight) точек.
+    /// Шаг строки — Text.advX/advY, которые GoLabel считает при отрисовке:
+    /// <list type="bullet">
+    /// <item>TrueType_Font (DrawInternalTTFont): Font.Height шрифта Windows из FontCmd размером
+    /// round(dpi/72 · FontHeight) точек;</item>
+    /// <item>BuiltIn_Bitmap_Font (DrawInternalBMPFontEZPL): (int)(Font.Height · FontHeight), где
+    /// шрифт — экранный образ встроенного шрифта принтера из таблиц IBfonts/IBfonts300
+    /// (Text.cs:3114–3155), FontHeight — множитель высоты.</item>
+    /// </list>
     /// </summary>
     private (int X, int Y) LineAdvance(EzpxText t)
     {
@@ -233,13 +239,22 @@ public sealed partial class EzplJob
         {
             return cached;
         }
-        if (t.FontType != FontSource.TrueType_Font || t.FontId is FontIDs.Default or >= FontIDs.BuiltIn_1 || !t.BTrueType)
+        int h;
+        if (t.FontType == FontSource.BuiltIn_Bitmap_Font)
+        {
+            var (family, pixels) = BuiltInScreenFont(t.FontId);
+            h = (int)(GdiPlusFonts.FontHeight(family, 0, pixels) * t.FontHeight);
+        }
+        else if (t.FontType == FontSource.TrueType_Font && t.FontId is not (FontIDs.Default or >= FontIDs.BuiltIn_1) && t.BTrueType)
+        {
+            int emPixels = (int)Math.Round(Dpi / 72f * t.FontHeight, 0);
+            int style = (t.Bold ? 1 : 0) | (t.Italic ? 2 : 0) | (t.Underline ? 4 : 0) | (t.Strikeout ? 8 : 0);
+            h = GdiPlusFonts.FontHeight(t.FontFamily, style, emPixels);
+        }
+        else
         {
             throw new NotSupportedException("Многострочный текст этим шрифтом принтера (шаг строки) не перенесён.");
         }
-        int emPixels = (int)Math.Round(Dpi / 72f * t.FontHeight, 0);
-        int style = (t.Bold ? 1 : 0) | (t.Italic ? 2 : 0) | (t.Underline ? 4 : 0) | (t.Strikeout ? 8 : 0);
-        int h = GdiPlusFonts.FontHeight(t.FontFamily, style, emPixels);
         (int X, int Y) advance = t.Direction switch
         {
             Orientation.Angle0 => (0, h),
@@ -250,6 +265,35 @@ public sealed partial class EzplJob
         };
         _lineAdvance[t] = advance;
         return advance;
+    }
+
+    /// <summary>
+    /// Экранный образ встроенного шрифта принтера (Text.cs: G6P…G36P, G16x26; IBfonts — до 250 dpi,
+    /// FontId не дальше I; IBfonts300 — иначе). Шрифт — пиксельный (GraphicsUnit.Pixel), обычный.
+    /// </summary>
+    private (string Family, float Pixels) BuiltInScreenFont(FontIDs id)
+    {
+        bool lowDpi = Dpi < 250f;
+        int index = (int)id;
+        if (lowDpi && index > (int)FontIDs.I)
+        {
+            index = (int)FontIDs.I;
+        }
+        return index switch
+        {
+            0 or 4 => ("Arial", 33f),
+            1 => ("Arial", 16f),
+            2 => ("Arial", 22f),
+            3 => ("Arial", 27f),
+            5 => ("Arial", 38f),
+            6 => ("Arial", 50f),
+            7 => ("Arial", 66f),
+            8 => ("Arial", 83f),
+            9 => lowDpi ? ("Courier New", 26f) : ("Arial", 100f),
+            10 => ("Courier New", 26f),
+            // GoLabel здесь падает (индекс вне таблицы из 11 шрифтов).
+            _ => throw new NotSupportedException($"Встроенный шрифт {id}: в GoLabel нет его экранного образа."),
+        };
     }
 
     /// <summary>BarCode.PrintMyToString → Graphic.PrintMyToString(x, y) для штрихкода командой.</summary>
