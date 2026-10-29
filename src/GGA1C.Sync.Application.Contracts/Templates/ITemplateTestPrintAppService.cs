@@ -39,6 +39,12 @@ public class TestPrintInput
     public string PrinterHost { get; set; } = TestPrintDefaults.Host;
 
     public int PrinterPort { get; set; } = TestPrintDefaults.Port;
+
+    /// <summary>
+    /// Принтер понимает суффиксы выравнивания P2/P3 (БАГ-3). Нет — порт сам ставит начало строк
+    /// по центру/вправо (ZX430i v2.110); да — как GoLabel, байт в байт.
+    /// </summary>
+    public bool PrinterAlignsText { get; set; }
 }
 
 public static class TestPrintDefaults

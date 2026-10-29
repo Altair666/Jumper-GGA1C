@@ -155,14 +155,16 @@ public sealed partial class EzplJob
             }
             if (t.Name.Length > 0 && t.Name[0] == 'A')
             {
-                AppendTextCommand(sb, t, x, y, line, dotsPerPoint);
+                bool selfAlign = SelfAligns(t);
+                var (ax, ay) = selfAlign ? AlignedStart(t, x, y, line, dotsPerPoint) : (x, y);
+                AppendTextCommand(sb, t, ax, ay, line, dotsPerPoint, alignSuffix: !selfAlign);
             }
             lineNo++;
         }
         return sb.ToString();
     }
 
-    private static void AppendTextCommand(StringBuilder sb, EzpxText t, int x, int y, string line, float dotsPerPoint)
+    private static void AppendTextCommand(StringBuilder sb, EzpxText t, int x, int y, string line, float dotsPerPoint, bool alignSuffix)
     {
         string common = "," + x + "," + y + ",";
         switch (t.FontType)
@@ -174,7 +176,7 @@ public sealed partial class EzplJob
                 int width = (int)Math.Round(dotsPerPoint * t.FontWidth * 1f, 0);
                 string style = (t.Bold ? "B" : "") + (t.Italic ? "T" : "") + (t.Strikeout ? "S" : "") + (t.Underline ? "U" : "");
                 sb.Append("AT" + FontIdSymbol[(int)t.FontId] + common + width + "," + height + "," + Fmt.F(t.TextSpace) + "," + (int)t.Direction + style);
-                AppendFlags(sb, t, utf8Flag: true);
+                AppendFlags(sb, t, utf8Flag: true, alignSuffix);
                 sb.Append("," + FontEncodeSymbol[(int)t.Encoding] + ",0," + line);
                 break;
             }
@@ -184,19 +186,19 @@ public sealed partial class EzplJob
                 string id = t.FontId != FontIDs.Default ? FontIdSymbol[(int)t.FontId] : "D";
                 string head = t.FontType == FontSource.BuiltIn_Bitmap_Font ? t.Name : "V";
                 sb.Append(head + id + common + (int)t.FontWidth + "," + (int)t.FontHeight + "," + Fmt.F(t.TextSpace) + "," + (int)t.Direction);
-                AppendFlags(sb, t, utf8Flag: true);
+                AppendFlags(sb, t, utf8Flag: true, alignSuffix);
                 sb.Append("," + line);
                 break;
             }
             default:
                 sb.Append(FontTypeSymbol[(int)t.FontType] + common + (int)t.FontWidth + "," + (int)t.FontHeight + "," + Fmt.F(t.TextSpace) + "," + (int)t.Direction);
-                AppendFlags(sb, t, utf8Flag: false);
+                AppendFlags(sb, t, utf8Flag: false, alignSuffix);
                 sb.Append("," + line);
                 break;
         }
     }
 
-    private static void AppendFlags(StringBuilder sb, EzpxText t, bool utf8Flag)
+    private static void AppendFlags(StringBuilder sb, EzpxText t, bool utf8Flag, bool alignSuffix)
     {
         if (t.IsInverse)
         {
@@ -210,7 +212,7 @@ public sealed partial class EzplJob
         {
             sb.Append('M');
         }
-        if (t.Direction < Orientation.Angle0_Vertical)
+        if (alignSuffix && t.Direction < Orientation.Angle0_Vertical)
         {
             if (t.TextAlign == TextAlignment.Center)
             {
@@ -220,6 +222,65 @@ public sealed partial class EzplJob
             {
                 sb.Append("P3");
             }
+        }
+    }
+
+    /// <summary>
+    /// БАГ-3, вариант А: выравнивает ли порт текст сам. GoLabel шлёт для центра/вправо суффикс
+    /// P2/P3 и точку выравнивания вместо начала строки; ZX430i (прошивка v2.110) суффикс
+    /// игнорирует и печатает от точки как от начала. Пока принтер не понимает выравнивание
+    /// (<see cref="PrintValues.PrinterAlignsText"/> = false), порт считает начало строки сам и
+    /// суффикс не шлёт.
+    /// </summary>
+    private bool SelfAligns(EzpxText t) =>
+        !_values.PrinterAlignsText
+        && t.Direction < Orientation.Angle0_Vertical
+        && t.TextAlign is TextAlignment.Center or TextAlignment.Right;
+
+    /// <summary>
+    /// Начало строки по точке выравнивания (x, y) и ширине строки шрифтом принтера: по центру —
+    /// на полширины назад по направлению письма, вправо — на всю ширину. Направление письма:
+    /// 0° — +x, 90° — +y, 180° — −x, 270° — −y (как шаг строк и раскладка GoLabel).
+    /// </summary>
+    private (int X, int Y) AlignedStart(EzpxText t, int x, int y, string line, float dotsPerPoint)
+    {
+        float width = LineWidth(t, line, dotsPerPoint);
+        int back = t.TextAlign == TextAlignment.Center
+            ? (int)Math.Round(width / 2f, 0, MidpointRounding.AwayFromZero)
+            : (int)Math.Round(width, 0, MidpointRounding.AwayFromZero);
+        return t.Direction switch
+        {
+            Orientation.Angle0 => (x - back, y),
+            Orientation.Angle90 => (x, y - back),
+            Orientation.Angle180 => (x + back, y),
+            _ => (x, y + back),
+        };
+    }
+
+    /// <summary>Ширина строки в точках так, как её напечатает принтер (см. PrinterTextWidth).</summary>
+    private float LineWidth(EzpxText t, string line, float dotsPerPoint)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new NotSupportedException("Выравнивание текста принтера портом считается шрифтами Windows (GDI+).");
+        }
+        switch (t.FontType)
+        {
+            case FontSource.TrueType_Font:
+            {
+                // Те же размеры, что уходят в команду AT: высота и ширина знака в точках.
+                float height = (float)Math.Round(dotsPerPoint * t.FontHeight, 0);
+                float width = (float)Math.Round(dotsPerPoint * t.FontWidth, 0);
+                var style = (t.Bold ? System.Drawing.FontStyle.Bold : 0) | (t.Italic ? System.Drawing.FontStyle.Italic : 0);
+                return PrinterTextWidth.Measure(t.FontFamily, style, height, height > 0 ? width / height : 1f, t.TextSpace, line);
+            }
+            case FontSource.BuiltIn_Bitmap_Font:
+            {
+                var (family, pixels) = BuiltInScreenFont(t.FontId);
+                return PrinterTextWidth.Measure(family, 0, pixels, (int)t.FontWidth, t.TextSpace, line);
+            }
+            default:
+                throw new NotSupportedException($"Выравнивание портом для шрифта {t.FontType} не перенесено (принтер без P2/P3).");
         }
     }
 

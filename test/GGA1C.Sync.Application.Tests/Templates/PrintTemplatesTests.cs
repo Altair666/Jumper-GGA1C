@@ -142,7 +142,8 @@ public abstract class PrintTemplatesTests<TStartupModule> : SyncApplicationTestB
         }
         var (template, clientId, rowIds) = await SeedGoldenAsync(dir);
 
-        var built = await _testPrint.BuildAsync(new TestPrintInput { TemplateId = template.Id, ClientId = clientId, RowIds = rowIds });
+        // Байт в байт с GoLabel — в режиме «принтер понимает P2/P3».
+        var built = await _testPrint.BuildAsync(new TestPrintInput { TemplateId = template.Id, ClientId = clientId, RowIds = rowIds, PrinterAlignsText = true });
         built.Ok.ShouldBeTrue(built.Error);
         built.UsesDatabase.ShouldBeTrue();
         built.Labels.ShouldBe(4);
@@ -163,6 +164,7 @@ public abstract class PrintTemplatesTests<TStartupModule> : SyncApplicationTestB
         var printed = await _testPrint.PrintAsync(new TestPrintInput
         {
             TemplateId = template.Id, ClientId = clientId, RowIds = rowIds, PrinterHost = "127.0.0.1", PrinterPort = port,
+            PrinterAlignsText = true,
         });
         printed.Sent.ShouldBeTrue(printed.Error);
         var bytes = await received.WaitAsync(TimeSpan.FromSeconds(30));

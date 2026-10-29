@@ -346,6 +346,8 @@ public class GoLabelPortTests
             Serials = serials,
             Variables = variables,
             SerialDefaultsFromTemplate = true,
+            // Сверка с GoLabel байт в байт — режим «принтер понимает P2/P3», как шлёт GoLabel.
+            PrinterAlignsText = true,
             Records = LoadRecords(name),
             Clock = new FixedClock(CaptureTime),
         };

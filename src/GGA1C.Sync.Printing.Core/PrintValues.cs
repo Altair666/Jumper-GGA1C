@@ -26,6 +26,14 @@ public sealed class PrintValues
     /// </summary>
     public IReadOnlyList<IReadOnlyList<object?>>? Records { get; init; }
 
+    /// <summary>
+    /// Понимает ли принтер суффиксы выравнивания текста P2/P3 (БАГ-3). Нет (по умолчанию; ZX430i
+    /// v2.110 их игнорирует) — порт сам считает начало строки по ширине и шлёт текст без суффикса;
+    /// да — шлёт P2/P3 и точку выравнивания, байт в байт как GoLabel. Пока нет справочника
+    /// принтеров — параметр задания.
+    /// </summary>
+    public bool PrinterAlignsText { get; init; }
+
     /// <summary>Часы для даты и времени, которые печать подставляет сама.</summary>
     public TimeProvider Clock { get; init; } = TimeProvider.System;
 }

@@ -148,6 +148,7 @@ public class TemplateTestPrintAppService : SyncAppService, ITemplateTestPrintApp
             {
                 SerialDefaultsFromTemplate = true,
                 Records = records,
+                PrinterAlignsText = input.PrinterAlignsText,
             };
             using var templateStream = new MemoryStream(file, writable: false);
             byte[] bytes = new GoLabelDriver().Build(templateStream, values);

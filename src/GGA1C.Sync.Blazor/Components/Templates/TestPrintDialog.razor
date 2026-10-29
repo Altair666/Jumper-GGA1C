@@ -37,6 +37,9 @@
             </MudItem>
         </MudGrid>
 
+        <MudCheckBox T="bool" @bind-Value="PrinterAlignsText" Dense="true" Color="Color.Primary"
+                     Label="Принтер понимает выравнивание текста (P2/P3) — слать как GoLabel; иначе (ZX430i) хаб выравнивает сам" />
+
         @if (Source != null)
         {
             <MudTable Items="@Source.Rows" Dense="true" Hover="true" Class="mt-2" T="TestPrintRowDto"
@@ -104,6 +107,8 @@
 
     private bool Busy { get; set; }
 
+    private bool PrinterAlignsText { get; set; }
+
     private TestPrintBuildResultDto? Result { get; set; }
 
     protected override async Task OnInitializedAsync()
@@ -133,6 +138,7 @@
         RowIds = Source?.Rows.Where(Selected.Contains).Select(r => r.Id).ToList() ?? new(),
         PrinterHost = Host,
         PrinterPort = Port,
+        PrinterAlignsText = PrinterAlignsText,
     };
 
     private async Task BuildAsync()
