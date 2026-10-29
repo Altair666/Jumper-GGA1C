@@ -26,6 +26,12 @@ public sealed class GdiRasterRenderer : IRasterRenderer
             case "BarCode":
                 RenderBarCode((EzpxBarCode)request.Shape, request.OffsetX, request.OffsetY, request.Job, output);
                 break;
+            case "GdiWindowTextBox":
+                RenderGdiTextBox((EzpxRasterShape)request.Shape, request.OffsetX, request.OffsetY, request.Job, output);
+                break;
+            case "WindowTextBox":
+                RenderWindowTextBox((EzpxRasterShape)request.Shape, request.OffsetX, request.OffsetY, request.Job, output);
+                break;
             case "Ellipse":
                 RenderEllipse((EzpxRasterShape)request.Shape, request.OffsetX, request.OffsetY, output);
                 break;
@@ -106,6 +112,28 @@ public sealed class GdiRasterRenderer : IRasterRenderer
             }
         }
         Raster1Bit.WriteQ(output, (int)(x + shape.X), (int)(y + shape.Y), canvas);
+    }
+
+    /// <summary>GdiWindowTextBox.PrintMyToString(x, y).</summary>
+    private static void RenderGdiTextBox(EzpxRasterShape shape, float x, float y, EzplJob job, EzplWriter output)
+    {
+        string data = job.FillPrintingData(shape, bformat: false);
+        using var box = new TextBoxRaster(shape, job.Dpi).Render(data);
+        Raster1Bit.WriteQ(output, (int)Math.Round(x, 0) + shape.XInPixel, (int)Math.Round(y, 0) + shape.YInPixel, box);
+    }
+
+    /// <summary>WindowTextBox.PrintMyToString(x, y), без поворота.</summary>
+    private static void RenderWindowTextBox(EzpxRasterShape shape, float x, float y, EzplJob job, EzplWriter output)
+    {
+        job.FillPrintingData(shape, bformat: true);
+        string data = job.FillPrintingData(shape, bformat: false);
+        // WindowTextBox.Draw (её зовёт LinkedVar.UpdateLinkVariableData перед печатью) рисует при
+        // QLabel.ZoomRate = 0.1 (в командном режиме GoLabel его не меняет) и ставит ширину рамки
+        // (int)(W · 0.1) / 0.1: эталон gkv-avto-product — 428 → 420.
+        const float zoom = 0.1f;
+        float drawnWidth = (float)(int)((float)(int)shape.BoundRect.Width * zoom) / zoom;
+        using var text = new TextBoxRaster(shape, job.Dpi, window: true).Render(data, (int)drawnWidth);
+        Raster1Bit.WriteQ(output, (int)Math.Round(x, 0) + shape.XInPixel, (int)Math.Round(y, 0) + shape.YInPixel, text);
     }
 
     /// <summary>BarCode.PrintBmpBarcode: пустые данные — ничего не печатается.</summary>

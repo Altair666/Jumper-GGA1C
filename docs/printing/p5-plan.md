@@ -64,6 +64,11 @@
 5. **`gkv3-box-var-mysql`:** 4 тестовые строки `a.morozov@test.local` из `my_labels` стенда снять
    в `data.csv` папки эталона (вне git) — разрешено, читать учёткой приложения (пароль —
    `C:\GGA1C\mysql-app.txt`, в вывод не печатать).
+6. **Логотипы — вариант «В»: допуск, без x86-помощника и без перевода хаба в x86.** Правило
+   эталонных тестов: допуск **только** для растров `Q` из объектов `Image` — не больше 16 точек
+   мимо на картинку и не больше 0,5 % её точек; всё остальное строго байт в байт (команды,
+   заголовки `Q`, текст шрифтами Windows, Code39, эллипсы, линии). Тест пишет по каждой картинке
+   фактическое число точек мимо; эталоны без расхождений остаются «байт в байт».
 
 ### Что GoLabel берёт из системы (вопрос 3)
 
@@ -88,7 +93,21 @@ false). Сам GoLabel на рабочем месте с выключенным 
 | 2 | готов: цикл наклейки, две в ряд, счётчики `-S`, переменные `-V`, `Text` (`AT`/`A`/`V`), `QRectangle`, `Line`, штрихкод командой; ветка `PrintNornal` — отказ (в эталонах её нет) | `sample2`; команды при замаскированных `Q` — **14 из 14** (кроме `gkv3-box-var-mysql`) |
 | 3 | частично: `Raster1Bit`, `Image`, `Ellipse` (System.Drawing.Common 10.0.13) | + `gkv3-vm-product` |
 | 4 | готов для Code39 без поворота, подпись `TopAndLeft`/`BottomAndCenter`; дата ПК в данных штрихкода — шаг 5 | + `gkv1-vm-box`, `gkv3-vm-box` (итого **4 из 15**) |
-| 5–7 | не начаты | — |
+| 5 | готов: `GdiWindowTextBox` (перенос `WrapText`, межстрочный, подбор размера `Cal_FontSize`, `BoundingAlignment`), `WindowTextBox`, дата ПК в данных (`^D%y`, `^D±Y/M/Hnnnn`) от `TimeProvider` | с допуском `Image`: **12 из 14** (кроме печати из базы); не проходят 2 — строка Impact |
+| 6–7 | не начаты | — |
+
+**Шаг 5 — найдено.** (1) `WindowTextBox` перед печатью рисуется на экран (`Draw` из
+`LinkedVar.UpdateLinkVariableData`) при `QLabel.ZoomRate = 0.1` — в командном режиме GoLabel его не
+меняет — и ширина рамки становится `(int)(W · 0.1) / 0.1` (`gkv-avto-product`: 428 → 420, растр на
+байт уже). (2) Объект без атрибута `X`/`Y` (`[DefaultValue(0)]`) берёт положение из `BoundRect`
+(`gkv3-box`: `GdiWindowTextBox` с x = 0). (3) Текст `GlavkonGOST` всеми блоками и подписи Code39 с
+датой — 0 точек мимо. (4) **Строка `Impact` 11 pt («Лаборатория Микроприборов», `gkv-avto-product`,
+`gkv-avto-product-ru-korpus`) — 5888 точек мимо, и это снова разрядность `gdiplus.dll`:** PowerShell
+x86 рисует её как эталон (14868 чёрных точек, столбцы 0–597), x64 — как порт (14410, 0–595); от
+режима сглаживания не зависит, на 64 битах совпадает при размере +0.025 pt. Допуск решения 6 —
+только для `Image`, поэтому эти 2 эталона зачёт не проходят (тест-страховка сверяет у них всё,
+кроме этой строки). **Вопрос пользователю:** допуск для текста или иной путь.
+
 
 **Шаг 4 — раскладка Code39 (выведена по 11 растрам эталонов, декомпилят Neodynamic — только
 справка, он обфусцирован).** Ширина = сумма модулей Code39 (`*данные*`, узкий = `Narrow`, широкий =
@@ -99,9 +118,7 @@ false). Сам GoLabel на рабочем месте с выключенным 
 сверху, подпись по центру (ширина `MeasureString`) на `Height + Offset`. Совпало: `gkv1-vm-box`,
 `gkv3-vm-box` целиком, штрихкод `gkv3-vm-box-102x152` (подпись снизу) — 0 точек мимо.
 
-**Что осталось по шагам 5–7.** 5: `GdiWindowTextBox`/`WindowTextBox` (`myDraw2BmpTTFont`: размер
-`Size · dpi/96 + 0.5`, `WrapText`, межстрочный, выравнивание, `ClearTypeGridFit`) и `MyTimeDate` для
-даты ПК в данных штрихкода (`^D+Y0000`, `^D%y`) от `TimeProvider`. 6: печать из базы
+**Что осталось по шагам 6–7.** 6: печать из базы
 (`Print(records)`), снимок `data.csv` для `gkv3-box-var-mysql` ещё не снят. 7: обвязка для хаба.
 
 **Шаг строки многострочного `Text`** GoLabel берёт из `Font.Height` шрифта Windows из `FontCmd`
@@ -206,7 +223,7 @@ test/GGA1C.Sync.Printing.Tests       эталонные тесты: каждая
 | Растр текста (`GdiWindowTextBox`, `WindowTextBox`) | **почти как есть** + явный `TextRenderingHint.ClearTypeGridFit`; ветку `myDrawStringGDI` (Windows < 10) — выкинуть |
 | `BarCode` растром | **переписать**: свой Code39 + подпись `AntiAlias`/`GenericTypographic`; Neodynamic **не переносим** (запрещён); прочие символики — по мере появления в шаблонах |
 | `GlobalPrint` (GlobalInfo), `Program.cs` | взять только логику `InitLabel`, `CheckSerialPrompt`, `PrintJob_Execute` (удаление пустых), `UseNormalPrint` |
-| WinForms (`GlobalForm`, окна запроса, `RichTextBox`), EPL, `Trace.dll`/USB/COM, `SocketSDK`, BLE, весы, RFID, ECHO, `ClipperLib`, `MyWordArt`, `LoadOleDb*`, `LoadMySql` | **не переносим** (данные даёт хаб) |
+| WinForms (`GlobalForm`, окна запроса, `RichTextBox`), EPL, `Trace.dll` (исключена из проекта — только LPT/COM/USB), `SocketSDK`, BLE, весы, RFID, ECHO, `ClipperLib`, `MyWordArt`, `LoadOleDb*`, `LoadMySql` | **не переносим** (данные даёт хаб) |
 
 Код декомпилята переносится в `src/` впервые на этом шаге — с пометкой источника в заголовке
 файла (решение о лицензии — ниже).

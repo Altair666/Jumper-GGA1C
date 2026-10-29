@@ -1,6 +1,7 @@
 // Подстановка данных объекта: счётчики ^C, переменные ^V, поля ^F, дата ^D/^T.
 // Источник: Graphic.FillPrintingData/FillPrintingDataEZPL/getSerial (QLabelSDK/Graphic.cs:1517,
 // :1952, :1236). Окна запроса GoLabel не переносятся: значения даёт PrintValues.
+using System.Text.RegularExpressions;
 using GGA1C.Sync.Printing.GoLabel.Ezpx;
 
 namespace GGA1C.Sync.Printing.GoLabel.Ezpl;
@@ -371,8 +372,120 @@ public sealed partial class EzplJob
         {
             return text;
         }
-        // MyTimeDate.ConvDateTimeToStrEZPL: дата ПК в данных — шаг 5.
-        throw new NotSupportedException("Дата ПК в данных объекта (MyTimeDate) ещё не перенесена.");
+        string dFormat = string.IsNullOrEmpty(g.DateFormat) ? Label.DateFormat ?? "" : g.DateFormat;
+        return ConvDateTimeToStrEZPL(text, dFormat, matches);
+    }
+
+    /// <summary>
+    /// MyTimeDate.ConvDateTimeToStrEZPL (QLabelSDK/MyTimeDate.cs:241), bShowNowDateTime = true: дата
+    /// ПК подставляется в данные (штрихкод растром). Часы — PrintValues.Clock, не DateTime.Now.
+    /// Перенесены формы из шаблонов: «^D%y» (%m, %d) и «^D±Y/M/Hnnnn» без дробной части.
+    /// </summary>
+    private string ConvDateTimeToStrEZPL(string input, string dFormat, List<(char Label, int Id)> matches)
+    {
+        DateTime now = _values.Clock.GetLocalNow().DateTime;
+        var en = System.Globalization.CultureInfo.CreateSpecificCulture("en-US");
+        string text = input.Substring(0, matches[0].Id);
+        for (int k = 0; k < matches.Count; k++)
+        {
+            int start = matches[k].Id;
+            int remain = k != matches.Count - 1 ? matches[k + 1].Id - start : input.Length - start;
+            if (matches[k].Label != 'D')
+            {
+                throw new NotSupportedException("Время ПК в данных (^T) не перенесено.");
+            }
+            string part = input.Substring(start, remain);
+            if (remain >= 12 && Regex.IsMatch(part.Substring(0, 12), @"\b%[ymd][+-]\d{4}.\d{2}")
+                || remain >= 10 && Regex.IsMatch(part.Substring(0, 10), @"\b[+-]\d{4}.\d{2}")
+                || remain >= 10 && Regex.IsMatch(part.Substring(0, 10), @"\b%[ymd][+-][YM]\d{4}"))
+            {
+                throw new NotSupportedException($"Форма даты «{part}» не перенесена.");
+            }
+            if (remain >= 8 && Regex.IsMatch(part.Substring(0, 8), @"\b[+-][YMH]\d{4}"))
+            {
+                // Get_YMHxxxxyy_Date: «^D+Y0000[.yy]».
+                string tail = input.Substring(start + 4);
+                if (tail.Length > 7)
+                {
+                    tail = tail.Substring(0, 7);
+                }
+                string[] pieces = tail.Split('.');
+                int digits = NumericLen(pieces[0], 4);
+                int fraction = pieces.Length > 1 && pieces[0].Length <= 4 && digits == pieces[0].Length ? NumericLen(pieces[1], 2) : 0;
+                if (fraction != 0)
+                {
+                    throw new NotSupportedException("Сдвиг даты с дробной частью не перенесён.");
+                }
+                int length = digits + 4;
+                int amount = int.Parse(pieces[0].Substring(0, digits), System.Globalization.CultureInfo.InvariantCulture);
+                DateTime run = part.Substring(2, 2) switch
+                {
+                    "+Y" => now.AddYears(now.Year + amount > 9999 ? (now.Year + amount) % 10000 - now.Year : amount),
+                    "-Y" => now.AddYears(-(now.Year - amount < 0 ? -((10000 + now.Year - amount) % 10000 - now.Year) : amount)),
+                    "+M" => now.AddMonths(amount),
+                    "-M" => now.AddMonths(-amount),
+                    "+H" => now.AddHours(amount),
+                    _ => now.AddHours(-amount),
+                };
+                text += RunDateFormat(run, dFormat, en);
+                text += input.Substring(start + length, remain - length);
+            }
+            else if (remain >= 4 && part.Substring(2, 2) is "%y" or "%m" or "%d")
+            {
+                // GoLabel форматирует текущей культурой: для yy/MM/dd цифры те же.
+                text += now.ToString(DateFormatPart(part[3], dFormat), System.Globalization.CultureInfo.InvariantCulture);
+                text += input.Substring(start + 4, remain - 4);
+            }
+            else
+            {
+                throw new NotSupportedException($"Форма даты «{part}» не перенесена.");
+            }
+        }
+        return text;
+    }
+
+    private static int NumericLen(string data, int max)
+    {
+        int n = 0;
+        for (int i = 0; i < data.Length; i++)
+        {
+            if (char.IsAsciiDigit(data[i]))
+            {
+                n = i + 1;
+                if (n >= max)
+                {
+                    break;
+                }
+            }
+        }
+        return n;
+    }
+
+    /// <summary>MyTimeDate.GetDateFormat: часть формата даты («y2-me-dd») для %y, %m, %d.</summary>
+    private static string DateFormatPart(char ymd, string format)
+    {
+        if (ymd == 'y')
+        {
+            string f = format.Substring(0, 2);
+            return f.Contains("y2") ? f.Replace("y2", "yy") : f.Replace("y4", "yyyy");
+        }
+        if (ymd == 'm')
+        {
+            return format.Substring(3, 2).Replace("mn", "MM").Replace("me", "MM").Replace("m1", "MMM").Replace("m2", "MMMM");
+        }
+        return format.Substring(6, 2);
+    }
+
+    /// <summary>MyTimeDate.GetRunDateFormat без недель, юлианского дня и дня недели.</summary>
+    private static string RunDateFormat(DateTime run, string format, System.Globalization.CultureInfo en)
+    {
+        if (format.Contains("wy") || format.Contains("jj"))
+        {
+            throw new NotSupportedException($"Формат даты «{format}» (неделя, юлианский день) не перенесён.");
+        }
+        string f = format.Contains("y2") ? format.Replace("y2", "yy") : format.Replace("y4", "yyyy");
+        f = f.Replace("mn", "MM").Replace("me", "MMM").Replace("m1", "MMM").Replace("m2", "MMMM");
+        return f.Contains("yy") || f.Contains("MM") || f.Contains("dd") ? run.ToString(f, en) : f;
     }
 
     private static string VariableTagText(char[] a, int i) =>

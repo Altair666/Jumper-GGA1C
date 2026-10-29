@@ -70,6 +70,111 @@ public class GoLabelPortTests
         actual.SequenceEqual(golden).ShouldBeTrue($"{name}: байты не равны эталону — {EzplDump.FirstByteDifference(golden, actual)}");
     }
 
+    /// <summary>Допуск для растров Image (решение пользователя, вариант «В»): точек на картинку.</summary>
+    public const int ImageToleranceDots = 16;
+
+    /// <summary>Допуск для растров Image: доля точек картинки.</summary>
+    public const double ImageToleranceShare = 0.005;
+
+    /// <summary>
+    /// Зачёт с допуском (решение пользователя): строго байт в байт всё, кроме растров Q из
+    /// объектов Image — у них совпадают заголовок Q, а точек мимо не больше 16 и не больше 0,5 %
+    /// (64-битный gdiplus.dll уменьшает логотипы бикубикой иначе, чем 32-битный у GoLabel).
+    /// Число точек мимо по каждой картинке пишется в вывод теста.
+    /// </summary>
+    /// <summary>
+    /// Не проходят зачёт: строку шрифтом Impact (GdiWindowTextBox) 64-битный gdiplus.dll рисует
+    /// иначе, чем 32-битный у GoLabel (PowerShell x86 — как эталон, x64 — как порт; 5888 точек).
+    /// Допуск на текст пользователь не давал — открытый вопрос (p5-plan.md).
+    /// </summary>
+    public static readonly Dictionary<string, string> OpenGdiPlus64Text = new()
+    {
+        ["gkv-avto-product"] = "Q345,24,",
+        ["gkv-avto-product-ru-korpus"] = "Q378,9,",
+    };
+
+    public static TheoryData<string> ToleranceGoldens() => Data(Golden.Names.Except(FromDatabase).Except(OpenGdiPlus64Text.Keys));
+
+    public static TheoryData<string> OpenGoldens() => Data(Golden.Names.Intersect(OpenGdiPlus64Text.Keys));
+
+    [GoldenTheory]
+    [MemberData(nameof(ToleranceGoldens))]
+    public void Bytes_match_golden_with_image_tolerance(string name) => CompareWithImageTolerance(name, ignoredRaster: null);
+
+    /// <summary>
+    /// Не зачёт, а страховка от регресса для <see cref="OpenGdiPlus64Text"/>: то же сравнение,
+    /// но растр строки Impact пропускается (его число точек мимо — в выводе теста).
+    /// </summary>
+    [GoldenTheory]
+    [MemberData(nameof(OpenGoldens))]
+    public void Open_gdiplus64_text_goldens_match_except_that_raster(string name) =>
+        CompareWithImageTolerance(name, OpenGdiPlus64Text[name]);
+
+    private void CompareWithImageTolerance(string name, string? ignoredRaster)
+    {
+        var golden = EzplDump.Split(GoldenBytes(name));
+        var renderer = new TaggingRenderer(new GoLabel.Raster.GdiRasterRenderer());
+        var job = new EzplJob(LoadTemplate(name), LoadValues(name), renderer);
+        var actual = EzplDump.Split(job.Build());
+        actual.Count.ShouldBe(golden.Count, $"{name}: число команд — {EzplDump.FirstDifference(golden.Select(c => c.Text).ToList(), actual.Select(c => c.Text).ToList())}");
+        var failures = new List<string>();
+        for (int i = 0; i < golden.Count; i++)
+        {
+            bool image = renderer.Types.TryGetValue(actual[i].Offset, out var type) && type == "Image";
+            if (golden[i].Bytes.AsSpan().SequenceEqual(actual[i].Bytes))
+            {
+                if (image)
+                {
+                    _output.WriteLine($"{name} #{i} {golden[i].Text} (Image): 0 точек мимо");
+                }
+                continue;
+            }
+            if (ignoredRaster != null && golden[i].Text.StartsWith(ignoredRaster, StringComparison.Ordinal) && actual[i].Text == golden[i].Text
+                && golden[i].Bytes.Length == actual[i].Bytes.Length)
+            {
+                _output.WriteLine($"{name} #{i} {golden[i].Text} ({type}): {golden[i].Bytes.Zip(actual[i].Bytes).Sum(p => System.Numerics.BitOperations.PopCount((uint)(p.First ^ p.Second)))} точек мимо — открытый вопрос 32/64 бит");
+                continue;
+            }
+            if (image && golden[i].IsRaster && actual[i].Text == golden[i].Text && golden[i].Bytes.Length == actual[i].Bytes.Length)
+            {
+                int dots = golden[i].Bytes.Zip(actual[i].Bytes).Sum(p => System.Numerics.BitOperations.PopCount((uint)(p.First ^ p.Second)));
+                string[] header = golden[i].Text[1..].Split(',');
+                int total = int.Parse(header[2]) * 8 * int.Parse(header[3]);
+                _output.WriteLine($"{name} #{i} {golden[i].Text} (Image): {dots} точек мимо из {total}");
+                if (dots <= ImageToleranceDots && dots <= total * ImageToleranceShare)
+                {
+                    continue;
+                }
+                failures.Add($"#{i} {golden[i].Text} (Image): {dots} точек мимо — больше допуска");
+                continue;
+            }
+            failures.Add($"#{i} ({type ?? "команда"}): эталон «{golden[i].Text}», порт «{actual[i].Text}»"
+                + (golden[i].IsRaster && golden[i].Bytes.Length == actual[i].Bytes.Length
+                    ? $", точек мимо {golden[i].Bytes.Zip(actual[i].Bytes).Sum(p => System.Numerics.BitOperations.PopCount((uint)(p.First ^ p.Second)))}"
+                    : ""));
+        }
+        failures.ShouldBeEmpty($"{name}: расходится сверх допуска");
+    }
+
+    private readonly Xunit.Abstractions.ITestOutputHelper _output;
+
+    public GoLabelPortTests(Xunit.Abstractions.ITestOutputHelper output)
+    {
+        _output = output;
+    }
+
+    /// <summary>Запоминает, какой объект нарисовал растр по какому смещению задания.</summary>
+    private sealed class TaggingRenderer(IRasterRenderer inner) : IRasterRenderer
+    {
+        public Dictionary<long, string> Types { get; } = [];
+
+        public void Render(RasterRequest request, EzplWriter output)
+        {
+            Types[output.Length] = request.Shape.TypeName;
+            inner.Render(request, output);
+        }
+    }
+
     [Fact]
     public void Serial_counter_steps_like_golabel()
     {

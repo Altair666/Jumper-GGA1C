@@ -393,12 +393,10 @@ public sealed class EzpxLine : EzpxShape
 /// Объект, который GoLabel рисует сам и шлёт растром Q (Image, Ellipse, GdiWindowTextBox,
 /// WindowTextBox...). Размеры — для правила «пустой объект не печатается».
 /// </summary>
-public sealed class EzpxRasterShape : EzpxShape
+public sealed class EzpxRasterShape : EzpxGraphic
 {
     /// <summary>Наследник Graphic (есть BoundRect и Data) — Image, *TextBox, WindowText...</summary>
     public bool IsGraphic { get; set; }
-    public string? Data { get; set; }
-    public RectF BoundRect { get; set; }
 
     /// <summary>Width/Height фигуры (Ellipse, RoundRect, VarShape, ObliqueLine, TableForm).</summary>
     public float Width { get; set; }

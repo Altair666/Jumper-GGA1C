@@ -121,12 +121,6 @@ public sealed partial class EzplJob
                     height = (int)l.Height;
                     graphic = false;
                     break;
-                case EzpxGraphic g:
-                    width = (int)g.BoundRect.Width;
-                    height = (int)g.BoundRect.Height;
-                    data = g.Data;
-                    graphic = true;
-                    break;
                 case EzpxRasterShape { IsGraphic: true } rg:
                     width = (int)rg.BoundRect.Width;
                     height = (int)rg.BoundRect.Height;
@@ -137,6 +131,12 @@ public sealed partial class EzplJob
                     width = (int)rs.Width;
                     height = (int)rs.Height;
                     graphic = false;
+                    break;
+                case EzpxGraphic g:
+                    width = (int)g.BoundRect.Width;
+                    height = (int)g.BoundRect.Height;
+                    data = g.Data;
+                    graphic = true;
                     break;
                 default:
                     continue;
@@ -200,9 +200,6 @@ public sealed partial class EzplJob
                 case EzpxGraphic g:
                     text = g.Data;
                     formatType = g.FormatType;
-                    break;
-                case EzpxRasterShape r:
-                    text = r.Data ?? "";
                     break;
             }
             if (formatType != "None" || shape.PageAlignment == PageAlignment.Center)

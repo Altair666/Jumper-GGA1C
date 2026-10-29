@@ -184,8 +184,11 @@ public static class EzpxReader
         {
             shape.Name = name.Value;
         }
-        shape.X = Float(e.Attribute("X"), shape.X);
-        shape.Y = Float(e.Attribute("Y"), shape.Y);
+        // X/Y с [DefaultValue(0)] XmlSerializer не пишет, если они 0. У объектов с BoundRect GoLabel
+        // берёт положение из него (эталон gkv3-box: GdiWindowTextBox без X печатается с x = 0).
+        bool hasRect = shape is EzpxGraphic && e.Element("BoundRect") != null;
+        shape.X = Float(e.Attribute("X"), hasRect ? ((EzpxGraphic)shape).BoundRect.X : shape.X);
+        shape.Y = Float(e.Attribute("Y"), hasRect ? ((EzpxGraphic)shape).BoundRect.Y : shape.Y);
         shape.Direction = Enum(e.Attribute("Direction"), Orientation.Angle0);
         // GraphicShape.Direction: у всех, кроме Text и WindowText, — только 4 поворота.
         if (type != "Text" && type != "WindowText")
@@ -331,8 +334,7 @@ public static class EzpxReader
         var r = new EzpxRasterShape { IsGraphic = GraphicTypes.Contains(type) };
         if (r.IsGraphic)
         {
-            r.Data = e.Element("Data")?.Value ?? "1234";
-            r.BoundRect = ReadBoundRect(e, new RectF(4f, 4f, 100.1f, 100.3f));
+            ReadGraphic(e, r);
         }
         else
         {
