@@ -129,6 +129,47 @@ public abstract class MyCredentialsTests<TStartupModule> : SyncApplicationTestBa
         _printLogins.Ensured.ShouldBeEmpty();
     }
 
+    /// <summary>П7.2: учётка 1С — те же правила секретов, что у Altium и PDM.</summary>
+    [Fact]
+    public async Task OneC_Credentials_Follow_Secret_Rules()
+    {
+        var (alice, aliceClient, _, _) = await SeedTwoPeopleAsync();
+
+        using (As(alice))
+        {
+            var creds = await _me.GetCredentialsAsync();
+            creds.OneCLogin = "Морозов А.";
+            creds.OneCPassword = "onec-secret";
+            await _me.SaveCredentialsAsync(creds);
+
+            var shown = await _me.GetCredentialsAsync();
+            shown.OneCLogin.ShouldBe("Морозов А.");
+            shown.OneCPassword.ShouldBe(new string('•', "onec-secret".Length));
+            shown.HasOneCPassword.ShouldBeTrue();
+
+            // Маску не трогали — пароль прежний; Altium при этом не пострадал.
+            await _me.SaveCredentialsAsync(shown);
+        }
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var saved = await _clients.RevealCredentialsAsync(aliceClient);
+            saved.OneCLogin.ShouldBe("Морозов А.");
+            saved.OneCPassword.ShouldBe("onec-secret");
+            saved.AltiumPassword.ShouldBe("alice-secret");
+        });
+
+        using (As(alice))
+        {
+            var creds = await _me.GetCredentialsAsync();
+            creds.OneCPassword = "";
+            await _me.SaveCredentialsAsync(creds);
+        }
+
+        await WithUnitOfWorkAsync(async () =>
+            (await _clients.RevealCredentialsAsync(aliceClient)).OneCPassword.ShouldBeNull());
+    }
+
     [Fact]
     public async Task Local_User_Without_Keycloak_Gets_Clear_Error()
     {

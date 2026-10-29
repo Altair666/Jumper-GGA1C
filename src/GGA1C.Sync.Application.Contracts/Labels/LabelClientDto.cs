@@ -42,4 +42,7 @@ public class LabelClientDto
 
     /// <summary>Заданы ли учётные данные SOLIDWORKS PDM.</summary>
     public bool HasPdmCredentials { get; set; }
+
+    /// <summary>Заданы ли учётные данные 1С. Сами данные здесь не передаются.</summary>
+    public bool HasOneCCredentials { get; set; }
 }

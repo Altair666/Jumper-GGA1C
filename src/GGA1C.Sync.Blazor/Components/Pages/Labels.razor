@@ -82,6 +82,28 @@
                 человека без его пароля он не позволяет.
             </MudText>
 
+            <MudText Typo="Typo.subtitle2" Class="mb-2">1С</MudText>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Creds.OneCLogin" Label="Логин" T="string"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Adornment="@Mark(Filled(Creds.OneCLogin))"
+                                  AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                                  AdornmentColor="Color.Success" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Creds.OneCPassword" Label="Пароль" T="string"
+                                  InputType="InputType.Password"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Adornment="@Mark(Creds.HasOneCPassword)"
+                                  AdornmentIcon="@Icons.Material.Filled.CheckCircle"
+                                  AdornmentColor="Color.Success" />
+                </MudItem>
+            </MudGrid>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1 mb-4">
+                Учётка человека в 1С: обмен с 1С идёт от его имени. Пароль хранится зашифрованным и наружу не отдаётся.
+            </MudText>
+
             <MudText Typo="Typo.subtitle2" Class="mb-2">База печати (GoLabel II)</MudText>
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="6">
@@ -218,6 +240,9 @@
                             <MudIcon Size="Size.Small" Title="SOLIDWORKS PDM"
                                      Icon="@Icons.Material.Filled.Inventory2"
                                      Color="@StateColor(context.HasPdmCredentials)" />
+                            <MudIcon Size="Size.Small" Title="1С"
+                                     Icon="@Icons.Material.Filled.AccountBalance"
+                                     Color="@StateColor(context.HasOneCCredentials)" />
                         </MudStack>
                     </MudTd>
                     <MudTd DataLabel="Использован">
@@ -230,7 +255,7 @@
                     <MudTd>
                         <MudStack Row="true" Spacing="0">
                             <MudIconButton Icon="@Icons.Material.Filled.ManageAccounts" Size="Size.Small"
-                                           Color="Color.Primary" Title="Учётные данные Altium и PDM"
+                                           Color="Color.Primary" Title="Учётные данные Altium, PDM и 1С"
                                            Disabled="@Busy"
                                            OnClick="@(() => OpenCredsAsync(context))" />
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"

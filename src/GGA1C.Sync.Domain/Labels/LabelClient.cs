@@ -101,6 +101,15 @@ public class LabelClient : AuditedEntity<int>
     public string? PdmPasswordEncrypted { get; set; }
 
     /// <summary>
+    /// Логин человека в 1С (П7.2). Хаб действует во внешних системах от имени человека его
+    /// учётными данными; 1С не входит через Keycloak.
+    /// </summary>
+    public string? OneCLogin { get; set; }
+
+    /// <summary>Пароль 1С, зашифрованный ключом StringEncryption. Наружу не отдаётся — как у Altium и PDM.</summary>
+    public string? OneCPasswordEncrypted { get; set; }
+
+    /// <summary>
     /// Логин этого человека в MySQL, которым подключается GoLabel II. Пусто, пока логин
     /// не выдан. Пароль у нас не хранится вовсе: он показывается один раз при выдаче —
     /// как ключ виджета. Забыл — выдаётся новый.

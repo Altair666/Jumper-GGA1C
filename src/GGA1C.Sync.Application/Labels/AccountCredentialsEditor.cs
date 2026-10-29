@@ -6,7 +6,7 @@ using Volo.Abp.DependencyInjection;
 namespace GGA1C.Sync.Labels;
 
 /// <summary>
-/// Карточка учётных данных (Altium, PDM, пароль печати) для учётки с известным id. Общая
+/// Карточка учётных данных (Altium, PDM, 1С, пароль печати) для учётки с известным id. Общая
 /// для администратора (<see cref="LabelClientsAppService"/>, id из запроса) и для самого
 /// человека (<c>MyAccountAppService</c>, id — только его собственный, по <c>sub</c>), чтобы
 /// правила секретов были одни: маска длины, «одни точки — не менять, пусто — удалить».
@@ -39,16 +39,19 @@ public class AccountCredentialsEditor : ITransientDependency
             Name = client.Name,
             AltiumLogin = client.AltiumLogin ?? "",
             PdmLogin = client.PdmLogin ?? "",
+            OneCLogin = client.OneCLogin ?? "",
 
             // Вместо паролей - маски той же длины: значения наружу не уходят, но длину
             // видно, и поле можно стереть, чтобы удалить пароль.
             AltiumPassword = SecretMask.For(secrets.AltiumPassword),
             PdmPassword = SecretMask.For(secrets.PdmPassword),
+            OneCPassword = SecretMask.For(secrets.OneCPassword),
             PrintLogin = client.PrintLogin ?? _printLogins.LoginFor(client.Slug, client.Email),
             PrintPassword = SecretMask.For(await _clients.RevealPrintPasswordAsync(id)),
             HasPrintPassword = !string.IsNullOrEmpty(client.PrintPasswordEncrypted),
             HasAltiumPassword = !string.IsNullOrEmpty(client.AltiumPasswordEncrypted),
             HasPdmPassword = !string.IsNullOrEmpty(client.PdmPasswordEncrypted),
+            HasOneCPassword = !string.IsNullOrEmpty(client.OneCPasswordEncrypted),
             UpdatedAt = client.CredentialsUpdatedAt
         };
     }
@@ -65,7 +68,9 @@ public class AccountCredentialsEditor : ITransientDependency
                 input.AltiumLogin,
                 input.AltiumPassword,
                 input.PdmLogin,
-                input.PdmPassword));
+                input.PdmPassword,
+                input.OneCLogin,
+                input.OneCPassword));
 
         // Пароль MySQL меняем только если в поле ввели новое значение: точки означают
         // «оставить как есть», как и у прочих секретов.

@@ -388,6 +388,14 @@ namespace GGA1C.Sync.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)");
 
+                    b.Property<string>("OneCLogin")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("OneCPasswordEncrypted")
+                        .HasMaxLength(512)
+                        .HasColumnType("varchar(512)");
+
                     b.Property<string>("PdmLogin")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)");

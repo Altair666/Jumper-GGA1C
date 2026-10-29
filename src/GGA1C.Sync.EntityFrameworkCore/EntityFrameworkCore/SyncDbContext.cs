@@ -169,6 +169,8 @@ public class SyncDbContext :
             b.Property(x => x.AltiumPasswordEncrypted).HasMaxLength(512);
             b.Property(x => x.PdmLogin).HasMaxLength(128);
             b.Property(x => x.PdmPasswordEncrypted).HasMaxLength(512);
+            b.Property(x => x.OneCLogin).HasMaxLength(128);
+            b.Property(x => x.OneCPasswordEncrypted).HasMaxLength(512);
 
             // Логин печати - имя пользователя MySQL, им подключается GoLabel II.
             // Уникален: двум людям один логин выдавать нельзя.

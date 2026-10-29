@@ -12,4 +12,6 @@ public record AccountCredentials(
     string? AltiumLogin,
     string? AltiumPassword,
     string? PdmLogin,
-    string? PdmPassword);
+    string? PdmPassword,
+    string? OneCLogin = null,
+    string? OneCPassword = null);

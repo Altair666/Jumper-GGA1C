@@ -198,12 +198,14 @@ public class LabelClientStore : DomainService, ILabelClientStore
 
         client.AltiumLogin = Trim(input.AltiumLogin);
         client.PdmLogin = Trim(input.PdmLogin);
+        client.OneCLogin = Trim(input.OneCLogin);
 
         // Пароль приходит маской своей длины (одни точки) - значит поле не трогали и
         // прежнее значение остаётся. Пусто - человек стёр точки, пароль нужно удалить.
         // Иное - новое значение.
         client.AltiumPasswordEncrypted = Apply(client.AltiumPasswordEncrypted, input.AltiumPassword);
         client.PdmPasswordEncrypted = Apply(client.PdmPasswordEncrypted, input.PdmPassword);
+        client.OneCPasswordEncrypted = Apply(client.OneCPasswordEncrypted, input.OneCPassword);
 
         client.CredentialsUpdatedAt = DateTime.UtcNow;
 
@@ -245,7 +247,9 @@ public class LabelClientStore : DomainService, ILabelClientStore
             client.AltiumLogin,
             Decrypt(client.AltiumPasswordEncrypted),
             client.PdmLogin,
-            Decrypt(client.PdmPasswordEncrypted));
+            Decrypt(client.PdmPasswordEncrypted),
+            client.OneCLogin,
+            Decrypt(client.OneCPasswordEncrypted));
     }
 
     private string? Decrypt(string? encrypted)

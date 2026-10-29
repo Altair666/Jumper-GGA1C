@@ -75,7 +75,8 @@ public class LabelClientsAppService : ApplicationService, ILabelClientsAppServic
             Email = c.Email ?? "",
             RowCount = buffers.TryGetValue(c.Slug, out var info) ? info.RowCount : 0,
             HasAltiumCredentials = !string.IsNullOrEmpty(c.AltiumPasswordEncrypted),
-            HasPdmCredentials = !string.IsNullOrEmpty(c.PdmPasswordEncrypted)
+            HasPdmCredentials = !string.IsNullOrEmpty(c.PdmPasswordEncrypted),
+            HasOneCCredentials = !string.IsNullOrEmpty(c.OneCPasswordEncrypted)
         }).ToList();
     }
 

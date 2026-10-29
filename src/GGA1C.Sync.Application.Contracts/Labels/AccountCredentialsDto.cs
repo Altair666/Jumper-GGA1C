@@ -28,6 +28,12 @@ public class AccountCredentialsDto
 
     public bool HasPdmPassword { get; set; }
 
+    public string OneCLogin { get; set; } = "";
+
+    public string OneCPassword { get; set; } = "";
+
+    public bool HasOneCPassword { get; set; }
+
     /// <summary>
     /// Логин MySQL для GoLabel II — это почта человека. Поле только для чтения: меняется
     /// вместе с почтой.
