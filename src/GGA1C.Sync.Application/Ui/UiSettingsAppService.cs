@@ -1,6 +1,8 @@
 using System.Threading.Tasks;
+using GGA1C.Sync.Branding;
 using GGA1C.Sync.Settings;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.SettingManagement;
 using Volo.Abp.Settings;
@@ -12,10 +14,12 @@ namespace GGA1C.Sync.Ui;
 public class UiSettingsAppService : SyncAppService, IUiSettingsAppService
 {
     private readonly ISettingManager _settingManager;
+    private readonly SiteIconStore _siteIcon;
 
-    public UiSettingsAppService(ISettingManager settingManager)
+    public UiSettingsAppService(ISettingManager settingManager, SiteIconStore siteIcon)
     {
         _settingManager = settingManager;
+        _siteIcon = siteIcon;
     }
 
     public async Task<string> GetServerNameAsync()
@@ -39,5 +43,28 @@ public class UiSettingsAppService : SyncAppService, IUiSettingsAppService
         // увидит правку только когда истечёт его кэш.
         await _settingManager.SetGlobalAsync(
             SyncSettings.Ui.ServerName, string.IsNullOrEmpty(name) ? null : name);
+    }
+
+    public Task<SiteIconInfoDto> GetSiteIconAsync()
+    {
+        var file = _siteIcon.Find();
+        return Task.FromResult(new SiteIconInfoDto
+        {
+            IsCustom = file != null,
+            Url = SiteIcon.Url + "?v=" + (file?.LastWriteUtc.Ticks ?? 0),
+        });
+    }
+
+    public async Task SetSiteIconAsync(string fileName, byte[] content)
+    {
+        await _siteIcon.SaveAsync(fileName, content);
+        Logger.LogInformation("Значок сайта заменён: {FileName}, {Size} байт", fileName, content.Length);
+    }
+
+    public Task ResetSiteIconAsync()
+    {
+        _siteIcon.Reset();
+        Logger.LogInformation("Значок сайта сброшен на значок по умолчанию");
+        return Task.CompletedTask;
     }
 }

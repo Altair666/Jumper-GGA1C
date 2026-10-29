@@ -36,6 +36,7 @@ public class RequestLoggerMiddleware
         "/images",
         "/fonts",
         "/favicon",
+        "/site-icon",
         "/Abp/",
         "/swagger"
     ];

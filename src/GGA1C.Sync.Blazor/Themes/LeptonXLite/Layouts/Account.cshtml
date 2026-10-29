@@ -1,10 +1,11 @@
 @* Раскладка страниц входа: подменяет /Themes/LeptonXLite/Layouts/Account.cshtml из
    Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite 5.4.0 (восстановлена декомпиляцией, исходника в
-   пакете нет). Отличия от штатной - только два:
+   пакете нет). Отличия от штатной - только три:
    1. Бренд «значок + имя» в одну строку: значок слева, имя справа, блок по центру (класс
       sync-login-brand, стили - wwwroot/global-styles.css). Имя - BrandingProvider.AppName,
       то есть настройка Sync.Ui.ServerName.
-   2. Страница может забрать верхнюю карточку (смена языка, сообщения, арендатор) к себе:
+   2. Значок вкладки и бренда - /site-icon (П16; бренд - через --lpx-logo в global-styles.css).
+   3. Страница может забрать верхнюю карточку (смена языка, сообщения, арендатор) к себе:
       ViewData["Sync.HeaderInCard"] = true. Так делает Login.cshtml - у неё одна карточка.
    При обновлении LeptonX Lite сверить с оригиналом. *@
 @using System.Globalization
@@ -76,7 +77,7 @@
 
 	<title>@pageTitle</title>
 
-	<link rel="icon" href="~/favicon.svg" type="image/svg+xml">
+	<link rel="icon" href="~/site-icon">
 
 	<abp-style-bundle name="LeptonXLite.Global" />
 

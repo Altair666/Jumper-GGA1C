@@ -16,7 +16,41 @@
     right: 0.75rem;
     top: 0.5rem;
 }
+/* Значок сайта (П16): /site-icon - загруженный в «Настройки → Хаб» или по умолчанию. */
 :root .lpx-brand-logo {
-    --lpx-logo: url('/images/logo/leptonx/logo-light.png');
-    --lpx-logo-icon: url('/images/logo/leptonx/logo-light-thumbnail.png');
+    --lpx-logo: url('/site-icon');
+    --lpx-logo-icon: url('/site-icon');
+}
+
+/* Значок сайта в шапке меню (П16) - перед именем сервера. Белая подложка: свой значок
+   администратора виден и на цветной шапке. */
+.mud-appbar .mud-toolbar-appbar > h6.mud-typography-h6::before {
+    content: "";
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    margin-right: .6rem;
+    vertical-align: middle;
+    border-radius: 7px;
+    background: #fff url('/site-icon') center / 26px 26px no-repeat;
+}
+
+/* Предпросмотр значка во вкладке «Хаб» настроек: на светлом фоне и на цвете шапки. */
+.sync-icon-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 8px;
+    border: 1px solid var(--mud-palette-lines-default);
+    background: #fff;
+}
+
+.sync-icon-preview-dark {
+    background: var(--mud-palette-appbar-background);
+}
+
+.sync-icon-preview img {
+    object-fit: contain;
 }

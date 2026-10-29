@@ -347,6 +347,8 @@ public class SyncBlazorModule : AbpModule
 
         app.UseConfiguredEndpoints(builder =>
         {
+            // Значок сайта (П16): загруженный администратором или значок по умолчанию.
+            GGA1C.Sync.Blazor.Branding.SiteIconEndpoint.MapSiteIcon(builder);
             builder.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode()
                 .AddAdditionalAssemblies(builder.ServiceProvider.GetRequiredService<IOptions<AbpRouterOptions>>().Value.AdditionalAssemblies.ToArray());

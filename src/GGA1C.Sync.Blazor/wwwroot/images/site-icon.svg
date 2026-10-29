@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Значок сайта по умолчанию (П16): тёмный квадрат виден и на светлом фоне, и на цветной шапке. -->
+  <rect width="64" height="64" rx="14" fill="#2f3e5c"/>
+  <path d="M15 20H37L49 32L37 44H15Z" fill="#ffffff" stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="23" cy="32" r="3.5" fill="#2f3e5c"/>
+</svg>

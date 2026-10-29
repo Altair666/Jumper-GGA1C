@@ -10,6 +10,7 @@
 | Ключ шифрования настроек | `C:\GGA1C\stringencryption.key` |
 | Сертификат стенда | `C:\GGA1C\tls\` |
 | Выгрузка CSV для GoLabel | `C:\GGA1C\labels\<папка>\labels.csv` (`Labels:ExportRoot`) |
+| Значок сайта (П16) | `C:\GGA1C\branding\site-icon.(png|svg|ico)` (`Branding:Folder`; нет файла — значок из сборки) |
 | Бэкапы | `C:\GGA1C\backup\` |
 
 **`StringEncryption:DefaultPassPhrase` в `appsettings.json` пустой намеренно.** Этим ключом ABP

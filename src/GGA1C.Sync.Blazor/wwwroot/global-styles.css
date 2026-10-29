@@ -2,9 +2,10 @@ body {
     
 }
 
+/* Значок сайта (П16): /site-icon - загруженный в «Настройки → Хаб» или по умолчанию. */
 :root .lpx-brand-logo {
-    --lpx-logo: url('/images/logo/leptonx/logo-light.png');
-    --lpx-logo-icon: url('/images/logo/leptonx/logo-light-thumbnail.png');
+    --lpx-logo: url('/site-icon');
+    --lpx-logo-icon: url('/site-icon');
 }
 /* Бренд на страницах входа (Themes/LeptonXLite/Layouts/Account.cshtml): значок слева, имя
    справа, вся пара по центру колонки. Штатно LeptonX ставит имя под значок. */
@@ -26,4 +27,14 @@ body {
     margin: 0;
     padding: 0 !important;
     text-align: left;
+}
+
+/* Значок на странице входа: квадратный, целиком, без растяжения (штатно LeptonX рассчитан на
+   свой белый логотип). */
+.sync-login-brand .lpx-brand-logo.lpx-login-logo {
+    width: 48px;
+    height: 48px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
 }

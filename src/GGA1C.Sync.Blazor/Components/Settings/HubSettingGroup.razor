@@ -1,6 +1,8 @@
 @* Вкладка «Хаб» на странице «Администрирование → Настройки» (/setting-management).
    Видна только с правом Sync.Admin - см. HubSettingComponentContributor. *@
+@using GGA1C.Sync.Branding
 @using GGA1C.Sync.Settings
+@using Microsoft.AspNetCore.Components.Forms
 @using GGA1C.Sync.Ui
 @inherits SyncComponentBase
 @inject IUiSettingsAppService UiSettings
@@ -15,6 +17,41 @@
             Сохранить
         </MudButton>
     </div>
+
+    <MudDivider />
+    @* Значок сайта (П16): файл в папке Branding:Folder, не в базе. Образец - загрузка значка
+       рабочего пространства в Docmost: сразу заменяет, рядом - «вернуть по умолчанию». *@
+    <MudText Typo="Typo.subtitle1">Значок сайта</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+        <div class="sync-icon-preview" title="На светлом фоне">
+            <img src="@IconUrl" alt="Значок сайта" width="48" height="48" />
+        </div>
+        <div class="sync-icon-preview sync-icon-preview-dark" title="На цветной шапке">
+            <img src="@IconUrl" alt="Значок сайта на шапке" width="48" height="48" />
+        </div>
+        <MudText Typo="Typo.body2">@(IsCustomIcon ? "Загружен свой значок" : "Значок по умолчанию")</MudText>
+    </MudStack>
+    <MudText Typo="Typo.caption">
+        Вкладка браузера, страница входа и шапка меню. PNG, SVG или ICO, не больше @(SiteIcon.MaxBytes / 1024) КБ;
+        лучше квадратный, от 64×64. Видно после перезагрузки страницы.
+    </MudText>
+    <MudStack Row="true" Spacing="2">
+        <MudFileUpload T="IBrowserFile" Accept="@SiteIcon.AllowedExtensions" FilesChanged="UploadIconAsync" Disabled="Busy">
+            <CustomContent Context="upload">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="Busy"
+                           StartIcon="@Icons.Material.Filled.Upload" OnClick="@upload.OpenFilePickerAsync">
+                    Загрузить значок
+                </MudButton>
+            </CustomContent>
+            <SelectedTemplate Context="selected"></SelectedTemplate>
+        </MudFileUpload>
+        @if (IsCustomIcon)
+        {
+            <MudButton Variant="Variant.Text" Disabled="Busy" OnClick="ResetIconAsync">
+                Вернуть значок по умолчанию
+            </MudButton>
+        }
+    </MudStack>
 </MudStack>
 
 @code {
@@ -22,15 +59,82 @@
 
     private bool Busy { get; set; }
 
+    private string IconUrl { get; set; } = SiteIcon.Url;
+
+    private bool IsCustomIcon { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             ServerName = await UiSettings.GetServerNameAsync();
+            await LoadIconAsync();
         }
         catch (Exception ex)
         {
             await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task LoadIconAsync()
+    {
+        var icon = await UiSettings.GetSiteIconAsync();
+        IconUrl = icon.Url;
+        IsCustomIcon = icon.IsCustom;
+    }
+
+    private async Task UploadIconAsync(IBrowserFile? file)
+    {
+        if (file == null)
+        {
+            return;
+        }
+
+        Busy = true;
+        try
+        {
+            if (file.Size > SiteIcon.MaxBytes)
+            {
+                await Notify.Error($"Значок больше {SiteIcon.MaxBytes / 1024} КБ.");
+                return;
+            }
+
+            using var memory = new System.IO.MemoryStream();
+            await using (var stream = file.OpenReadStream(SiteIcon.MaxBytes))
+            {
+                await stream.CopyToAsync(memory);
+            }
+
+            await UiSettings.SetSiteIconAsync(file.Name, memory.ToArray());
+            await LoadIconAsync();
+            await Notify.Success("Значок сайта загружен. Перезагрузите страницу, чтобы увидеть его во вкладке и в шапке.");
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task ResetIconAsync()
+    {
+        Busy = true;
+        try
+        {
+            await UiSettings.ResetSiteIconAsync();
+            await LoadIconAsync();
+            await Notify.Success("Вернули значок по умолчанию.");
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            Busy = false;
         }
     }
 
