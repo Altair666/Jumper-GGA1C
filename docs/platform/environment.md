@@ -60,3 +60,28 @@ ABP проверять заново.**
 `KeycloakSyncWorker` (сверка учёток, раз в час), `AutoSyncWorker` (автосинхронизация Altium),
 `PrintConnectionWorker` (раз в две минуты добирает брошенные сессии GoLabel). Единицу работы
 открывают явно через `IUnitOfWorkManager` — сами работники ABP её не открывают.
+
+## Грабли кода (каждая уже стоила времени)
+
+- **Запуск хаба из worktree** (`C:\gg1ac-wt\...`): там нет `openiddict.pfx` и `wwwroot/libs`
+  (оба в `.gitignore`) — без первого хаб не стартует, без второго страница входа отдаёт 500.
+  Скопировать из `C:\gg1ac\src\GGA1C.Sync.Blazor\` до запуска. Второй экземпляр на общей
+  базе — с `Workers__Enabled=false` и по `https://localhost:<порт>` (куки не различают порты).
+- **`--no-launch-profile` обязателен**: без него `dotnet run` берёт адрес из
+  `launchSettings.json` (`https://localhost:44397` — по нему и видно, что флаг забыли) и молча
+  игнорирует `--urls` и `ASPNETCORE_URLS`.
+- **Сначала погасить старый `GGA1C.Sync.Blazor`**: живой процесс держит dll, сборка падает, а
+  «сайт отвечает» — отвечает прежний процесс. Выглядит как «изменения не применились».
+- **Фоновые работники ABP не открывают единицу работы** — репозитории в них падают с
+  `ObjectDisposedException`. Открывать явно через `IUnitOfWorkManager` (см. `KeycloakSyncWorker`).
+- **Шифрованную настройку расшифровывает только `ISettingProvider`**; `ISettingManager`
+  отдаёт шифротекст (пишет при этом нормально).
+- **Ключ `StringEncryption` в git не возвращать** — шаблон ABP кладёт его в `appsettings.json`.
+- Секреты в UI — маской своей длины (`SecretMask`): одни точки — не менять, пусто — удалить,
+  иное — новое значение.
+- `MySql.EntityFrameworkCore` (Oracle) работает только с MySQL: на MariaDB падает при миграции
+  с `InvalidCastException: DBNull -> Int64`.
+- Пины 10.0.13 закрывают уязвимости шаблона: `System.Security.Cryptography.*` в `common.props`,
+  `Microsoft.AspNetCore.Components.WebAssembly.Server` в Blazor-проекте — при обновлении ABP
+  проверять заново.
+
