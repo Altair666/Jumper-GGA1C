@@ -11,6 +11,7 @@
 | Сертификат стенда | `C:\GGA1C\tls\` |
 | ~~Выгрузка CSV для GoLabel~~ — убрано 2026-10-29 | была `C:\GGA1C\labels\<папка>\labels.csv` (`Labels:ExportRoot`); папка на диске оставлена |
 | Значок сайта (П16) | `C:\GGA1C\branding\site-icon.(png|svg|ico)` (`Branding:Folder`; нет файла — значок из сборки) |
+| Файлы шаблонов печати (П9) | `C:\GGA1C\templates\<guid>.ezpx|.pdf` (`Templates:Folder`; в базе — только ссылка; потом — сервис «ФАЙЛ» на NAS) |
 | Бэкапы | `C:\GGA1C\backup\` |
 
 **`StringEncryption:DefaultPassPhrase` в `appsettings.json` пустой намеренно.** Этим ключом ABP

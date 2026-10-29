@@ -69,6 +69,11 @@ public sealed class EzpxSetup
     public int Darkness { get; set; } = 5;
     public int Number { get; set; } = 1;
     public bool CutDataBase { get; set; }
+
+    /// <summary>Setup.bCopyDataBase / bNumberDataBase: копии и число наклеек из поля базы (CopyField/NumberField).</summary>
+    public bool CopyDataBase { get; set; }
+
+    public bool NumberDataBase { get; set; }
     public bool BatchCut { get; set; }
     public bool PartialCut { get; set; }
     public bool FullCutLast { get; set; }

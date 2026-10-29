@@ -36,17 +36,30 @@ public class SyncMenuContributor : IMenuContributor
             )
         );
 
-        context.Menu.Items.Insert(
-            1,
-            new ApplicationMenuItem(
-                SyncMenus.Labels,
-                "Grist → GoLabel2",
-                "/labels",
-                icon: "fas fa-tags",
-                order: 1,
-                requiredPermissionName: SyncPermissions.Admin
-            )
+        // Раздел GoLabel: буферы Grist → GoLabel2 и шаблоны печати (П9; сюда же — редактор П12).
+        var goLabel = new ApplicationMenuItem(
+            SyncMenus.GoLabel,
+            "GoLabel",
+            icon: "fas fa-tags",
+            order: 1
         );
+        goLabel.AddItem(new ApplicationMenuItem(
+            SyncMenus.Labels,
+            "Grist → GoLabel2",
+            "/labels",
+            icon: "fas fa-exchange-alt",
+            order: 1,
+            requiredPermissionName: SyncPermissions.Admin
+        ));
+        goLabel.AddItem(new ApplicationMenuItem(
+            SyncMenus.Templates,
+            "Шаблоны",
+            "/templates",
+            icon: "fas fa-file-alt",
+            order: 2,
+            requiredPermissionName: SyncPermissions.Admin
+        ));
+        context.Menu.Items.Insert(1, goLabel);
 
         context.Menu.Items.Insert(
             2,

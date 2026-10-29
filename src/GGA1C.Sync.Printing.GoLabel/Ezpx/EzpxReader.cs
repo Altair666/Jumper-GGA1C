@@ -84,6 +84,8 @@ public static class EzpxReader
             Darkness = Int(e.Attribute("Darkness"), 5),
             Number = Int(e.Attribute("Number"), 1),
             CutDataBase = Bool(e.Attribute("bCutDataBase"), false),
+            CopyDataBase = Bool(e.Attribute("bCopyDataBase"), false),
+            NumberDataBase = Bool(e.Attribute("bNumberDataBase"), false),
             BatchCut = Bool(e.Attribute("bBatchCut"), false),
             PartialCut = Bool(e.Attribute("bPartialCut"), false),
             FullCutLast = Bool(e.Attribute("bFullCutLast"), false),

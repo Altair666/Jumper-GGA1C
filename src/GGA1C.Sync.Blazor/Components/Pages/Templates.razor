@@ -1,0 +1,214 @@
+@page "/templates"
+@attribute [Authorize(GGA1C.Sync.Permissions.SyncPermissions.Admin)]
+@using GGA1C.Sync.Templates
+@using Microsoft.AspNetCore.Components.Forms
+@using GGA1C.Sync.Blazor.Components.Templates
+@inherits SyncComponentBase
+@inject IPrintTemplatesAppService TemplatesService
+
+@* П9: шаблоны печати — подвкладка раздела GoLabel. Файлы — в ITemplateFileStore (папка
+   Templates:Folder, потом FastAPI на NAS), в базе только ссылка. Сюда же потом откроется
+   редактор (П12). *@
+
+<MudText Typo="Typo.h5" Class="mb-4">Шаблоны печати</MudText>
+
+<MudCard Class="mb-4">
+    <MudCardContent>
+        <MudText Typo="Typo.h6" Class="mb-2">Загрузить шаблон</MudText>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="NewName" Label="Название" T="string" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" MaxLength="@PrintTemplateConsts.MaxNameLength" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="PrintTemplateKind" @bind-Value="NewKind" Label="Вид" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var kind in Enum.GetValues<PrintTemplateKind>())
+                    {
+                        <MudSelectItem Value="@kind">@KindText(kind)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6" md="2">
+                <MudNumericField T="int?" @bind-Value="NewPlatform" Label="Платформа (rowId)" Min="1"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudNumericField T="int?" @bind-Value="NewModification" Label="Исполнение (rowId, необяз.)" Min="1"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
+            </MudItem>
+        </MudGrid>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-2">
+            <MudFileUpload T="IBrowserFile" Accept="@(NewKind == PrintTemplateKind.Pdf ? ".pdf" : ".ezpx")"
+                           FilesChanged="UploadAsync" Disabled="Busy">
+                <CustomContent Context="upload">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="Busy"
+                               StartIcon="@Icons.Material.Filled.Upload" OnClick="@upload.OpenFilePickerAsync">
+                        Выбрать файл и загрузить
+                    </MudButton>
+                </CustomContent>
+                <SelectedTemplate Context="selected"></SelectedTemplate>
+            </MudFileUpload>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Наклейка — .ezpx GoLabel (проверяется разбором; логин и пароль базы из файла не сохраняются),
+                PDF — .pdf; до @(PrintTemplateConsts.MaxFileBytes / 1024 / 1024) МБ. Платформа и исполнение — rowId из Grist.
+            </MudText>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+<MudTable Items="@Items" Dense="true" Hover="true" Loading="@Busy">
+    <HeaderContent>
+        <MudTh>Название</MudTh>
+        <MudTh>Вид</MudTh>
+        <MudTh>Платформа</MudTh>
+        <MudTh>Исполнение</MudTh>
+        <MudTh>Файл</MudTh>
+        <MudTh>Загружен</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Название">@context.Name</MudTd>
+        <MudTd DataLabel="Вид">@KindText(context.Kind)</MudTd>
+        <MudTd DataLabel="Платформа">@context.BasePlatformId</MudTd>
+        <MudTd DataLabel="Исполнение">@(context.ModificationId?.ToString() ?? "все")</MudTd>
+        <MudTd DataLabel="Файл"><code>@context.FileName</code> <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.Size / 1024) КБ</MudText></MudTd>
+        <MudTd DataLabel="Загружен"><MudText Typo="Typo.caption">@context.CreationTime.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText></MudTd>
+        <MudTd>
+            <MudStack Row="true" Spacing="0">
+                @if (context.IsLabel)
+                {
+                    @* ВРЕМЕННО: отладочная печать — удалить вместе с TestPrintDialog. *@
+                    <MudIconButton Icon="@Icons.Material.Filled.Print" Size="Size.Small" Color="Color.Primary"
+                                   Title="Отладочная печать (временно)" Disabled="@Busy"
+                                   OnClick="@(() => TestPrintFor = context)" />
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               Title="Удалить" Disabled="@Busy" OnClick="@(() => DeleteAsync(context))" />
+            </MudStack>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Шаблонов пока нет.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@if (TestPrintFor != null)
+{
+    <TestPrintDialog Template="@TestPrintFor" OnClose="@(() => TestPrintFor = null)" />
+}
+
+@code {
+    private List<PrintTemplateDto> Items { get; set; } = new();
+
+    private bool Busy { get; set; }
+
+    private string? NewName { get; set; }
+
+    private PrintTemplateKind NewKind { get; set; } = PrintTemplateKind.ProductLabel;
+
+    private int? NewPlatform { get; set; }
+
+    private int? NewModification { get; set; }
+
+    private PrintTemplateDto? TestPrintFor { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Busy = true;
+        try
+        {
+            Items = await TemplatesService.GetListAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task UploadAsync(IBrowserFile? file)
+    {
+        if (file == null)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(NewName) || NewPlatform == null)
+        {
+            await Notify.Error("Сначала укажите название и платформу.");
+            return;
+        }
+        if (file.Size > PrintTemplateConsts.MaxFileBytes)
+        {
+            await Notify.Error($"Файл больше {PrintTemplateConsts.MaxFileBytes / 1024 / 1024} МБ.");
+            return;
+        }
+        Busy = true;
+        try
+        {
+            using var memory = new System.IO.MemoryStream();
+            await using (var stream = file.OpenReadStream(PrintTemplateConsts.MaxFileBytes))
+            {
+                await stream.CopyToAsync(memory);
+            }
+            await TemplatesService.UploadAsync(new PrintTemplateUploadDto
+            {
+                Name = NewName,
+                Kind = NewKind,
+                BasePlatformId = NewPlatform.Value,
+                ModificationId = NewModification,
+                FileName = file.Name,
+                Content = memory.ToArray(),
+            });
+            NewName = null;
+            await Notify.Success("Шаблон загружен.");
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            Busy = false;
+        }
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(PrintTemplateDto template)
+    {
+        if (!await Message.Confirm($"Удалить шаблон «{template.Name}» вместе с файлом?"))
+        {
+            return;
+        }
+        Busy = true;
+        try
+        {
+            await TemplatesService.DeleteAsync(template.Id);
+            await Notify.Success("Шаблон удалён.");
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            Busy = false;
+        }
+        await LoadAsync();
+    }
+
+    private static string KindText(PrintTemplateKind kind) => kind switch
+    {
+        PrintTemplateKind.Pdf => "PDF",
+        PrintTemplateKind.ProductLabel => "Наклейка на изделие",
+        PrintTemplateKind.BoxLabel => "Наклейка на коробку",
+        _ => kind.ToString(),
+    };
+}

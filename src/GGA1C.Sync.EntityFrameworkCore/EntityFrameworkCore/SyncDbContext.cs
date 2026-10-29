@@ -38,6 +38,8 @@ public class SyncDbContext :
 
     public DbSet<LabelRow> Labels { get; set; }
 
+    public DbSet<GGA1C.Sync.Templates.PrintTemplate> PrintTemplates { get; set; }
+
     #region Entities from the modules
 
     /* Notice: We only implemented IIdentityDbContext and ITenantManagementDbContext
@@ -176,6 +178,18 @@ public class SyncDbContext :
             // Уникален: двум людям один логин выдавать нельзя.
             b.HasIndex(x => x.PrintLogin).IsUnique();
             b.Property(x => x.PrintLogin).HasMaxLength(32);
+        });
+
+        // П9: шаблоны печати. Файл — в ITemplateFileStore, здесь только ссылка.
+        builder.Entity<GGA1C.Sync.Templates.PrintTemplate>(b =>
+        {
+            b.ToTable(SyncConsts.DbTablePrefix + "PrintTemplates", SyncConsts.DbSchema);
+            b.ConfigureByConvention();
+            b.HasIndex(x => new { x.BasePlatformId, x.ModificationId });
+            b.Property(x => x.Name).HasMaxLength(GGA1C.Sync.Templates.PrintTemplateConsts.MaxNameLength).IsRequired();
+            b.Property(x => x.FileRef).HasMaxLength(GGA1C.Sync.Templates.PrintTemplateConsts.MaxFileRefLength).IsRequired();
+            b.Property(x => x.FileName).HasMaxLength(GGA1C.Sync.Templates.PrintTemplateConsts.MaxFileNameLength).IsRequired();
+            b.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
         });
 
         builder.Entity<LabelRow>(b =>

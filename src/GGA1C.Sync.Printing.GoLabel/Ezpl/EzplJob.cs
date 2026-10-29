@@ -445,6 +445,11 @@ public sealed partial class EzplJob
         {
             throw new NotSupportedException("Печать из базы с отрезом не перенесена.");
         }
+        if (Setup.CopyDataBase || Setup.NumberDataBase)
+        {
+            // GoLabel шлёт «^C<значение поля>» (SendDbaseCopy) — эталона с этим флагом нет.
+            throw new NotSupportedException("Копии или число наклеек из поля базы (bCopyDataBase/bNumberDataBase) не перенесены.");
+        }
         int count = lo.HorAcross * lo.VerAcross;
         MoveXorToFront();
         foreach (var row in records)

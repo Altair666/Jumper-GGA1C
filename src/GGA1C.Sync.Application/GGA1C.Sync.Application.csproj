@@ -11,6 +11,8 @@
   <ItemGroup>
     <ProjectReference Include="..\GGA1C.Sync.Domain\GGA1C.Sync.Domain.csproj" />
     <ProjectReference Include="..\GGA1C.Sync.Application.Contracts\GGA1C.Sync.Application.Contracts.csproj" />
+    <!-- П9: проверка .ezpx при загрузке и временная отладочная печать — порт GoLabel. -->
+    <ProjectReference Include="..\GGA1C.Sync.Printing.GoLabel\GGA1C.Sync.Printing.GoLabel.csproj" />
   </ItemGroup>
 
   <ItemGroup>

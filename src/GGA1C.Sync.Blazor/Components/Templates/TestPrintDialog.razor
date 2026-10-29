@@ -1,0 +1,175 @@
+@* ВРЕМЕННО (П9, решение пользователя 2026-10-29): отладочная печать шаблона из хаба.
+   Удаляется целиком вместе с ITemplateTestPrintAppService/TemplateTestPrintAppService и
+   кнопкой «Отладочная печать» в Pages/Templates.razor, когда печать переедет в виджет. *@
+@using GGA1C.Sync.Templates
+@inherits SyncComponentBase
+@inject ITemplateTestPrintAppService TestPrint
+
+<MudCard Class="mt-4" Outlined="true">
+    <MudCardContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.Print" Color="Color.Warning" />
+            <MudText Typo="Typo.h6">Отладочная печать (временно): @Template.Name</MudText>
+            <MudSpacer />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@OnClose" Title="Закрыть" />
+        </MudStack>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+            Наклейка на каждую выбранную строку данных (как GoLabel); копии — из настройки шаблона.
+            Данные — строки буфера человека (то же, что GoLabel читает из my_labels).
+        </MudText>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="4">
+                <MudSelect T="int?" Value="@ClientId" ValueChanged="@ClientChanged" Label="Чьи строки" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Clearable="true">
+                    @foreach (var s in Sources)
+                    {
+                        <MudSelectItem T="int?" Value="@s.ClientId">@s.Name (@s.Rows.Count)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="8" md="5">
+                <MudTextField @bind-Value="Host" Label="Принтер (адрес)" T="string" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="4" md="3">
+                <MudNumericField T="int" @bind-Value="Port" Label="Порт" Min="1" Max="65535" Variant="Variant.Outlined"
+                                 Margin="Margin.Dense" HideSpinButtons="true" />
+            </MudItem>
+        </MudGrid>
+
+        @if (Source != null)
+        {
+            <MudTable Items="@Source.Rows" Dense="true" Hover="true" Class="mt-2" T="TestPrintRowDto"
+                      MultiSelection="true" @bind-SelectedItems="Selected">
+                <HeaderContent>
+                    <MudTh>Дата</MudTh>
+                    <MudTh>Код изделия</MudTh>
+                    <MudTh>Код режима</MudTh>
+                    <MudTh>Наименование</MudTh>
+                    <MudTh>Кол-во</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Date</MudTd>
+                    <MudTd>@context.ProductCode</MudTd>
+                    <MudTd>@context.ModeCode</MudTd>
+                    <MudTd>@context.Name</MudTd>
+                    <MudTd>@context.Qty</MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">У этой учётки строк нет.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
+
+        <MudStack Row="true" Spacing="2" Class="mt-3" AlignItems="AlignItems.Center">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy" OnClick="BuildAsync"
+                       StartIcon="@Icons.Material.Filled.Build">Собрать</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Warning" Disabled="@Busy" OnClick="PrintAsync"
+                       StartIcon="@Icons.Material.Filled.Print">Напечатать</MudButton>
+            <MudText Typo="Typo.body2">Выбрано строк: @Selected.Count</MudText>
+        </MudStack>
+
+        @if (Result != null)
+        {
+            <MudAlert Class="mt-3" Dense="true" Severity="@(Result.Ok ? Severity.Success : Severity.Error)">
+                @if (Result.Ok)
+                {
+                    <span>Задание: @Result.Bytes байт, наклеек @Result.Labels@(Result.UsesDatabase ? ", данные из строк буфера" : ", без данных из базы")@(Result.Sent ? $" — отправлено на {Host}:{Port}" : "").</span>
+                }
+                else
+                {
+                    <span>@Result.Error</span>
+                }
+            </MudAlert>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired] public PrintTemplateDto Template { get; set; } = default!;
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<TestPrintSourceDto> Sources { get; set; } = new();
+
+    private int? ClientId { get; set; }
+
+    private TestPrintSourceDto? Source => Sources.FirstOrDefault(s => s.ClientId == ClientId);
+
+    private HashSet<TestPrintRowDto> Selected { get; set; } = new();
+
+    private string Host { get; set; } = TestPrintDefaults.Host;
+
+    private int Port { get; set; } = TestPrintDefaults.Port;
+
+    private bool Busy { get; set; }
+
+    private TestPrintBuildResultDto? Result { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Sources = await TestPrint.GetSourcesAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private void ClientChanged(int? id)
+    {
+        ClientId = id;
+        Selected = new();
+        Result = null;
+    }
+
+    private TestPrintInput Input() => new()
+    {
+        TemplateId = Template.Id,
+        ClientId = ClientId,
+        // Порядок — как в таблице, а не как щёлкали.
+        RowIds = Source?.Rows.Where(Selected.Contains).Select(r => r.Id).ToList() ?? new(),
+        PrinterHost = Host,
+        PrinterPort = Port,
+    };
+
+    private async Task BuildAsync()
+    {
+        Busy = true;
+        try
+        {
+            Result = await TestPrint.BuildAsync(Input());
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task PrintAsync()
+    {
+        if (!await Message.Confirm($"Напечатать «{Template.Name}» на {Host}:{Port}? Строк данных: {Selected.Count}."))
+        {
+            return;
+        }
+        Busy = true;
+        try
+        {
+            Result = await TestPrint.PrintAsync(Input());
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+}
