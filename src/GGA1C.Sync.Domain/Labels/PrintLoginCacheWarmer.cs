@@ -8,7 +8,8 @@ using Volo.Abp.Uow;
 namespace GGA1C.Sync.Labels;
 
 /// <summary>
-/// Кладёт в кэш MySQL пароли всех логинов печати — при старте хаба.
+/// Кладёт в кэш MySQL пароли всех логинов печати — при старте хаба и после перезапуска MySQL
+/// (вызывает <see cref="PrintConnectionWorker"/>, решение — <see cref="MySqlRestartDetector"/>).
 ///
 /// Без этого после перезапуска MySQL GoLabel II не входит в базу вообще: он подключается
 /// с <c>SslMode=none</c>, а <c>caching_sha2_password</c> без TLS пускает только по кэшу
