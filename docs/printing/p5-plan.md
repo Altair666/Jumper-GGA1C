@@ -94,7 +94,13 @@ false). Сам GoLabel на рабочем месте с выключенным 
 | 3 | частично: `Raster1Bit`, `Image`, `Ellipse` (System.Drawing.Common 10.0.13) | + `gkv3-vm-product` |
 | 4 | готов для Code39 без поворота, подпись `TopAndLeft`/`BottomAndCenter`; дата ПК в данных штрихкода — шаг 5 | + `gkv1-vm-box`, `gkv3-vm-box` (итого **4 из 15**) |
 | 5 | готов: `GdiWindowTextBox` (перенос `WrapText`, межстрочный, подбор размера `Cal_FontSize`, `BoundingAlignment`), `WindowTextBox`, дата ПК в данных (`^D%y`, `^D±Y/M/Hnnnn`) от `TimeProvider` | с допуском `Image`: **12 из 14** (кроме печати из базы); не проходят 2 — строка Impact |
-| 6–7 | не начаты | — |
+| 6 | готов для «все записи», одна наклейка на странице: `Print(records)`/`PrintDBaseCommandEZPL`, поля `^F00`/`^F01`, строки данных — `PrintValues.Records` (вместо запроса GoLabel к MySQL); счётчик без значения — из шаблона (`SerialDefaultsFromTemplate`, как «ОК» в окне GoLabel) | + `gkv3-box-var-mysql` байт в байт: итого **5 из 15** байт в байт, **13 из 15** с допуском `Image` |
+| 7 | не начат | — |
+
+**Шаг 6 — снимок данных.** `C:\GGA1C\golden\gkv3-box-var-mysql\data.csv` (вне git): 4 строки
+`a.morozov@test.local` — запрос представления `my_labels` с логином человека вместо `USER()`, учётка
+`gga1c_app`; строки не менялись после съёма эталона (`UpdatedAt` 2026-10-19). «октябрь 2026» —
+строка (`varchar`), не дата, поэтому формат `yyyy/MM/dd` GoLabel не применяется.
 
 **Шаг 5 — найдено.** (1) `WindowTextBox` перед печатью рисуется на экран (`Draw` из
 `LinkedVar.UpdateLinkVariableData`) при `QLabel.ZoomRate = 0.1` — в командном режиме GoLabel его не
@@ -118,8 +124,8 @@ x86 рисует её как эталон (14868 чёрных точек, сто
 сверху, подпись по центру (ширина `MeasureString`) на `Height + Offset`. Совпало: `gkv1-vm-box`,
 `gkv3-vm-box` целиком, штрихкод `gkv3-vm-box-102x152` (подпись снизу) — 0 точек мимо.
 
-**Что осталось по шагам 6–7.** 6: печать из базы
-(`Print(records)`), снимок `data.csv` для `gkv3-box-var-mysql` ещё не снят. 7: обвязка для хаба.
+**Что осталось — шаг 7:** обвязка для хаба (задание без статики, два задания параллельно, явная
+культура, прогон тестов под другой учёткой Windows) и открытый вопрос про строку Impact.
 
 **Шаг строки многострочного `Text`** GoLabel берёт из `Font.Height` шрифта Windows из `FontCmd`
 (не из принтера): `GlavkonGOST Type A` Bold 29 px → 37, 25 px → 32. Порт меряет тем же GDI+.

@@ -23,10 +23,18 @@ public class GoLabelPortTests
         "gkv3-vm-product",
         // шаг 4: Code39 растром
         "gkv1-vm-box", "gkv3-vm-box",
+        // шаг 6: печать из базы (data.csv)
+        "gkv3-box-var-mysql",
     ];
 
-    /// <summary>Печать из базы — шаг 6: без снимка данных команды наклеек не сверить.</summary>
-    public static readonly string[] FromDatabase = ["gkv3-box-var-mysql"];
+    /// <summary>
+    /// Печать из базы без снимка данных (data.csv в папке эталона) не сверить; у
+    /// gkv3-box-var-mysql снимок есть (4 строки my_labels, решение пользователя 5).
+    /// </summary>
+    public static readonly string[] FromDatabase = Golden.Names
+        .Where(n => !File.Exists(Path.Combine(Golden.Root, n, "data.csv"))
+            && File.ReadAllText(Path.Combine(Golden.Root, n, "template.ezpx")).Contains("<DataBaseFormat>MySQL</DataBaseFormat>"))
+        .ToArray();
 
     /// <summary>Дата съёма эталонов (П2) — для даты ПК, которую GoLabel рисует сам.</summary>
     public static readonly DateTimeOffset CaptureTime = new(2026, 10, 28, 21, 0, 0, TimeSpan.FromHours(3));
@@ -221,7 +229,28 @@ public class GoLabelPortTests
                 variables[v] = tokens[++i];
             }
         }
-        return new PrintValues { Serials = serials, Variables = variables, Clock = new FixedClock(CaptureTime) };
+        // Счётчик без -S GoLabel спрашивает окном; при съёме в нём нажимали «ОК» — значение шаблона.
+        return new PrintValues
+        {
+            Serials = serials,
+            Variables = variables,
+            SerialDefaultsFromTemplate = true,
+            Records = LoadRecords(name),
+            Clock = new FixedClock(CaptureTime),
+        };
+    }
+
+    /// <summary>data.csv папки эталона: 1-я строка — имена столбцов, значения без запятых и кавычек.</summary>
+    private static IReadOnlyList<IReadOnlyList<object?>>? LoadRecords(string name)
+    {
+        string path = Path.Combine(Golden.Root, name, "data.csv");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+        return File.ReadLines(path, Encoding.UTF8).Skip(1).Where(line => line.Length > 0)
+            .Select(line => (IReadOnlyList<object?>)line.Split(',').Select(v => (object?)v).ToList())
+            .ToList();
     }
 
     private static TheoryData<string> Data(IEnumerable<string> names)

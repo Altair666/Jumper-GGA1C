@@ -31,7 +31,11 @@ public sealed partial class EzplJob
             {
                 continue;
             }
-            if (!_values.Serials.TryGetValue(m, out var value))
+            if (!_values.Serials.TryGetValue(m, out var value) && _values.SerialDefaultsFromTemplate)
+            {
+                value = parts[0];
+            }
+            if (value == null)
             {
                 throw new InvalidOperationException(
                     $"Нет стартового значения счётчика C{m:00} («{parts[2]}»): GoLabel спросил бы его окном.");

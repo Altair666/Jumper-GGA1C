@@ -9,9 +9,7 @@ namespace GGA1C.Sync.Printing.GoLabel.Ezpl;
 public sealed partial class EzplJob
 {
     // QLabel.DataRow — строка базы при печати из данных (шаг 6). Без базы — null.
-#pragma warning disable CS0649 // заполняется печатью из базы (шаг 6)
     private IReadOnlyList<object?>? _dataRow;
-#pragma warning restore CS0649
 
     /// <summary>Graphic.FillPrintingData(bformat, ..., bcmd).</summary>
     /// <param name="measureOnly">

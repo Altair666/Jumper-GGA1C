@@ -50,7 +50,12 @@ public sealed partial class EzplJob
         Prepare();
         if (FromRecords)
         {
-            throw new NotSupportedException("Печать из базы данных (Print(records)) — шаг 6, ещё не перенесена.");
+            var records = _values.Records
+                ?? throw new InvalidOperationException($"Шаблон берёт данные из базы ({Label.DataBaseFormat}): нужны строки PrintValues.Records.");
+            WriteHeader(output);
+            PrintDBaseCommandEZPL(records, output);
+            WriteJobEnd(output);
+            return output.ToArray();
         }
         if (UseNormalPrint())
         {
@@ -329,6 +334,12 @@ public sealed partial class EzplJob
             }
             PrintNormalCommandEZPL(output);
         }
+        WriteJobEnd(output);
+    }
+
+    /// <summary>Конец PrintJob.Print/Print(records): команды «в конец задания», полный отрез.</summary>
+    private void WriteJobEnd(EzplWriter output)
+    {
         foreach (var command in _endJobCommands)
         {
             output.WriteLine(command);
@@ -392,6 +403,65 @@ public sealed partial class EzplJob
             UpdateSerialFormatAll(1);
         }
         output.WriteLine((Setup.DrawMode != 0 ? "^XSET,DRAWMODE,0\r\n" : "") + "E");
+    }
+
+    /// <summary>
+    /// QLabel.PrintDBaseCommandEZPL (QLabel.cs:3473), диапазон «все записи» (ключ -r не задан →
+    /// «0-(n-1)»), по одной наклейке на странице (Layout.Number = 1): на запись — ^C копий,
+    /// страница, объекты с полями ^Fnn этой записи.
+    /// </summary>
+    private void PrintDBaseCommandEZPL(IReadOnlyList<IReadOnlyList<object?>> records, EzplWriter output)
+    {
+        var lo = Setup.Layout;
+        if (lo.Number > 1)
+        {
+            throw new NotSupportedException("Печать из базы по нескольку разных наклеек на странице не перенесена.");
+        }
+        if (Setup.LabelsPerCut > 0)
+        {
+            throw new NotSupportedException("Печать из базы с отрезом не перенесена.");
+        }
+        int count = lo.HorAcross * lo.VerAcross;
+        MoveXorToFront();
+        foreach (var row in records)
+        {
+            _dataRow = row;
+            // bCopyDataBase/bNumberDataBase не перенесены: копии и число — из Setup (SendSetupCopy).
+            output.WriteLine("^C" + Setup.Copy);
+            for (int n = 0; n < Setup.Number; n++)
+            {
+                output.WriteLine((Setup.DrawMode != 0 ? "^XSET,DRAWMODE," + Setup.DrawMode + "\r\n" : "") + "^L");
+                if (!string.IsNullOrEmpty(Label.DateFormat))
+                {
+                    output.WriteLine("D" + Label.DateFormat);
+                }
+                if (!string.IsNullOrEmpty(Label.TimeFormat))
+                {
+                    output.WriteLine("T" + Label.TimeFormat);
+                }
+                UpdateVariableFormatAll();
+                var shapes = Label.Shapes;
+                for (int i = 0; i < count; i++)
+                {
+                    var (x, y) = lo.Offset(i, Setup);
+                    for (int k = shapes.Count - 1; k >= 0; k--)
+                    {
+                        var shape = shapes[k];
+                        if (shape.PageAlignment == PageAlignment.Center)
+                        {
+                            throw new NotSupportedException("Выравнивание объекта по центру страницы не перенесено.");
+                        }
+                        if (shape.IsPrint && !OutOfPageArea(shape))
+                        {
+                            PrintShape(shape, x, y, output);
+                        }
+                    }
+                }
+                UpdateSerialFormatAll(1);
+                output.WriteLine((Setup.DrawMode != 0 ? "^XSET,DRAWMODE,0\r\n" : "") + "E");
+            }
+        }
+        _dataRow = null;
     }
 
     /// <summary>QLabel.OutOfPageArea (bPrintPageAreaOnly = true): начало объекта за наклейкой.</summary>

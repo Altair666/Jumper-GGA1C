@@ -14,6 +14,18 @@ public sealed class PrintValues
     /// <summary>Переменные: номер переменной (V00 = 0) → значение.</summary>
     public IReadOnlyDictionary<int, string> Variables { get; init; } = new Dictionary<int, string>();
 
+    /// <summary>
+    /// Счётчик без значения в <see cref="Serials"/> начинается со значения из шаблона (как если бы
+    /// в окне запроса GoLabel нажали «ОК»). Иначе — ошибка: значение должен дать хаб.
+    /// </summary>
+    public bool SerialDefaultsFromTemplate { get; init; }
+
+    /// <summary>
+    /// Строки данных для шаблона, привязанного к базе (поля ^F00, ^F01 … — по порядку столбцов).
+    /// Даёт хаб вместо запроса GoLabel к MySQL/CSV.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<object?>>? Records { get; init; }
+
     /// <summary>Часы для даты и времени, которые печать подставляет сама.</summary>
     public TimeProvider Clock { get; init; } = TimeProvider.System;
 }
