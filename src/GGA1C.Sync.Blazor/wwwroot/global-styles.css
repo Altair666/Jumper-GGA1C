@@ -119,3 +119,33 @@
     white-space: pre;
     font-family: monospace;
 }
+
+
+/* Мышь в редакторе (П12.4): курсоры, перекрестие, маркеры линеек */
+.sync-canvas {
+    cursor: crosshair;
+}
+
+.sync-shape {
+    cursor: move;
+}
+
+.sync-cross {
+    stroke: #e91e63;
+    stroke-width: 0.2;
+    pointer-events: none;
+}
+
+.sync-ruler-marker {
+    stroke: #e91e63;
+    stroke-width: 1.4;
+    pointer-events: none;
+}
+
+.sync-pos-readout {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--mud-palette-text-secondary);
+    min-width: 110px;
+    display: inline-block;
+}

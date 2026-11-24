@@ -1,4 +1,4 @@
-// Правка .ezpx с сохранением. Читаем и пишем один XDocument: у каждой фигуры EzpxReader
+﻿// Правка .ezpx с сохранением. Читаем и пишем один XDocument: у каждой фигуры EzpxReader
 // оставляет исходный элемент (EzpxShape.Element), правки вносятся прямо в него, а в модели
 // дублируются для превью. Неизвестные порту поля (а их у объектов больше, чем перенесено)
 // так никуда не деваются — сохранённый файл остаётся шаблоном GoLabel.
@@ -8,22 +8,42 @@ using GGA1C.Sync.Printing.GoLabel.Ezpx;
 
 namespace GGA1C.Sync.Printing.GoLabel.Ezpx;
 
-/// <summary>Правка одного объекта по его номеру в списке Shapes. null — не менять.</summary>
+/// <summary>
+/// Правка настроек страницы (Setup): размер наклейки и зазор в мм, отступы в точках,
+/// скорость, плотность, копии, способ печати (PrintMode 0 = ^AT термоперенос, 1 = ^AD
+/// прямая). null — не менять.
+/// </summary>
+public sealed record EzpxSetupEdit(
+    float? WidthMm = null,
+    float? HeightMm = null,
+    float? GapMm = null,
+    int? LeftMarginDots = null,
+    int? TopMarginDots = null,
+    int? Speed = null,
+    int? Darkness = null,
+    int? Copies = null,
+    bool? DirectThermal = null);
+
+/// <summary>Правка одного объекта по его номеру в списке Shapes. null — не менять.
+/// Remove = true удаляет объект; другие поля при этом игнорируются.</summary>
 public sealed record EzpxShapeEdit(
     int Index,
     float? X = null,
     float? Y = null,
     float? Width = null,
     float? Height = null,
-    string? Data = null);
+    string? Data = null,
+    bool Remove = false);
 
 public sealed class EzpxEditor
 {
     private readonly XDocument _doc;
+    private readonly XElement _root;
 
     private EzpxEditor(XDocument doc, EzpxTemplate template)
     {
         _doc = doc;
+        _root = doc.Root!;
         Template = template;
     }
 
@@ -50,6 +70,21 @@ public sealed class EzpxEditor
     /// </summary>
     public void Apply(IReadOnlyList<EzpxShapeEdit> edits)
     {
+        // Удаления применяются первыми, по убыванию индекса — чтобы сдвиг индексов после
+        // удаления не направил остальные правки в чужие объекты. Смешивать удаление и правку
+        // в одном запросе нельзя: правки с индексами после удалённого игнорируются.
+        var removals = edits.Where(e => e.Remove).Select(e => e.Index).OrderDescending().ToList();
+
+        if (removals.Count > 0)
+        {
+            foreach (var index in removals)
+            {
+                RemoveShape(index);
+            }
+
+            return;
+        }
+
         foreach (var edit in edits)
         {
             if (edit.Index < 0 || edit.Index >= Template.Label.Shapes.Count)
@@ -214,6 +249,79 @@ public sealed class EzpxEditor
         // Элемента не было — XmlSerializer не пишет значения по умолчанию. Создаём в конце:
         // порядок элементов для XmlSerializer (а им читает и GoLabel) не важен.
         parent.SetElementValue(name, value);
+    }
+
+    /// <summary>
+    /// Применить правки настроек страницы к Setup-элементу. Поля Setup — атрибуты
+    /// элемента (см. EzpxReader.ReadSetup), пишем тем же способом.
+    /// </summary>
+    public void ApplySetup(EzpxSetupEdit edit)
+    {
+        var setup = _root.Element("Setup") ?? throw new InvalidOperationException("В шаблоне нет Setup.");
+
+        void Set(string name, float value) =>
+            setup.SetAttributeValue(name, value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
+
+        void SetInt(string name, int value) => setup.SetAttributeValue(name, value);
+
+        if (edit.WidthMm is { } w)
+        {
+            Template.Setup.LabelWidth = w;
+            Set("LabelWidth", w);
+        }
+        if (edit.HeightMm is { } h)
+        {
+            Template.Setup.LabelLength = h;
+            Set("LabelLength", h);
+        }
+        if (edit.GapMm is { } gap)
+        {
+            Template.Setup.GapLength = gap;
+            Set("GapLength", gap);
+        }
+        if (edit.LeftMarginDots is { } lm)
+        {
+            Template.Setup.LeftMargin = lm;
+            SetInt("LeftMargin", lm);
+        }
+        if (edit.TopMarginDots is { } tm)
+        {
+            Template.Setup.TopMargin = tm;
+            SetInt("TopMargin", tm);
+        }
+        if (edit.Speed is { } speed)
+        {
+            Template.Setup.Speed = speed;
+            SetInt("Speed", speed);
+        }
+        if (edit.Darkness is { } darkness)
+        {
+            Template.Setup.Darkness = darkness;
+            SetInt("Darkness", darkness);
+        }
+        if (edit.Copies is { } copies)
+        {
+            Template.Setup.Copy = copies;
+            SetInt("Copy", copies);
+        }
+        if (edit.DirectThermal is { } direct)
+        {
+            // 0 = ^AT термоперенос, 1 = ^AD прямая печать (SetupCommands.GetCommandEZPL)
+            Template.Setup.PrintMode = direct ? 1 : 0;
+            SetInt("PrintMode", Template.Setup.PrintMode);
+        }
+    }
+
+    /// <summary>Удалить объект: из модели и из XML-дерева. Индексы после него сдвигаются.</summary>
+    public void RemoveShape(int index)
+    {
+        if (index < 0 || index >= Template.Label.Shapes.Count)
+        {
+            return;
+        }
+
+        Template.Label.Shapes[index].Element!.Remove();
+        Template.Label.Shapes.RemoveAt(index);
     }
 
     /// <summary>

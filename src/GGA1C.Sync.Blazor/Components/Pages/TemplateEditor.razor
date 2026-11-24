@@ -41,6 +41,7 @@ else
             <MudText Typo="Typo.caption" Class="mud-text-secondary">Масштаб</MudText>
             <MudSlider T="double" @bind-Value="Zoom" Min="0.5" Max="6" Step="0.25" Style="width:150px;" />
             <MudText Typo="Typo.caption" Style="width:44px;">@FormatNumber(Zoom) ×</MudText>
+            <span id="sync-pos-readout" class="sync-pos-readout">— / — мм</span>
             <MudSwitch T="bool" @bind-Value="ShowHidden" Label="Скрытые" Color="Color.Primary" />
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy"
                        StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Сохранить</MudButton>
@@ -53,10 +54,13 @@ else
         <div style="flex:1 1 auto;overflow:auto;max-height:80vh;border:1px solid #bdbdbd;">
             <div style="position:relative;width:@(CornerPx + CanvasWidthPx)px;height:@(CornerPx + CanvasHeightPx)px;margin:16px auto;box-shadow:2px 2px 8px rgba(0,0,0,.25);">
                 <div style="position:absolute;left:0;top:0;width:@(CornerPx)px;height:@(RulerPx)px;background:white;z-index:2;"></div>
-                <svg style="position:absolute;left:@(CornerPx)px;top:0;background:white;z-index:2;" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))</svg>
-                <svg style="position:absolute;left:0;top:@(RulerPx)px;background:white;z-index:2;" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))</svg>
-                <svg style="position:absolute;left:@(CornerPx)px;top:@(RulerPx)px;background:white;" viewBox="0 0 @FormatNumber(Model.WidthMm) @FormatNumber(Model.HeightMm)"
-                     width="@FormatNumber(CanvasWidthPx)" height="@FormatNumber(CanvasHeightPx)">
+                <svg style="position:absolute;left:@(CornerPx)px;top:0;background:white;z-index:2;" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))<line id="sync-marker-top" visibility="hidden" class="sync-ruler-marker" y1="0" y2="@RulerPx" /></svg>
+                <svg style="position:absolute;left:0;top:@(RulerPx)px;background:white;z-index:2;" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))<line id="sync-marker-left" visibility="hidden" class="sync-ruler-marker" x1="0" x2="@RulerPx" /></svg>
+                <svg id="sync-canvas-svg" style="position:absolute;left:@(CornerPx)px;top:@(RulerPx)px;background:white;" viewBox="0 0 @FormatNumber(Model.WidthMm) @FormatNumber(Model.HeightMm)"
+                     width="@FormatNumber(CanvasWidthPx)" height="@FormatNumber(CanvasHeightPx)"
+                     class="sync-canvas">
+                    <line id="sync-cross-x" visibility="hidden" class="sync-cross" y1="0" y2="@FormatNumber(Model.HeightMm)" />
+                    <line id="sync-cross-y" visibility="hidden" class="sync-cross" x1="0" x2="@FormatNumber(Model.WidthMm)" />
                     <rect x="0" y="0" width="@FormatNumber(Model.WidthMm)" height="@FormatNumber(Model.HeightMm)"
                           fill="white" stroke="#bdbdbd" stroke-width="0.2" />
                     @((MarkupString)ShapesSvg())
@@ -124,6 +128,10 @@ else
                             Векторный объект — макет обновляется сразу при правке полей.
                         </MudText>
                     }
+
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" Disabled="@Busy" FullWidth="true"
+                               Class="mt-2" StartIcon="@Icons.Material.Filled.Delete"
+                               OnClick="@(() => DeleteShapeAsync(Selected.Index))">Удалить объект</MudButton>
                 }
             </MudPaper>
 
@@ -137,6 +145,35 @@ else
                     }
                 </MudPaper>
             }
+
+            <MudPaper Class="pa-2 mt-2" Elevation="1">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Настройки страницы</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                    Как в диалоге GoLabel: размер наклейки и зазор — мм, отступы — точки принтера.
+                </MudText>
+
+                <MudNumericField T="float?" Label="Ширина, мм" @bind-Value="SetupEdits.WidthMm"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                <MudNumericField T="float?" Label="Высота, мм" @bind-Value="SetupEdits.HeightMm"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                <MudNumericField T="float?" Label="Зазор, мм" @bind-Value="SetupEdits.GapMm" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                <MudNumericField T="int?" Label="Отступ слева, точек" @bind-Value="SetupEdits.LeftMarginDots" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                <MudNumericField T="int?" Label="Отступ сверху, точек" @bind-Value="SetupEdits.TopMarginDots" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                <MudNumericField T="int?" Label="Скорость (1–6)" @bind-Value="SetupEdits.Speed" Min="1" Max="6"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                <MudNumericField T="int?" Label="Плотность (0–19)" @bind-Value="SetupEdits.Darkness" Min="0" Max="19"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                <MudNumericField T="int?" Label="Копий наклейки" @bind-Value="SetupEdits.Copies" Min="1"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                <MudSwitch T="bool?" @bind-Value="SetupEdits.DirectThermal" Label="Термоперенос (лента)"
+                           Color="Color.Primary" Class="mb-2" />
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy" FullWidth="true"
+                           OnClick="ApplySetupAsync">Применить к макету</MudButton>
+            </MudPaper>
         </div>
     </div>
 
@@ -160,6 +197,9 @@ else
     [Parameter] public int Id { get; set; }
 
     private TemplateEditorDto? Model { get; set; }
+
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<TemplateEditorCallbacks>? _callbacks;
 
     private int? SelectedIndex { get; set; }
 
@@ -191,6 +231,7 @@ else
         try
         {
             Model = await EditorService.OpenAsync(Id);
+            SetupEdits = ToSetupEdits(Model.Setup);
         }
         catch (Exception ex)
         {
@@ -200,6 +241,105 @@ else
         {
             Busy = false;
         }
+    }
+
+    /// <summary>Правки настроек страницы — локальная копия, канва читает из неё же.</summary>
+    private TemplateSetupChangeDto SetupEdits { get; set; } = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || Model == null)
+        {
+            return;
+        }
+
+        _module = await JsRuntime.InvokeAsync<IJSObjectReference>(
+            "import", "./js/sync-editor.js");
+        _callbacks = DotNetObjectReference.Create(new TemplateEditorCallbacks(this));
+        await _module.InvokeVoidAsync("initEditor", "sync-canvas-svg", _callbacks);
+    }
+
+    public void Dispose()
+    {
+        _callbacks?.Dispose();
+    }
+
+    /// <summary>
+    /// Канва читает размер из Model.Setup: «Применить» кладёт значения из формы туда, и
+    /// наклейка меняет размер до сохранения.
+    /// </summary>
+    private async Task ApplySetupAsync()
+    {
+        if (Model == null)
+        {
+            return;
+        }
+
+        Model.Setup.WidthMm = Math.Max(1, SetupEdits.WidthMm ?? (float)Model.Setup.WidthMm);
+        Model.Setup.HeightMm = Math.Max(1, SetupEdits.HeightMm ?? (float)Model.Setup.HeightMm);
+        Model.Setup.GapMm = Math.Max(0, SetupEdits.GapMm ?? (float)Model.Setup.GapMm);
+        Model.Setup.LeftMarginDots = Math.Max(0, SetupEdits.LeftMarginDots ?? Model.Setup.LeftMarginDots);
+        Model.Setup.TopMarginDots = Math.Max(0, SetupEdits.TopMarginDots ?? Model.Setup.TopMarginDots);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DeleteShapeAsync(int index)
+    {
+        if (Model == null || !await Message.Confirm($"Удалить объект № {index}?"))
+        {
+            return;
+        }
+
+        Busy = true;
+        try
+        {
+            Model = await EditorService.SaveAsync(new TemplateEditorChangesDto
+            {
+                TemplateId = Model.TemplateId,
+                Changes = [new TemplateEditorShapeChangeDto { Index = index, Remove = true }],
+            });
+            SelectedIndex = null;
+            await Notify.Success("Объект удалён.");
+        }
+        catch (Exception ex)
+        {
+            await Notify.Error(ex.Message);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    /// <summary>JS отдал итог перетаскивания — координаты в мм, переводим в точки.</summary>
+    private void OnShapeDragged(int index, double xMm, double yMm)
+    {
+        var shape = Model?.Shapes.FirstOrDefault(s => s.Index == index);
+        if (shape == null)
+        {
+            return;
+        }
+
+        shape.X = (float)(xMm * Model!.DotsPerMm);
+        shape.Y = (float)(yMm * Model!.DotsPerMm);
+        SelectedIndex = index;
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Клик по объекту на канве — выделить.</summary>
+    private void OnShapeClicked(int index)
+    {
+        SelectedIndex = index;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private sealed class TemplateEditorCallbacks(TemplateEditor page)
+    {
+        [JSInvokable]
+        public void ShapeDragged(int index, double xMm, double yMm) => page.OnShapeDragged(index, xMm, yMm);
+
+        [JSInvokable]
+        public void ShapeClicked(int index) => page.OnShapeClicked(index);
     }
 
     // ── Единицы и координаты ──────────────────────────────────────────────────
@@ -402,6 +542,14 @@ else
             var (w, h) = BboxMm(shape);
             double opacity = shape.IsPrint ? 1 : 0.25;
 
+            // Группа с прозрачным «хитом» на всю площадь: рамки с fill=none сами мышь
+            // не ловят, а JS-перетаскиванию (П12.4) нужен цельный клик по объекту.
+            svg.Append($"<g data-shape-index=\"{shape.Index}\" data-x=\"{Fmt((float)(shape.X / dpm))}\" " +
+                       $"data-y=\"{Fmt((float)(shape.Y / dpm))}\" class=\"sync-shape\">");
+            svg.Append($"<rect x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" " +
+                       $"height=\"{Fmt((float)h)}\" fill=\"transparent\" stroke=\"none\" " +
+                       $"pointer-events=\"all\" />");
+
             if (shape.IsRaster && shape.RasterPngBase64 != null)
             {
                 svg.Append($"<image href=\"data:image/png;base64,{shape.RasterPngBase64}\" x=\"{Fmt((float)x)}\" " +
@@ -456,6 +604,8 @@ else
                                $"fill=\"red\" opacity=\"{opacity:0.##}\">{Esc(shape.TypeName)}</text>");
                     break;
             }
+
+            svg.Append("</g>");
         }
 
         if (Selected != null)
@@ -532,7 +682,9 @@ else
             {
                 TemplateId = Model.TemplateId,
                 Changes = CurrentShapes(),
+                Setup = SetupChanges(),
             });
+            SetupEdits = ToSetupEdits(Model.Setup);
             await Notify.Success("Правки сохранены новой версией файла.");
         }
         catch (Exception ex)
@@ -582,4 +734,30 @@ else
             Height = s.Height,
             Data = s.Data,
         }).ToList();
+
+    private TemplateSetupChangeDto SetupChanges() => new()
+    {
+        WidthMm = Model!.Setup.WidthMm,
+        HeightMm = Model.Setup.HeightMm,
+        GapMm = Model.Setup.GapMm,
+        LeftMarginDots = Model.Setup.LeftMarginDots,
+        TopMarginDots = Model.Setup.TopMarginDots,
+        Speed = Model.Setup.Speed,
+        Darkness = Model.Setup.Darkness,
+        Copies = Model.Setup.Copies,
+        DirectThermal = Model.Setup.DirectThermal,
+    };
+
+    private static TemplateSetupChangeDto ToSetupEdits(TemplateSetupDto s) => new()
+    {
+        WidthMm = s.WidthMm,
+        HeightMm = s.HeightMm,
+        GapMm = s.GapMm,
+        LeftMarginDots = s.LeftMarginDots,
+        TopMarginDots = s.TopMarginDots,
+        Speed = s.Speed,
+        Darkness = s.Darkness,
+        Copies = s.Copies,
+        DirectThermal = s.DirectThermal,
+    };
 }

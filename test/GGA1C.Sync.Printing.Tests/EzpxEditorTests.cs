@@ -168,3 +168,74 @@ public class EzpxEditorGoldenTests
             $"{name}: задание из сохранённого файла не равно заданию из исходного");
     }
 }
+
+/// <summary>
+/// Настройки страницы (П12.5) и удаление объектов: Setup-атрибуты правятся в файле,
+/// удалённый объект исчезает из модели и из XML.
+/// </summary>
+public class EzpxEditorSetupTests
+{
+    private static byte[] Edited(Action<EzpxEditor> edit)
+    {
+        var editor = EzpxEditor.Load(new MemoryStream(Encoding.UTF8.GetBytes("""
+            <PrintJob xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+              <FormatVersion>1</FormatVersion>
+              <Setup LabelWidth="50" LabelLength="30" GapLength="3" Speed="20" Darkness="5" Copy="1" PrintMode="1" />
+              <Label>
+                <qlabel>
+                  <GraphicShape xsi:type="Text" X="10" Y="20"><Data>привет</Data></GraphicShape>
+                  <GraphicShape xsi:type="QRectangle"><Width>30</Width><Height>40</Height></GraphicShape>
+                </qlabel>
+              </Label>
+            </PrintJob>
+            """)));
+        edit(editor);
+        using var output = new MemoryStream();
+        editor.Save(output);
+        return output.ToArray();
+    }
+
+    [Fact]
+    public void Настройка_страницы_меняет_Setup_атрибуты()
+    {
+        var saved = Edited(editor => editor.ApplySetup(new EzpxSetupEdit(
+            WidthMm: 104, HeightMm: 100.83f, GapMm: 2.5f,
+            LeftMarginDots: 15, TopMarginDots: 25,
+            Speed: 3, Darkness: 12, Copies: 2, DirectThermal: false)));
+
+        var reloaded = EzpxReader.Load(new MemoryStream(saved));
+        reloaded.Setup.LabelWidth.ShouldBe(104f);
+        reloaded.Setup.LabelLength.ShouldBe(100.83f);
+        reloaded.Setup.GapLength.ShouldBe(2.5f);
+        reloaded.Setup.LeftMargin.ShouldBe(15);
+        reloaded.Setup.TopMargin.ShouldBe(25);
+        reloaded.Setup.Speed.ShouldBe(3);
+        reloaded.Setup.Darkness.ShouldBe(12);
+        reloaded.Setup.Copy.ShouldBe(2);
+        reloaded.Setup.PrintMode.ShouldBe(0);   // DirectThermal: false = термоперенос, ^AT
+    }
+
+    [Fact]
+    public void Удаление_объекта_убирает_его_из_модели_и_xml()
+    {
+        var saved = Edited(editor => editor.RemoveShape(0));
+
+        var reloaded = EzpxReader.Load(new MemoryStream(saved));
+        reloaded.Label.Shapes.Count.ShouldBe(1);
+        reloaded.Label.Shapes.Single().TypeName.ShouldBe("QRectangle");
+        // Текст исчез вместе со своим элементом, не оставив пустышек
+        Encoding.UTF8.GetString(saved).ShouldNotContain("привет");
+    }
+
+    [Fact]
+    public void Термоперенос_и_прямая_печать_меняют_PrintMode()
+    {
+        // Прямая печать (DirectThermal = true) — ^AD, PrintMode = 1;
+        // термоперенос с лентой — ^AT, PrintMode = 0 (SetupCommands.GetCommandEZPL).
+        var direct = Edited(editor => editor.ApplySetup(new EzpxSetupEdit(DirectThermal: true)));
+        var transfer = Edited(editor => editor.ApplySetup(new EzpxSetupEdit(DirectThermal: false)));
+
+        EzpxReader.Load(new MemoryStream(direct)).Setup.PrintMode.ShouldBe(1);
+        EzpxReader.Load(new MemoryStream(transfer)).Setup.PrintMode.ShouldBe(0);
+    }
+}

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Volo.Abp;
@@ -29,6 +29,7 @@ public interface IPrintTemplateEditorAppService : IApplicationService
     /// <summary>Применить правки и сохранить новую версией файла шаблона.</summary>
     Task<TemplateEditorDto> SaveAsync(TemplateEditorChangesDto input);
 
+
     /// <summary>Содержимое текущего файла — для скачивания из редактора.</summary>
     Task<PrintTemplateFileDto> DownloadAsync(int templateId);
 }
@@ -55,6 +56,9 @@ public class TemplateEditorDto
     /// <summary>DPI из шаблона — для показа.</summary>
     public float Dpi { get; set; }
 
+    /// <summary>Настройки страницы (Setup) — как в диалоге GoLabel.</summary>
+    public TemplateSetupDto Setup { get; set; } = new();
+
     public List<TemplateEditorShapeDto> Shapes { get; set; } = [];
 
     /// <summary>Счётчики (C00…) с непустым форматом — «C00», «C01» и т.д.</summary>
@@ -75,6 +79,36 @@ public class TemplateEditorDto
     public string FileName { get; set; } = "";
 
     public long Size { get; set; }
+}
+
+public class TemplateSetupDto
+{
+    /// <summary>Ширина наклейки в мм.</summary>
+    public float WidthMm { get; set; }
+
+    /// <summary>Высота наклейки в мм.</summary>
+    public float HeightMm { get; set; }
+
+    /// <summary>Зазор между наклейками в мм.</summary>
+    public float GapMm { get; set; }
+
+    /// <summary>Отступ слева, точек принтера.</summary>
+    public int LeftMarginDots { get; set; }
+
+    /// <summary>Отступ сверху, точек принтера.</summary>
+    public int TopMarginDots { get; set; }
+
+    /// <summary>Скорость печати (единицы GoLabel, 1–6).</summary>
+    public int Speed { get; set; }
+
+    /// <summary>Плотность (темнота) печати, 0–19.</summary>
+    public int Darkness { get; set; }
+
+    /// <summary>Копий каждой наклейки.</summary>
+    public int Copies { get; set; }
+
+    /// <summary>Термоперенос (лента) — true; прямая печать — false.</summary>
+    public bool DirectThermal { get; set; }
 }
 
 public class TemplateEditorShapeDto
@@ -128,6 +162,9 @@ public class TemplateEditorChangesDto
     public int TemplateId { get; set; }
 
     public List<TemplateEditorShapeChangeDto> Changes { get; set; } = [];
+
+    /// <summary>Правка настроек страницы; null — не менять.</summary>
+    public TemplateSetupChangeDto? Setup { get; set; }
 }
 
 public class TemplateEditorShapeChangeDto
@@ -144,6 +181,40 @@ public class TemplateEditorShapeChangeDto
 
     /// <summary>Данные объекта: текст, код переменной, подпись штрихкода. null — не менять.</summary>
     public string? Data { get; set; }
+
+    /// <summary>Удалить объект. Индексы остальных сдвигаются — правки одного запроса
+    /// применяются по порядку, поэтому удаление ставят последним.</summary>
+    public bool Remove { get; set; }
+}
+
+public class TemplateSetupChangeDto
+{
+    /// <summary>Ширина наклейки в мм.</summary>
+    public float? WidthMm { get; set; }
+
+    /// <summary>Высота наклейки в мм.</summary>
+    public float? HeightMm { get; set; }
+
+    /// <summary>Зазор между наклейками в мм.</summary>
+    public float? GapMm { get; set; }
+
+    /// <summary>Отступ слева, точек принтера.</summary>
+    public int? LeftMarginDots { get; set; }
+
+    /// <summary>Отступ сверху, точек принтера.</summary>
+    public int? TopMarginDots { get; set; }
+
+    /// <summary>Скорость печати (единицы GoLabel, 1–6).</summary>
+    public int? Speed { get; set; }
+
+    /// <summary>Плотность (темнота) печати, 0–19.</summary>
+    public int? Darkness { get; set; }
+
+    /// <summary>Копий каждой наклейки.</summary>
+    public int? Copies { get; set; }
+
+    /// <summary>Термоперенос (лента) — true; прямая печать — false. null — не менять.</summary>
+    public bool? DirectThermal { get; set; }
 }
 
 public class TemplatePreviewDto

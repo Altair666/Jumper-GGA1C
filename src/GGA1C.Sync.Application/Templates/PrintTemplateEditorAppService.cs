@@ -1,4 +1,4 @@
-// Веб-редактор наклеек (П12). Рабочая область — по модели GoLabel: канва в мм от физического
+﻿// Веб-редактор наклеек (П12). Рабочая область — по модели GoLabel: канва в мм от физического
 // размера, зум слайдером, линейки мм/см/дюймы/пиксели, отрисовка вектором в браузере. Сервер
 // отдаёт геометрию и растры объектов тем же кодом, что печать (LabelPreview.RenderShapePng
 // поверх RasterShapeBitmaps), поэтому растровые объекты на канве — ровно то, что уйдёт на
@@ -83,6 +83,21 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         var file = await ReadFileAsync(template);
         var editor = EzpxEditor.Load(new MemoryStream(file));
         editor.Apply(ToEdits(input.Changes));
+
+        // Настройки страницы — до сохранения: размер канвы в ответе пересчитается сам.
+        if (input.Setup != null)
+        {
+            editor.ApplySetup(new EzpxSetupEdit(
+                input.Setup.WidthMm,
+                input.Setup.HeightMm,
+                input.Setup.GapMm,
+                input.Setup.LeftMarginDots,
+                input.Setup.TopMarginDots,
+                input.Setup.Speed,
+                input.Setup.Darkness,
+                input.Setup.Copies,
+                input.Setup.DirectThermal));
+        }
 
         using var saved = new MemoryStream();
         editor.Save(saved);
@@ -206,6 +221,7 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
             HeightMm = parsed.Setup.LabelLength,
             DotsPerMm = parsed.Setup.DotsPerMm,
             Dpi = dpi,
+            Setup = ToSetupDto(parsed.Setup),
             Shapes = shapes,
             Counters = Indexed(parsed.Label.SerialFormat, "C"),
             Variables = Indexed(parsed.Label.VariableFormat, "V"),
@@ -216,8 +232,28 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         };
     }
 
-    private static EzpxShapeEdit[] ToEdits(List<TemplateEditorShapeChangeDto> changes) =>
-        changes.Select(c => new EzpxShapeEdit(c.Index, c.X, c.Y, c.Width, c.Height, c.Data)).ToArray();
+    private static TemplateSetupDto ToSetupDto(EzpxSetup s) => new()
+    {
+        WidthMm = s.LabelWidth,
+        HeightMm = s.LabelLength,
+        GapMm = s.GapLength,
+        LeftMarginDots = s.LeftMargin,
+        TopMarginDots = s.TopMargin,
+        Speed = s.Speed,
+        Darkness = s.Darkness,
+        Copies = s.Copy,
+        DirectThermal = s.PrintMode == 0,
+    };
+
+    private static EzpxShapeEdit[] ToEdits(List<TemplateEditorShapeChangeDto> changes)
+    {
+        // Удаление — первым: индексы правок даны в исходном списке, после удаления они
+        // сдвигаются.
+        var ordered = changes.OrderByDescending(c => c.Remove).ThenBy(c => c.Index).ToList();
+
+        return ordered.Select(c => new EzpxShapeEdit(
+            c.Index, c.X, c.Y, c.Width, c.Height, c.Data, c.Remove)).ToArray();
+    }
 
     private static (float? Width, float? Height) SizeOf(EzpxShape s) => s switch
     {
