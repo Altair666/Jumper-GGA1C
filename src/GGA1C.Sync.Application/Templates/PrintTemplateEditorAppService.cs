@@ -167,7 +167,7 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
                 Height = SizeOf(s).Height,
                 Data = s is EzpxGraphic g ? g.Data : "",
                 IsPrint = s.IsPrint,
-                FontMultiplier = s is EzpxText text ? text.FontHeight : 1f,
+                FontHeightPoints = s is EzpxText text ? text.FontHeight : 1f,
             };
 
             if (LabelPreview.RenderShapePng(s, dpi) is { } raster)

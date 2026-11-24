@@ -67,7 +67,7 @@ else
         <div class="sync-editor-side">
             <MudPaper Class="pa-2" Elevation="1">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Объекты</MudText>
-                <MudList T="int" Dense="true" Class="sync-editor-list">
+                <MudList T="int" Dense="true" Class="sync-editor-list" Style="max-height:34vh;overflow:auto;">
                     @foreach (var shape in Model.Shapes)
                     {
                         <MudListItem T="int" Value="@shape.Index" @onclick="@(() => SelectedIndex = shape.Index)"
@@ -341,15 +341,21 @@ else
             return (shape.Width.Value / Model!.DotsPerMm, shape.Height!.Value / Model!.DotsPerMm);
         }
 
-        // Текст шрифтом принтера: ширины в шаблоне нет, оценка по числу знаков.
-        double height = FontSizeMm(shape);
-        double width = Math.Max(8, shape.Data.Length * height * 0.62);
+        // Текст шрифтом принтера: ширины в шаблоне нет, оценка по самой длинной строке
+        // (многострочный «Текст» — строки по \n).
+        var lines = (shape.Data ?? "").Split('\n');
+        double longest = lines.Length == 0 ? 0 : lines.Max(l => l.Length);
+        double height = FontSizeMm(shape) * Math.Max(1, lines.Length) * 1.2;
+        double width = Math.Max(8, longest * FontSizeMm(shape) * 0.62);
         return (width, height);
     }
 
-    /// <summary>Размер знака «текста принтера» в мм: множитель из шаблона × база ~2.8 мм.</summary>
+    /// <summary>
+    /// Размер знака «текста принтера» в мм — как рисует предпросмотр GoLabel
+    /// (Text.Draw: FontHeight в пунктах × Dpi/72 точек; в мм — FontHeight × 25.4/72).
+    /// </summary>
     private static double FontSizeMm(TemplateEditorShapeDto shape) =>
-        Math.Clamp(shape.FontMultiplier * 2.8, 1.2, 15);
+        Math.Clamp(shape.FontHeightPoints * 25.4 / 72.0, 0.8, 30);
 
     private static string Esc(string? value) =>
         (value ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
@@ -388,8 +394,20 @@ else
             switch (shape.TypeName)
             {
                 case "Text":
-                    svg.Append($"<text x=\"{Fmt((float)x)}\" y=\"{Fmt((float)(y + h))}\" font-family=\"sans-serif\" " +
-                               $"font-size=\"{Fmt((float)FontSizeMm(shape))}\" opacity=\"{opacity:0.##}\">{Esc(shape.Data)}</text>");
+                    // Многострочный «Текст» GoLabel: строки по \n, шаг ~1.2 размера знака
+                    var textLines = Esc(shape.Data).Split('\n');
+                    var textSvg = new StringBuilder(
+                        $"<text x=\"{Fmt((float)x)}\" font-family=\"sans-serif\" " +
+                        $"font-size=\"{Fmt((float)FontSizeMm(shape))}\" opacity=\"{opacity:0.##}\">");
+                    for (int li = 0; li < textLines.Length; li++)
+                    {
+                        string dy = li == 0
+                            ? Fmt((float)(FontSizeMm(shape) * 0.9))
+                            : Fmt((float)(FontSizeMm(shape) * 1.2));
+                        textSvg.Append($"<tspan x=\"{Fmt((float)x)}\" dy=\"{dy}\">{textLines[li]}</tspan>");
+                    }
+                    textSvg.Append("</text>");
+                    svg.Append(textSvg);
                     break;
 
                 case "QRectangle":

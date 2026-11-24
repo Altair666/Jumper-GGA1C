@@ -103,10 +103,11 @@ public class TemplateEditorShapeDto
     public bool IsPrint { get; set; }
 
     /// <summary>
-    /// Множитель размера «текста принтера» из шаблона (AT-команда: x_mul/y_mul). Приближение
-    /// для превью: канва рисует знак ~2.8 мм · множитель — принтер нарисует своим шрифтом.
+    /// Высота знака «текста принтера» в пунктах (FontHeight шаблона). В предпросмотре GoLabel
+    /// она рисуется как FontHeight × Dpi/72 точек (Text.Draw, QLabelSDK/Text.cs:2860), в мм это
+    /// FontHeight × 25.4/72.
     /// </summary>
-    public float FontMultiplier { get; set; } = 1f;
+    public float FontHeightPoints { get; set; } = 1f;
 
     /// <summary>
     /// Объект печатается растром: картинка ниже — ровно то, что уйдёт на принтер. Векторные
