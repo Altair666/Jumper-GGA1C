@@ -1,13 +1,18 @@
 @page "/templates/{Id:int}/edit"
 @attribute [Authorize(GGA1C.Sync.Permissions.SyncPermissions.Admin)]
 @using GGA1C.Sync.Templates
+@using System.Text
 @inherits SyncComponentBase
 @inject IPrintTemplateEditorAppService EditorService
 @inject IJSRuntime JsRuntime
+@inject NavigationManager NavigationManager
 
-@* П12.1: редактор наклеек — превью растром из того же кода, что печать, правка
-   положения/размера/данных объектов, EZPL-текст задания для отладки порта (П5).
-   Свойства шрифтов — П12.2, счётчики — П12.3, добавление объектов — П12.4. *@
+@* П12.1п: рабочая область по модели GoLabel. Данные шаблона — в мм; канва рисуется от
+   физического размера (пикселей на мм — от экрана, ~3.78 при 96 dpi), масштаб — множитель
+   слайдера (как fZoomRate у GoLabel). Линейки сверху и слева переключают мм/см/дюймы/пиксели
+   (RulerControl.enumScaleMode). Векторные объекты (текст принтера, рамки, линии, штрихкод
+   командой) канва рисует сама; растровые (текст Windows, логотипы, штрихкоды-картинки)
+   вставлены картинками из кода печати. Правка числами; перетаскивание — П12.4. *@
 
 @if (Model == null)
 {
@@ -15,125 +20,133 @@
 }
 else
 {
-    <MudBreadcrumbs Items="@Breadcrumbs" Class="mb-2" />
+    <MudPaper Class="pa-2 mb-2" Elevation="1">
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="К шаблонам"
+                           OnClick="@(() => NavigationManager.NavigateTo("templates"))" />
+            <MudText Typo="Typo.h6" Class="mb-0">@Model.Name</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @FormatNumber(Model.WidthMm) × @FormatNumber(Model.HeightMm) мм · @(Math.Round(Model.Dpi)) dpi ·
+                @Model.FileName (@(Model.Size / 1024) КБ)
+            </MudText>
+            <MudSpacer />
+            <MudSelect T="EditorUnit" @bind-Value="Unit" Label="Единицы линейки" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Style="width:180px;">
+                <MudSelectItem Value="@EditorUnit.Mm">мм</MudSelectItem>
+                <MudSelectItem Value="@EditorUnit.Cm">см</MudSelectItem>
+                <MudSelectItem Value="@EditorUnit.Inch">дюймы</MudSelectItem>
+                <MudSelectItem Value="@EditorUnit.Px">пиксели (принтер)</MudSelectItem>
+            </MudSelect>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Масштаб</MudText>
+            <MudSlider T="double" @bind-Value="Zoom" Min="0.5" Max="6" Step="0.25" Style="width:150px;" />
+            <MudText Typo="Typo.caption" Style="width:44px;">@FormatNumber(Zoom) ×</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy"
+                       StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Сохранить</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@Busy"
+                       StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadAsync">Скачать</MudButton>
+        </MudStack>
+    </MudPaper>
 
-    <MudText Typo="Typo.h5" Class="mb-1">@Model.Name</MudText>
-    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
-        Наклейка @Model.WidthPx × @Model.HeightPx точек (@(Math.Round(Model.Dpi)):0 dpi). Координаты
-        объектов — в тех же точках. Превью рисует тот же код, что печать: растровые объекты точны,
-        текст шрифтом принтера и рамки — приближение (их печатает сам принтер).
-    </MudText>
-
-    <MudGrid Spacing="3">
-        <MudItem xs="12" md="8">
-            <div class="sync-editor-stage">
-                <div class="sync-editor-canvas" style="width:@(Model.WidthPx * Scale)px;height:@(Model.HeightPx * Scale)px;">
-                    @if (Model.PreviewPngBase64.Length > 0)
+    <MudGrid Spacing="2">
+        <MudItem xs="12" md="2">
+            <MudPaper Class="pa-2" Elevation="1">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Объекты</MudText>
+                <MudList T="int" Dense="true" Class="sync-editor-list">
+                    @foreach (var shape in Model.Shapes)
                     {
-                        <img src="data:image/png;base64,@Model.PreviewPngBase64"
-                             style="width:100%;height:100%;image-rendering:pixelated;" alt="превью" />
+                        <MudListItem T="int" Value="@shape.Index" @onclick="@(() => SelectedIndex = shape.Index)"
+                                     Class="@(SelectedIndex == shape.Index ? "sync-editor-list-selected" : "")">
+                            <MudText Typo="Typo.caption">
+                                @shape.Index. @shape.KindCaption@(shape.IsPrint ? "" : " · скрыт")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="font-family:monospace;">
+                                @ShortData(shape)
+                            </MudText>
+                        </MudListItem>
                     }
-                    else
-                    {
-                        <MudAlert Severity="Severity.Warning">Превью не собралось — смотрите журнал.</MudAlert>
-                    }
-                    @foreach (var shape in VisibleShapes)
-                    {
-                        var selected = SelectedIndex == shape.Index;
-                        <div class="@BoxClass(selected, shape.IsPrint)"
-                             style="@BoxStyle(shape)"
-                             title="@(shape.KindCaption + ": " + ShortData(shape))"
-                             @onclick="@(() => SelectedIndex = shape.Index)">
-                            <span class="sync-editor-box-label">@shape.Index</span>
-                        </div>
-                    }
-                </div>
-                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="mt-2">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Масштаб</MudText>
-                    <MudSlider T="double" @bind-Value="Scale" Min="1" Max="6" Step="0.5" Style="width:220px;" />
-                    <MudText Typo="Typo.caption">@Scale ×</MudText>
-                    <MudSpacer />
-                    <MudSwitch T="bool" @bind-Value="ShowHidden" Label="Скрытые объекты" Color="Color.Primary" />
-                </MudStack>
-            </div>
-        </MudItem>
-
-        <MudItem xs="12" md="4">
-            <MudPaper Class="pa-3" Elevation="1">
-                @if (Selected == null)
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Выберите объект на макете или в списке — здесь появятся его свойства.
-                    </MudText>
-                }
-                else
-                {
-                    <MudText Typo="Typo.subtitle2">
-                        № @Selected.Index · @Selected.KindCaption
-                    </MudText>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-                        тип в шаблоне: @Selected.TypeName
-                    </MudText>
-
-                    <MudNumericField T="float" Label="X, точек" @bind-Value="Selected.X" Min="0"
-                                     Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true"
-                                     Class="mb-1" />
-                    <MudNumericField T="float" Label="Y, точек" @bind-Value="Selected.Y" Min="0"
-                                     Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true"
-                                     Class="mb-1" />
-                    @if (Selected.Width != null)
-                    {
-                        <MudNumericField T="float?" Label="Ширина, точек" @bind-Value="Selected.Width" Min="1"
-                                         Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true"
-                                         Class="mb-1" />
-                        <MudNumericField T="float?" Label="Высота, точек" @bind-Value="Selected.Height" Min="1"
-                                         Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true"
-                                         Class="mb-1" />
-                    }
-                    <MudTextField T="string" Label="Данные" @bind-Value="Selected.Data" Lines="3"
-                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-1" />
-                    <MudSwitch T="bool" @bind-Value="Selected.IsPrint" Label="Печатать этот объект"
-                               Color="Color.Primary" Class="mb-2" />
-
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@Busy" FullWidth="true"
-                               OnClick="ApplyPreviewAsync">Применить к превью</MudButton>
-                }
-            </MudPaper>
-
-            <MudPaper Class="pa-3 mt-3" Elevation="1">
-                <MudStack Row="true" Spacing="2">
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy"
-                               StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Сохранить в хаб</MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@Busy"
-                               StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadAsync">Скачать .ezpx</MudButton>
-                </MudStack>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                    Сохранение пишет новую версию файла; прежняя остаётся в хранилище. Файл:
-                    @Model.FileName (@(Model.Size / 1024) КБ).
-                </MudText>
+                </MudList>
             </MudPaper>
 
             @if (Model.Counters.Count > 0 || Model.Variables.Count > 0)
             {
-                <MudPaper Class="pa-3 mt-3" Elevation="1">
-                    @if (Model.Counters.Count > 0)
+                <MudPaper Class="pa-2 mt-2" Elevation="1">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Счётчики и переменные</MudText>
+                    @foreach (var line in Model.Counters.Concat(Model.Variables))
                     {
-                        <MudText Typo="Typo.subtitle2">Счётчики (формат в шаблоне)</MudText>
-                        @foreach (var counter in Model.Counters)
-                        {
-                            <MudText Typo="Typo.caption" Style="font-family:monospace;">@counter</MudText>
-                        }
-                    }
-                    @if (Model.Variables.Count > 0)
-                    {
-                        <MudText Typo="Typo.subtitle2" Class="mt-2">Переменные</MudText>
-                        @foreach (var variable in Model.Variables)
-                        {
-                            <MudText Typo="Typo.caption" Style="font-family:monospace;">@variable</MudText>
-                        }
+                        <MudText Typo="Typo.caption" Style="font-family:monospace;">@line</MudText>
                     }
                 </MudPaper>
             }
+        </MudItem>
+
+        <MudItem xs="12" md="7">
+            <div class="sync-workspace">
+                <div class="sync-workspace-grid" style="width:@(CornerPx + CanvasWidthPx)px;">
+                    <div class="sync-corner" style="width:@(CornerPx)px;height:@(RulerPx)px;"></div>
+                    <svg class="sync-ruler" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))</svg>
+                    <svg class="sync-ruler" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))</svg>
+                    <svg class="sync-canvas" viewBox="0 0 @FormatNumber(Model.WidthMm) @FormatNumber(Model.HeightMm)"
+                         width="@FormatNumber(CanvasWidthPx)" height="@FormatNumber(CanvasHeightPx)">
+                        <rect x="0" y="0" width="@FormatNumber(Model.WidthMm)" height="@FormatNumber(Model.HeightMm)"
+                              fill="white" stroke="#bdbdbd" stroke-width="0.2" />
+                        @((MarkupString)ShapesSvg())
+                    </svg>
+                </div>
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="mt-2">
+                    <MudSwitch T="bool" @bind-Value="ShowHidden" Label="Скрытые объекты" Color="Color.Primary" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Растровые объекты (текст Windows, логотипы, штрихкоды-картинки) — точный вывод;
+                        текст шрифтом принтера и рамки — приближение, их печатает сам принтер.
+                    </MudText>
+                </MudStack>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" md="3">
+            <MudPaper Class="pa-2" Elevation="1">
+                @if (Selected == null)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Выберите объект на макете или в списке — здесь его свойства в единицах
+                        линейки. Мышью объекты двигаются с П12.4, пока — полями.
+                    </MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.subtitle2">№ @Selected.Index · @Selected.KindCaption</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                        тип: @Selected.TypeName@(Selected.IsPrint ? "" : " · скрыт")
+                    </MudText>
+
+                    <MudNumericField T="double" Label="@UnitLabel("X")" @bind-Value="EditsX"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                    <MudNumericField T="double" Label="@UnitLabel("Y")" @bind-Value="EditsY"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                    @if (Selected.Width != null)
+                    {
+                        <MudNumericField T="double" Label="@UnitLabel("Ширина")" @bind-Value="EditsWidth"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                        <MudNumericField T="double" Label="@UnitLabel("Высота")" @bind-Value="EditsHeight"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
+                    }
+                    <MudTextField T="string" Label="Данные" @bind-Value="Selected.Data" Lines="3"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-1" />
+                    <MudSwitch T="bool" @bind-Value="Selected.IsPrint" Label="Печатать этот объект"
+                               Color="Color.Primary" Class="mb-1" />
+
+                    @if (Selected.IsRaster)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy" FullWidth="true"
+                                   OnClick="RebuildRasterAsync">Пересобрать картинку (данные изменились)</MudButton>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Векторный объект — канва обновляется сама при правке полей.
+                        </MudText>
+                    }
+                }
+            </MudPaper>
         </MudItem>
 
         <MudItem xs="12">
@@ -150,29 +163,6 @@ else
                         </MudAlert>
                     }
                 </MudExpansionPanel>
-                <MudExpansionPanel Text="Объекты">
-                    <MudList T="int" Dense="true">
-                        @foreach (var shape in Model.Shapes)
-                        {
-                            var size = shape.Width != null
-                                ? $" {shape.Width?.ToString("0")}×{shape.Height?.ToString("0")}"
-                                : "";
-                            var hidden = shape.IsPrint ? "" : " · скрыт";
-                            <MudListItem T="int" Value="@shape.Index" @onclick="@(() => SelectedIndex = shape.Index)">
-                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@shape.Index</MudChip>
-                                    <span>@shape.KindCaption</span>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                        @(shape.X.ToString("0")),@(shape.Y.ToString("0"))@size@hidden
-                                    </MudText>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="font-family:monospace;">
-                                        @ShortData(shape)
-                                    </MudText>
-                                </MudStack>
-                            </MudListItem>
-                        }
-                    </MudList>
-                </MudExpansionPanel>
             </MudExpansionPanels>
         </MudItem>
     </MudGrid>
@@ -187,15 +177,25 @@ else
 
     private bool ShowHidden { get; set; } = true;
 
-    private double Scale { get; set; } = 2;
+    private double Zoom { get; set; } = 1;
+
+    private EditorUnit Unit { get; set; } = EditorUnit.Mm;
 
     private bool Busy { get; set; }
+
+    /// <summary>Пикселей CSS на мм при масштабе ×1 (экран 96 dpi — определение CSS-пикселя).</summary>
+    private const double PxPerMm = 96.0 / 25.4;
+
+    private const int CornerPx = 22;
+
+    private const int RulerPx = 22;
 
     private TemplateEditorShapeDto? Selected =>
         Model?.Shapes.FirstOrDefault(s => s.Index == SelectedIndex);
 
-    private IEnumerable<TemplateEditorShapeDto> VisibleShapes =>
-        ShowHidden ? Model?.Shapes ?? [] : Model?.Shapes.Where(s => s.IsPrint) ?? [];
+    private double CanvasWidthPx => PxPerMm * Zoom * (Model?.WidthMm ?? 0);
+
+    private double CanvasHeightPx => PxPerMm * Zoom * (Model?.HeightMm ?? 0);
 
     private IReadOnlyList<BreadcrumbItem> Breadcrumbs => new List<BreadcrumbItem>
     {
@@ -220,28 +220,252 @@ else
         }
     }
 
-    private static string BoxClass(bool selected, bool isPrint)
+    // ── Единицы и координаты ──────────────────────────────────────────────────
+
+    private enum EditorUnit { Mm, Cm, Inch, Px }
+
+    private double DotsToUnit(double dots) => Unit switch
     {
-        return "sync-editor-box" + (selected ? " selected" : "") + (isPrint ? "" : " not-printed");
+        EditorUnit.Mm => dots / Model!.DotsPerMm,
+        EditorUnit.Cm => dots / Model!.DotsPerMm / 10,
+        EditorUnit.Inch => dots / Model!.DotsPerMm / 25.4,
+        _ => dots,
+    };
+
+    private float UnitToDots(double value) => Unit switch
+    {
+        EditorUnit.Mm => (float)(value * Model!.DotsPerMm),
+        EditorUnit.Cm => (float)(value * 10 * Model!.DotsPerMm),
+        EditorUnit.Inch => (float)(value * 25.4 * Model!.DotsPerMm),
+        _ => (float)value,
+    };
+
+    private string UnitLabel(string field) => Unit switch
+    {
+        EditorUnit.Mm => $"{field}, мм",
+        EditorUnit.Cm => $"{field}, см",
+        EditorUnit.Inch => $"{field}, дюймы",
+        _ => $"{field}, точки",
+    };
+
+    /// <summary>Единица линейки: сколько единиц в миллиметре пространства наклейки.</summary>
+    private double UnitsPerMm => Unit switch
+    {
+        EditorUnit.Mm => 1,
+        EditorUnit.Cm => 0.1,
+        EditorUnit.Inch => 1.0 / 25.4,
+        _ => Model?.DotsPerMm ?? 8,
+    };
+
+    // ── Правки выбранного объекта в единицах линейки ─────────────────────────
+
+    private double EditsX { get => Selected == null ? 0 : Math.Round(DotsToUnit(Selected.X), 3); set { if (Selected != null) Selected.X = UnitToDots(value); } }
+
+    private double EditsY { get => Selected == null ? 0 : Math.Round(DotsToUnit(Selected.Y), 3); set { if (Selected != null) Selected.Y = UnitToDots(value); } }
+
+    private double EditsWidth { get => Selected?.Width == null ? 0 : Math.Round(DotsToUnit(Selected.Width.Value), 3); set { if (Selected?.Width != null) Selected.Width = UnitToDots(value); } }
+
+    private double EditsHeight { get => Selected?.Height == null ? 0 : Math.Round(DotsToUnit(Selected.Height.Value), 3); set { if (Selected?.Height != null) Selected.Height = UnitToDots(value); } }
+
+    // ── Линейки ───────────────────────────────────────────────────────────────
+
+    private sealed record RulerTick(double PositionPx, bool Major, string? Label);
+
+    private (double Minor, double Major) TickSteps => Unit switch
+    {
+        EditorUnit.Mm => (1, 10),
+        EditorUnit.Cm => (0.1, 1),
+        EditorUnit.Inch => (0.125, 0.5),
+        _ => (8, 80),
+    };
+
+    private List<RulerTick> TopTicks => RulerTicks(Model?.WidthMm ?? 0);
+
+    private List<RulerTick> LeftTicks => RulerTicks(Model?.HeightMm ?? 0);
+
+    /// <summary>Деления по выбранной единице: экран-пиксели = единицы · единиц-в-мм · px/мм · зум.</summary>
+    private List<RulerTick> RulerTicks(float lengthMm)
+    {
+        var ticks = new List<RulerTick>();
+        if (Model == null || lengthMm <= 0)
+        {
+            return ticks;
+        }
+
+        double lengthUnits = lengthMm * UnitsPerMm;
+        double pxPerUnit = Unit == EditorUnit.Px
+            ? PxPerMm * Zoom / Model.DotsPerMm
+            : PxPerMm * Zoom * UnitsPerMm;
+        var (minor, major) = TickSteps;
+        int stepsPerMajor = Math.Max(1, (int)Math.Round(major / minor));
+
+        double position = 0;
+        int step = 0;
+        while (position <= lengthUnits + minor / 2 && ticks.Count < 4000)
+        {
+            bool isMajor = step % stepsPerMajor == 0;
+            ticks.Add(new RulerTick(
+                Math.Round(position * pxPerUnit, 2), isMajor,
+                isMajor ? FormatTick(position) : null));
+            position += minor;
+            step++;
+        }
+
+        return ticks;
     }
 
-    private string BoxStyle(TemplateEditorShapeDto shape)
+    private static string FormatTick(double value)
     {
-        var size = shape.Width != null
-            ? $"width:{shape.Width * Scale}px;height:{shape.Height * Scale}px;"
-            : $"width:{6 * Scale}px;height:{6 * Scale}px;";
-        return $"left:{shape.X * Scale}px;top:{shape.Y * Scale}px;{size}";
+        return Math.Abs(value - Math.Round(value)) < 0.001
+            ? Math.Round(value).ToString("0")
+            : value.ToString("0.###");
     }
+
+    // ── Отрисовка объектов (SVG, координаты в мм; разметка строкой — внутри
+    //    Razor тег <text> конфликтует со служебным <text>, поэтому слой собирается
+    //    кодом и вставляется как разметка) ─────────────────────────────────────
+
+    private static string Fmt(float mm) => mm.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string FormatNumber(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>SVG линейки. Тег <text> в Razor зарезервирован, поэтому разметка строкой.</summary>
+    private static string RulerSvg(List<RulerTick> ticks, bool horizontal)
+    {
+        var svg = new StringBuilder();
+        foreach (var tick in ticks)
+        {
+            string from = horizontal ? $"y1=\"{(tick.Major ? 0 : 14)}\" y2=\"22\"" : $"x1=\"{(tick.Major ? 0 : 14)}\" x2=\"22\"";
+            string to = horizontal ? $"x2=\"{FormatNumber(tick.PositionPx)}\"" : $"y2=\"{FormatNumber(tick.PositionPx)}\"";
+            svg.Append($"<line {from} {to} class=\"sync-ruler-tick\"/>");
+            if (tick.Label != null)
+            {
+                string x = horizontal ? FormatNumber(tick.PositionPx + 2) : "2";
+                string y = horizontal ? "10" : FormatNumber(tick.PositionPx - 2);
+                svg.Append($"<text x=\"{x}\" y=\"{y}\" class=\"sync-ruler-label\">{tick.Label}</text>");
+            }
+        }
+        return svg.ToString();
+    }
+
+    private (double Width, double Height) BboxMm(TemplateEditorShapeDto shape)
+    {
+        if (shape.IsRaster)
+        {
+            return (shape.RasterWidthDots / Model!.DotsPerMm, shape.RasterHeightDots / Model!.DotsPerMm);
+        }
+        if (shape.Width != null)
+        {
+            return (shape.Width.Value / Model!.DotsPerMm, shape.Height!.Value / Model!.DotsPerMm);
+        }
+
+        // Текст шрифтом принтера: ширины в шаблоне нет, оценка по числу знаков.
+        double height = FontSizeMm(shape);
+        double width = Math.Max(8, shape.Data.Length * height * 0.62);
+        return (width, height);
+    }
+
+    /// <summary>Размер знака «текста принтера» в мм: множитель из шаблона × база ~2.8 мм.</summary>
+    private static double FontSizeMm(TemplateEditorShapeDto shape) =>
+        Math.Clamp(shape.FontMultiplier * 2.8, 1.2, 15);
+
+    private static string Esc(string? value) =>
+        (value ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
+            .Replace("\r", " ").Replace("\n", " ");
+
+    private string ShapesSvg()
+    {
+        if (Model == null)
+        {
+            return "";
+        }
+
+        var svg = new StringBuilder();
+        double dpm = Model.DotsPerMm;
+
+        foreach (var shape in Model.Shapes)
+        {
+            if (!ShowHidden && !shape.IsPrint)
+            {
+                continue;
+            }
+
+            double x = shape.X / dpm;
+            double y = shape.Y / dpm;
+            var (w, h) = BboxMm(shape);
+            double opacity = shape.IsPrint ? 1 : 0.25;
+
+            if (shape.IsRaster && shape.RasterPngBase64 != null)
+            {
+                svg.Append($"<image href=\"data:image/png;base64,{shape.RasterPngBase64}\" x=\"{Fmt((float)x)}\" " +
+                           $"y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" height=\"{Fmt((float)h)}\" " +
+                           $"preserveAspectRatio=\"none\" opacity=\"{opacity:0.##}\"/>");
+                continue;
+            }
+
+            switch (shape.TypeName)
+            {
+                case "Text":
+                    svg.Append($"<text x=\"{Fmt((float)x)}\" y=\"{Fmt((float)(y + h))}\" font-family=\"sans-serif\" " +
+                               $"font-size=\"{Fmt((float)FontSizeMm(shape))}\" opacity=\"{opacity:0.##}\">{Esc(shape.Data)}</text>");
+                    break;
+
+                case "QRectangle":
+                    svg.Append($"<rect x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" " +
+                               $"height=\"{Fmt((float)h)}\" fill=\"none\" stroke=\"black\" " +
+                               $"stroke-width=\"{Fmt(StrokeMm(shape))}\" opacity=\"{opacity:0.##}\"/>");
+                    break;
+
+                case "Line":
+                    svg.Append($"<rect x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" " +
+                               $"height=\"{Fmt((float)h)}\" fill=\"black\" opacity=\"{opacity:0.##}\"/>");
+                    break;
+
+                case "BarCode":
+                    svg.Append($"<rect x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" " +
+                               $"height=\"{Fmt((float)h)}\" fill=\"white\" stroke=\"black\" stroke-width=\"0.2\" " +
+                               $"opacity=\"{opacity:0.##}\"/>");
+                    svg.Append($"<text x=\"{Fmt((float)(x + 1))}\" y=\"{Fmt((float)(y + 2.5))}\" font-family=\"monospace\" " +
+                               $"font-size=\"2\" opacity=\"{opacity:0.##}\">{Esc(shape.Data)}</text>");
+                    break;
+
+                default:
+                    svg.Append($"<rect x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" " +
+                               $"height=\"{Fmt((float)h)}\" fill=\"none\" stroke=\"red\" stroke-width=\"0.25\" " +
+                               $"stroke-dasharray=\"1,1\" opacity=\"{opacity:0.##}\"/>");
+                    svg.Append($"<text x=\"{Fmt((float)(x + 1))}\" y=\"{Fmt((float)(y + 2.5))}\" font-size=\"2\" " +
+                               $"fill=\"red\" opacity=\"{opacity:0.##}\">{Esc(shape.TypeName)}</text>");
+                    break;
+            }
+        }
+
+        if (Selected != null)
+        {
+            var (w, h) = BboxMm(Selected);
+            double x = Selected.X / dpm;
+            double y = Selected.Y / dpm;
+            svg.Append($"<rect x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" " +
+                       $"height=\"{Fmt((float)h)}\" fill=\"none\" stroke=\"#1976d2\" stroke-width=\"0.3\" " +
+                       $"stroke-dasharray=\"1.5,1\"/>");
+        }
+
+        return svg.ToString();
+    }
+
+    private float StrokeMm(TemplateEditorShapeDto shape) =>
+        shape.Height == null ? 0.13f : Math.Clamp(shape.Height.Value, 1, 8) / Model!.DotsPerMm;
+
+    // ── Действия ──────────────────────────────────────────────────────────────
 
     private static string ShortData(TemplateEditorShapeDto shape)
     {
         var text = shape.Data ?? "";
-        return text.Length <= 40 ? text : text[..40] + "…";
+        return text.Length <= 32 ? text : text[..32] + "…";
     }
 
-    private async Task ApplyPreviewAsync()
+    private async Task RebuildRasterAsync()
     {
-        if (Model == null)
+        if (Model == null || Selected == null)
         {
             return;
         }
@@ -252,10 +476,14 @@ else
             var preview = await EditorService.RenderPreviewAsync(new TemplateEditorChangesDto
             {
                 TemplateId = Model.TemplateId,
-                Changes = CurrentShapes(),
+                Changes = [new TemplateEditorShapeChangeDto { Index = Selected.Index, Data = Selected.Data }],
             });
-            Model.PreviewPngBase64 = preview.PreviewPngBase64;
-            await Notify.Success("Превью обновлено.");
+
+            if (preview.Rasters.TryGetValue(Selected.Index, out var raster))
+            {
+                Selected.RasterPngBase64 = raster;
+                await Notify.Success("Картинка объекта пересобрана.");
+            }
         }
         catch (Exception ex)
         {

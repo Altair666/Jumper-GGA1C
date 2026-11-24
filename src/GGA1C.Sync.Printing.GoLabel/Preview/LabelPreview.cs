@@ -43,6 +43,54 @@ public static class LabelPreview
         return canvas;
     }
 
+    /// <summary>
+    /// Растр одного объекта тем же кодом, что печать — для веб-редактора: растровые объекты
+    /// (текст Windows, текстовые поля, логотипы, штрихкоды-картинки, эллипсы) вставляются в
+    /// векторную канву картинками. Векторные (текст принтера, рамки, линии) — null: их рисует
+    /// браузер. Растровые размеры — в точках принтера.
+    /// </summary>
+    public static (byte[] Png, int WidthDots, int HeightDots)? RenderShapePng(EzpxShape shape, float dpi)
+    {
+        if (shape is not EzpxRasterShape raster)
+        {
+            return null;
+        }
+
+        string data = shape is EzpxGraphic graphic ? graphic.Data : "";
+
+        Bitmap? bitmap = shape.TypeName switch
+        {
+            "Image" => RasterShapeBitmaps.ImageBitmap(raster),
+            "WindowText" => RasterShapeBitmaps.WindowTextBitmap(raster, data, dpi).Bitmap,
+            "WindowTextBox" => RasterShapeBitmaps.WindowTextBoxBitmap(raster, data, dpi),
+            "GdiWindowTextBox" => RasterShapeBitmaps.GdiTextBoxBitmap(raster, data, dpi),
+            "Ellipse" => RasterShapeBitmaps.EllipseBitmap(raster),
+            "BarCode" => rasterBarcode(shape, data),
+            _ => null,
+        };
+
+        if (bitmap == null)
+        {
+            return null;
+        }
+
+        using (bitmap)
+        {
+            using var stream = new MemoryStream();
+            bitmap.Save(stream, ImageFormat.Png);
+            return (stream.ToArray(), bitmap.Width, bitmap.Height);
+        }
+
+        static Bitmap? rasterBarcode(EzpxShape shape, string data)
+        {
+            if (shape is not EzpxBarCode barcode || !barcode.IsRaster)
+            {
+                return null;
+            }
+            return data == " " ? null : RasterShapeBitmaps.BarCodeBitmap(barcode, data);
+        }
+    }
+
     /// <summary>Превью в PNG — картинку отдают в браузер.</summary>
     public static byte[] RenderPng(EzpxTemplate template)
     {

@@ -1,4 +1,4 @@
-body {
+﻿body {
     
 }
 
@@ -39,48 +39,60 @@ body {
     background-position: center;
 }
 
-/* Редактор наклеек (П12.1): канва с превью и оверлей объектов */
-.sync-editor-stage {
-    display: inline-block;
+/* Редактор наклеек (П12.1п): рабочая область по модели GoLabel — канва в мм от
+   физического размера, линейки с единицами, векторная отрисовка */
+.sync-workspace {
+    overflow: auto;
     max-width: 100%;
-}
-
-.sync-editor-canvas {
-    position: relative;
+    max-height: 78vh;
+    background: var(--mud-palette-background-grey);
     border: 1px solid var(--mud-palette-lines-default);
-    background: repeating-conic-gradient(#f5f5f5 0 25%, #ffffff 0 50%) 0 0/16px 16px;
-    overflow: hidden;
 }
 
-.sync-editor-box {
-    position: absolute;
-    border: 1px dashed rgba(25, 118, 210, .55);
-    cursor: pointer;
+.sync-workspace-grid {
+    display: grid;
+    grid-template-columns: 22px auto;
+    grid-template-rows: 22px auto;
 }
 
-.sync-editor-box:hover {
-    border-color: rgba(25, 118, 210, .9);
-    background: rgba(25, 118, 210, .08);
+.sync-corner {
+    background: var(--mud-palette-surface);
+    border-right: 1px solid var(--mud-palette-lines-default);
+    border-bottom: 1px solid var(--mud-palette-lines-default);
 }
 
-.sync-editor-box.selected {
-    border: 2px solid var(--mud-palette-primary);
-    background: rgba(25, 118, 210, .12);
+.sync-ruler {
+    display: block;
+    background: var(--mud-palette-surface);
 }
 
-.sync-editor-box.not-printed {
-    border-style: dotted;
-    border-color: rgba(158, 158, 158, .7);
+.sync-ruler-tick {
+    stroke: var(--mud-palette-text-secondary);
+    stroke-width: 1;
 }
 
-.sync-editor-box-label {
-    position: absolute;
-    top: -14px;
-    left: 0;
-    font-size: 10px;
-    line-height: 14px;
-    color: var(--mud-palette-primary);
+.sync-ruler-label {
+    font-size: 8px;
+    fill: var(--mud-palette-text-secondary);
     user-select: none;
+}
+
+.sync-canvas {
+    display: block;
+    background: var(--mud-palette-background-grey);
+}
+
+.sync-selection {
+    pointer-events: none;
+}
+
+.sync-editor-list {
+    max-height: 320px;
+    overflow: auto;
+}
+
+.sync-editor-list-selected {
+    background: rgba(25, 118, 210, .1);
 }
 
 .sync-editor-ezpl {

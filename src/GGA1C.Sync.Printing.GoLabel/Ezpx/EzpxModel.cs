@@ -88,6 +88,13 @@ public sealed class EzpxSetup
     /// <summary>Setup.LabelsPerCut: при отрезе по базе или пачкой — 32767.</summary>
     public int LabelsPerCut => CutDataBase || BatchCut ? 32767 : LabelsPerCutRaw;
 
+    /// <summary>
+    /// Точек принтера в миллиметре — коэффициент, которым порт переводит мм наклейки в точки.
+    /// У GoLabel при dpi &lt; 205 он 7.99, а не ровно dpi/25.4 (Units.ConvertFactor); редактор
+    /// показывает объекты в мм через него же, чтобы видеть то, что напечатается.
+    /// </summary>
+    public float DotsPerMm => Units.ConvertFactor(Unit.Mm, Dpi);
+
     // Setup._WidthInPixel и др.: размеры в точках принтера.
     public int WidthInPixel => (int)Math.Round(Units.ConvertFactor(Unit.Mm, Dpi) * LabelWidth, 0);
     public int HeightInPixel => (int)Math.Round(Units.ConvertFactor(UnitType, Dpi) * LabelLength, 0);

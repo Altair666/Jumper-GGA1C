@@ -1,7 +1,8 @@
-// Веб-редактор наклеек (П12.1). Превью рисуется тем же кодом, что печать
-// (LabelPreview поверх RasterShapeBitmaps), поэтому то, что видит администратор, — то, что
-// уйдёт на принтер; расхождение возможно только у объектов-команд (текст шрифтом принтера),
-// которые принтер рисует сам, — там превью рисует GDI, как и предпросмотр GoLabel.
+// Веб-редактор наклеек (П12). Рабочая область — по модели GoLabel: канва в мм от физического
+// размера, зум слайдером, линейки мм/см/дюймы/пиксели, отрисовка вектором в браузере. Сервер
+// отдаёт геометрию и растры объектов тем же кодом, что печать (LabelPreview.RenderShapePng
+// поверх RasterShapeBitmaps), поэтому растровые объекты на канве — ровно то, что уйдёт на
+// принтер; текст шрифтом принтера и рамки рисует браузер, как предпросмотр самого GoLabel.
 //
 // Сохранение — новой версией файла: прежний файл в хранилище остаётся, запись шаблона
 // переключается на новую ссылку. Так правку можно откатить вручную без механизма версий.
@@ -47,8 +48,7 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         var file = await ReadFileAsync(template);
         var editor = EzpxEditor.Load(new MemoryStream(file));
 
-        var dto = ToDto(template, editor.Template, file);
-        return dto;
+        return ToDto(template, editor.Template, file);
     }
 
     public async Task<TemplatePreviewDto> RenderPreviewAsync(TemplateEditorChangesDto input)
@@ -56,10 +56,25 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         var (editor, _) = await LoadEditableAsync(input.TemplateId);
         editor.Apply(ToEdits(input.Changes));
 
-        return new TemplatePreviewDto
+        // Растры обновляем только тем объектам, чьи данные правили: у остальных картинка
+        // не зависит от правки.
+        var editedData = input.Changes.Where(c => c.Data != null).Select(c => c.Index).ToHashSet();
+        var rasters = new Dictionary<int, string>();
+
+        foreach (var (shape, index) in editor.Template.Label.Shapes.Select((s, i) => (s, i)))
         {
-            PreviewPngBase64 = RenderPngSafe(editor.Template),
-        };
+            if (!editedData.Contains(index))
+            {
+                continue;
+            }
+
+            if (LabelPreview.RenderShapePng(shape, editor.Template.Setup.Dpi) is { } raster)
+            {
+                rasters[index] = Convert.ToBase64String(raster.Png);
+            }
+        }
+
+        return new TemplatePreviewDto { Rasters = rasters };
     }
 
     public async Task<TemplateEditorDto> SaveAsync(TemplateEditorChangesDto input)
@@ -137,19 +152,13 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
 
     private TemplateEditorDto ToDto(PrintTemplate template, EzpxTemplate parsed, byte[] file)
     {
-        var dto = new TemplateEditorDto
+        var dpi = parsed.Setup.Dpi;
+
+        var shapes = parsed.Label.Shapes.Select((s, index) =>
         {
-            TemplateId = template.Id,
-            Name = template.Name,
-            WidthPx = Math.Max(1, parsed.Setup.WidthInPixel),
-            HeightPx = Math.Max(1, parsed.Setup.HeightInPixel),
-            Dpi = parsed.Setup.Dpi,
-            FileName = template.FileName,
-            Size = template.Size,
-            PreviewPngBase64 = RenderPngSafe(parsed),
-            Shapes = parsed.Label.Shapes.Select((s, i) => new TemplateEditorShapeDto
+            var dto = new TemplateEditorShapeDto
             {
-                Index = i,
+                Index = index,
                 TypeName = s.TypeName,
                 KindCaption = KindCaption(s),
                 X = s.X,
@@ -158,42 +167,53 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
                 Height = SizeOf(s).Height,
                 Data = s is EzpxGraphic g ? g.Data : "",
                 IsPrint = s.IsPrint,
-            }).ToList(),
-            Counters = Indexed(parsed.Label.SerialFormat, "C"),
-            Variables = Indexed(parsed.Label.VariableFormat, "V"),
-        };
+                FontMultiplier = s is EzpxText text ? text.FontHeight : 1f,
+            };
 
-        // EZPL-текст для отладки П5: что порт шлёт принтеру. Растровые Q-блоки — двоичные,
-        // поэтому вместо них метки; само задание собирается тем же GoLabelDriver.
+            if (LabelPreview.RenderShapePng(s, dpi) is { } raster)
+            {
+                dto.IsRaster = true;
+                dto.RasterPngBase64 = Convert.ToBase64String(raster.Png);
+                dto.RasterWidthDots = raster.WidthDots;
+                dto.RasterHeightDots = raster.HeightDots;
+            }
+
+            return dto;
+        }).ToList();
+
+        string ezplText;
+        bool ezplOk;
         try
         {
             using var stream = new MemoryStream(file, writable: false);
             byte[] bytes = new GoLabelDriver(new MarkerRasterRenderer()).Build(
                 stream, new PrintValues { SerialDefaultsFromTemplate = true });
-            dto.EzplText = Encoding.UTF8.GetString(bytes);
-            dto.EzplOk = true;
+            ezplText = Encoding.UTF8.GetString(bytes);
+            ezplOk = true;
         }
         catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException
             or FormatException or ArgumentException or UserFriendlyException)
         {
-            dto.EzplText = "Задание не собралось — это и есть отладка П5:\n" + ex.Message;
-            dto.EzplOk = false;
+            ezplText = "Задание не собралось — это и есть отладка П5:\n" + ex.Message;
+            ezplOk = false;
         }
 
-        return dto;
-    }
-
-    /// <summary>Превью: сбой отрисовки одного объекта — не повод не открывать редактор.</summary>
-    private static string RenderPngSafe(EzpxTemplate parsed)
-    {
-        try
+        return new TemplateEditorDto
         {
-            return Convert.ToBase64String(LabelPreview.RenderPng(parsed));
-        }
-        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException)
-        {
-            return "";
-        }
+            TemplateId = template.Id,
+            Name = template.Name,
+            WidthMm = parsed.Setup.LabelWidth,
+            HeightMm = parsed.Setup.LabelLength,
+            DotsPerMm = parsed.Setup.DotsPerMm,
+            Dpi = dpi,
+            Shapes = shapes,
+            Counters = Indexed(parsed.Label.SerialFormat, "C"),
+            Variables = Indexed(parsed.Label.VariableFormat, "V"),
+            EzplText = ezplText,
+            EzplOk = ezplOk,
+            FileName = template.FileName,
+            Size = template.Size,
+        };
     }
 
     private static EzpxShapeEdit[] ToEdits(List<TemplateEditorShapeChangeDto> changes) =>
