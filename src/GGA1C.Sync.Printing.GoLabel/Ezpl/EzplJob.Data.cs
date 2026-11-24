@@ -16,7 +16,12 @@ public sealed partial class EzplJob
     /// Результат нужен GoLabel только для замера (выравнивание): дату ПК не подставляем, но
     /// побочные эффекты подстановки (выравнивание по формату переменной) сохраняются.
     /// </param>
-    internal string FillPrintingData(EzpxGraphic g, bool bformat, bool bcmd = false, bool measureOnly = false)
+    /// <summary>
+    /// Данные объекта к печати: переменные, счётчики, поля базы. Публичный, потому что
+    /// <see cref="IRasterRenderer"/> — часть договора с внешним транспортом (отладочный
+    /// MarkerRasterRenderer редактора П12.1 тоже подставляет данные в метки Q).
+    /// </summary>
+    public string FillPrintingData(EzpxGraphic g, bool bformat, bool bcmd = false, bool measureOnly = false)
     {
         if (g.FormatType != "None")
         {

@@ -5,6 +5,7 @@
 @using GGA1C.Sync.Blazor.Components.Templates
 @inherits SyncComponentBase
 @inject IPrintTemplatesAppService TemplatesService
+@inject NavigationManager NavigationManager
 
 @* П9: шаблоны печати — подвкладка раздела GoLabel. Файлы — в ITemplateFileStore (папка
    Templates:Folder, потом FastAPI на NAS), в базе только ссылка. Сюда же потом откроется
@@ -77,6 +78,9 @@
             <MudStack Row="true" Spacing="0">
                 @if (context.IsLabel)
                 {
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   Title="Редактор (П12.1)" Disabled="@Busy"
+                                   OnClick="@(() => NavigationManager.NavigateTo($"/templates/{context.Id}/edit"))" />
                     @* ВРЕМЕННО: отладочная печать — удалить вместе с TestPrintDialog. *@
                     <MudIconButton Icon="@Icons.Material.Filled.Print" Size="Size.Small" Color="Color.Primary"
                                    Title="Отладочная печать (временно)" Disabled="@Busy"

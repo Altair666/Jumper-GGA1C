@@ -37,7 +37,13 @@ public static class EzpxReader
         {
             throw new FormatException($"Корневой элемент .ezpx — {root.Name.LocalName}, ожидался PrintJob");
         }
+        return Read(root);
+    }
 
+    /// <summary>Разбор уже загруженного корня PrintJob — для правки с сохранением (EzpxEditor),
+    /// которой нужен и документ целиком, и модель.</summary>
+    public static EzpxTemplate Read(XElement root)
+    {
         var template = new EzpxTemplate
         {
             GraphicMode = Bool(root.Element("GraphicMode"), false),

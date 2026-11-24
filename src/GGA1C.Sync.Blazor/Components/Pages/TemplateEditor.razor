@@ -1,0 +1,338 @@
+@page "/templates/{Id:int}/edit"
+@attribute [Authorize(GGA1C.Sync.Permissions.SyncPermissions.Admin)]
+@using GGA1C.Sync.Templates
+@inherits SyncComponentBase
+@inject IPrintTemplateEditorAppService EditorService
+@inject IJSRuntime JsRuntime
+
+@* П12.1: редактор наклеек — превью растром из того же кода, что печать, правка
+   положения/размера/данных объектов, EZPL-текст задания для отладки порта (П5).
+   Свойства шрифтов — П12.2, счётчики — П12.3, добавление объектов — П12.4. *@
+
+@if (Model == null)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudBreadcrumbs Items="@Breadcrumbs" Class="mb-2" />
+
+    <MudText Typo="Typo.h5" Class="mb-1">@Model.Name</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+        Наклейка @Model.WidthPx × @Model.HeightPx точек (@(Math.Round(Model.Dpi)):0 dpi). Координаты
+        объектов — в тех же точках. Превью рисует тот же код, что печать: растровые объекты точны,
+        текст шрифтом принтера и рамки — приближение (их печатает сам принтер).
+    </MudText>
+
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="8">
+            <div class="sync-editor-stage">
+                <div class="sync-editor-canvas" style="width:@(Model.WidthPx * Scale)px;height:@(Model.HeightPx * Scale)px;">
+                    @if (Model.PreviewPngBase64.Length > 0)
+                    {
+                        <img src="data:image/png;base64,@Model.PreviewPngBase64"
+                             style="width:100%;height:100%;image-rendering:pixelated;" alt="превью" />
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Warning">Превью не собралось — смотрите журнал.</MudAlert>
+                    }
+                    @foreach (var shape in VisibleShapes)
+                    {
+                        var selected = SelectedIndex == shape.Index;
+                        <div class="@BoxClass(selected, shape.IsPrint)"
+                             style="@BoxStyle(shape)"
+                             title="@(shape.KindCaption + ": " + ShortData(shape))"
+                             @onclick="@(() => SelectedIndex = shape.Index)">
+                            <span class="sync-editor-box-label">@shape.Index</span>
+                        </div>
+                    }
+                </div>
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="mt-2">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Масштаб</MudText>
+                    <MudSlider T="double" @bind-Value="Scale" Min="1" Max="6" Step="0.5" Style="width:220px;" />
+                    <MudText Typo="Typo.caption">@Scale ×</MudText>
+                    <MudSpacer />
+                    <MudSwitch T="bool" @bind-Value="ShowHidden" Label="Скрытые объекты" Color="Color.Primary" />
+                </MudStack>
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-3" Elevation="1">
+                @if (Selected == null)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Выберите объект на макете или в списке — здесь появятся его свойства.
+                    </MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.subtitle2">
+                        № @Selected.Index · @Selected.KindCaption
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                        тип в шаблоне: @Selected.TypeName
+                    </MudText>
+
+                    <MudNumericField T="float" Label="X, точек" @bind-Value="Selected.X" Min="0"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true"
+                                     Class="mb-1" />
+                    <MudNumericField T="float" Label="Y, точек" @bind-Value="Selected.Y" Min="0"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true"
+                                     Class="mb-1" />
+                    @if (Selected.Width != null)
+                    {
+                        <MudNumericField T="float?" Label="Ширина, точек" @bind-Value="Selected.Width" Min="1"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true"
+                                         Class="mb-1" />
+                        <MudNumericField T="float?" Label="Высота, точек" @bind-Value="Selected.Height" Min="1"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true"
+                                         Class="mb-1" />
+                    }
+                    <MudTextField T="string" Label="Данные" @bind-Value="Selected.Data" Lines="3"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-1" />
+                    <MudSwitch T="bool" @bind-Value="Selected.IsPrint" Label="Печатать этот объект"
+                               Color="Color.Primary" Class="mb-2" />
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@Busy" FullWidth="true"
+                               OnClick="ApplyPreviewAsync">Применить к превью</MudButton>
+                }
+            </MudPaper>
+
+            <MudPaper Class="pa-3 mt-3" Elevation="1">
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy"
+                               StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Сохранить в хаб</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@Busy"
+                               StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadAsync">Скачать .ezpx</MudButton>
+                </MudStack>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                    Сохранение пишет новую версию файла; прежняя остаётся в хранилище. Файл:
+                    @Model.FileName (@(Model.Size / 1024) КБ).
+                </MudText>
+            </MudPaper>
+
+            @if (Model.Counters.Count > 0 || Model.Variables.Count > 0)
+            {
+                <MudPaper Class="pa-3 mt-3" Elevation="1">
+                    @if (Model.Counters.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2">Счётчики (формат в шаблоне)</MudText>
+                        @foreach (var counter in Model.Counters)
+                        {
+                            <MudText Typo="Typo.caption" Style="font-family:monospace;">@counter</MudText>
+                        }
+                    }
+                    @if (Model.Variables.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mt-2">Переменные</MudText>
+                        @foreach (var variable in Model.Variables)
+                        {
+                            <MudText Typo="Typo.caption" Style="font-family:monospace;">@variable</MudText>
+                        }
+                    }
+                </MudPaper>
+            }
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudExpansionPanels Elevation="1">
+                <MudExpansionPanel Text="EZPL — что порт шлёт принтеру (отладка П5)">
+                    @if (Model.EzplOk)
+                    {
+                        <pre class="sync-editor-ezpl">@Model.EzplText</pre>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                            <pre class="sync-editor-ezpl">@Model.EzplText</pre>
+                        </MudAlert>
+                    }
+                </MudExpansionPanel>
+                <MudExpansionPanel Text="Объекты">
+                    <MudList T="int" Dense="true">
+                        @foreach (var shape in Model.Shapes)
+                        {
+                            var size = shape.Width != null
+                                ? $" {shape.Width?.ToString("0")}×{shape.Height?.ToString("0")}"
+                                : "";
+                            var hidden = shape.IsPrint ? "" : " · скрыт";
+                            <MudListItem T="int" Value="@shape.Index" @onclick="@(() => SelectedIndex = shape.Index)">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@shape.Index</MudChip>
+                                    <span>@shape.KindCaption</span>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @(shape.X.ToString("0")),@(shape.Y.ToString("0"))@size@hidden
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="font-family:monospace;">
+                                        @ShortData(shape)
+                                    </MudText>
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private TemplateEditorDto? Model { get; set; }
+
+    private int? SelectedIndex { get; set; }
+
+    private bool ShowHidden { get; set; } = true;
+
+    private double Scale { get; set; } = 2;
+
+    private bool Busy { get; set; }
+
+    private TemplateEditorShapeDto? Selected =>
+        Model?.Shapes.FirstOrDefault(s => s.Index == SelectedIndex);
+
+    private IEnumerable<TemplateEditorShapeDto> VisibleShapes =>
+        ShowHidden ? Model?.Shapes ?? [] : Model?.Shapes.Where(s => s.IsPrint) ?? [];
+
+    private IReadOnlyList<BreadcrumbItem> Breadcrumbs => new List<BreadcrumbItem>
+    {
+        new("Шаблоны печати", "templates"),
+        new(Model?.Name ?? "…", null),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Busy = true;
+        try
+        {
+            Model = await EditorService.OpenAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            await Notify.Error(ex.Message);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private static string BoxClass(bool selected, bool isPrint)
+    {
+        return "sync-editor-box" + (selected ? " selected" : "") + (isPrint ? "" : " not-printed");
+    }
+
+    private string BoxStyle(TemplateEditorShapeDto shape)
+    {
+        var size = shape.Width != null
+            ? $"width:{shape.Width * Scale}px;height:{shape.Height * Scale}px;"
+            : $"width:{6 * Scale}px;height:{6 * Scale}px;";
+        return $"left:{shape.X * Scale}px;top:{shape.Y * Scale}px;{size}";
+    }
+
+    private static string ShortData(TemplateEditorShapeDto shape)
+    {
+        var text = shape.Data ?? "";
+        return text.Length <= 40 ? text : text[..40] + "…";
+    }
+
+    private async Task ApplyPreviewAsync()
+    {
+        if (Model == null)
+        {
+            return;
+        }
+
+        Busy = true;
+        try
+        {
+            var preview = await EditorService.RenderPreviewAsync(new TemplateEditorChangesDto
+            {
+                TemplateId = Model.TemplateId,
+                Changes = CurrentShapes(),
+            });
+            Model.PreviewPngBase64 = preview.PreviewPngBase64;
+            await Notify.Success("Превью обновлено.");
+        }
+        catch (Exception ex)
+        {
+            await Notify.Error(ex.Message);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Model == null)
+        {
+            return;
+        }
+        if (!await Message.Confirm("Сохранить правки? В хабе появится новая версия файла шаблона."))
+        {
+            return;
+        }
+
+        Busy = true;
+        try
+        {
+            Model = await EditorService.SaveAsync(new TemplateEditorChangesDto
+            {
+                TemplateId = Model.TemplateId,
+                Changes = CurrentShapes(),
+            });
+            await Notify.Success("Правки сохранены новой версией файла.");
+        }
+        catch (Exception ex)
+        {
+            await Notify.Error(ex.Message);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (Model == null)
+        {
+            return;
+        }
+        Busy = true;
+        try
+        {
+            var file = await EditorService.DownloadAsync(Model.TemplateId);
+            await JsRuntime.InvokeVoidAsync(
+                "syncEditor.downloadFile", file.FileName, Convert.ToBase64String(file.Content));
+        }
+        catch (Exception ex)
+        {
+            await Notify.Error(ex.Message);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    /// <summary>
+    /// Отсылаем все объекты с их текущими значениями: правки применяются присваиванием,
+    /// неизменённые значения — no-op. Проще и надёжнее отслеживания «что трогали».
+    /// </summary>
+    private List<TemplateEditorShapeChangeDto> CurrentShapes() =>
+        Model!.Shapes.Select(s => new TemplateEditorShapeChangeDto
+        {
+            Index = s.Index,
+            X = s.X,
+            Y = s.Y,
+            Width = s.Width,
+            Height = s.Height,
+            Data = s.Data,
+        }).ToList();
+}
