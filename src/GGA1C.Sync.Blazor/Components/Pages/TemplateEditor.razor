@@ -4,15 +4,16 @@
 @using System.Text
 @inherits SyncComponentBase
 @inject IPrintTemplateEditorAppService EditorService
-@inject IJSRuntime JsRuntime
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JsRuntime
 
-@* П12.1п: рабочая область по модели GoLabel. Данные шаблона — в мм; канва рисуется от
-   физического размера (пикселей на мм — от экрана, ~3.78 при 96 dpi), масштаб — множитель
+@* П12.1п + П12.1л: рабочая область по модели GoLabel. Данные шаблона — в мм; канва рисуется
+   от физического размера (пикселей на мм — от экрана, ~3.78 при 96 dpi), масштаб — множитель
    слайдера (как fZoomRate у GoLabel). Линейки сверху и слева переключают мм/см/дюймы/пиксели
    (RulerControl.enumScaleMode). Векторные объекты (текст принтера, рамки, линии, штрихкод
    командой) канва рисует сама; растровые (текст Windows, логотипы, штрихкоды-картинки)
-   вставлены картинками из кода печати. Правка числами; перетаскивание — П12.4. *@
+   вставлены картинками из кода печати. Раскладка: канва с линейками по центру, блок объектов
+   и его описание — справа. Правка числами; перетаскивание — П12.4. *@
 
 @if (Model == null)
 {
@@ -40,6 +41,7 @@ else
             <MudText Typo="Typo.caption" Class="mud-text-secondary">Масштаб</MudText>
             <MudSlider T="double" @bind-Value="Zoom" Min="0.5" Max="6" Step="0.25" Style="width:150px;" />
             <MudText Typo="Typo.caption" Style="width:44px;">@FormatNumber(Zoom) ×</MudText>
+            <MudSwitch T="bool" @bind-Value="ShowHidden" Label="Скрытые" Color="Color.Primary" />
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy"
                        StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Сохранить</MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@Busy"
@@ -47,8 +49,22 @@ else
         </MudStack>
     </MudPaper>
 
-    <MudGrid Spacing="2">
-        <MudItem xs="12" md="2">
+    <div class="sync-editor-body">
+        <div class="sync-editor-canvas-area">
+            <div class="sync-workspace-grid" style="width:@(CornerPx + CanvasWidthPx)px;">
+                <div class="sync-corner" style="width:@(CornerPx)px;height:@(RulerPx)px;"></div>
+                <svg class="sync-ruler" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))</svg>
+                <svg class="sync-ruler" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))</svg>
+                <svg class="sync-canvas" viewBox="0 0 @FormatNumber(Model.WidthMm) @FormatNumber(Model.HeightMm)"
+                     width="@FormatNumber(CanvasWidthPx)" height="@FormatNumber(CanvasHeightPx)">
+                    <rect x="0" y="0" width="@FormatNumber(Model.WidthMm)" height="@FormatNumber(Model.HeightMm)"
+                          fill="white" stroke="#bdbdbd" stroke-width="0.2" />
+                    @((MarkupString)ShapesSvg())
+                </svg>
+            </div>
+        </div>
+
+        <div class="sync-editor-side">
             <MudPaper Class="pa-2" Elevation="1">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Объекты</MudText>
                 <MudList T="int" Dense="true" Class="sync-editor-list">
@@ -67,48 +83,11 @@ else
                 </MudList>
             </MudPaper>
 
-            @if (Model.Counters.Count > 0 || Model.Variables.Count > 0)
-            {
-                <MudPaper Class="pa-2 mt-2" Elevation="1">
-                    <MudText Typo="Typo.subtitle2" Class="mb-1">Счётчики и переменные</MudText>
-                    @foreach (var line in Model.Counters.Concat(Model.Variables))
-                    {
-                        <MudText Typo="Typo.caption" Style="font-family:monospace;">@line</MudText>
-                    }
-                </MudPaper>
-            }
-        </MudItem>
-
-        <MudItem xs="12" md="7">
-            <div class="sync-workspace">
-                <div class="sync-workspace-grid" style="width:@(CornerPx + CanvasWidthPx)px;">
-                    <div class="sync-corner" style="width:@(CornerPx)px;height:@(RulerPx)px;"></div>
-                    <svg class="sync-ruler" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))</svg>
-                    <svg class="sync-ruler" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))</svg>
-                    <svg class="sync-canvas" viewBox="0 0 @FormatNumber(Model.WidthMm) @FormatNumber(Model.HeightMm)"
-                         width="@FormatNumber(CanvasWidthPx)" height="@FormatNumber(CanvasHeightPx)">
-                        <rect x="0" y="0" width="@FormatNumber(Model.WidthMm)" height="@FormatNumber(Model.HeightMm)"
-                              fill="white" stroke="#bdbdbd" stroke-width="0.2" />
-                        @((MarkupString)ShapesSvg())
-                    </svg>
-                </div>
-                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="mt-2">
-                    <MudSwitch T="bool" @bind-Value="ShowHidden" Label="Скрытые объекты" Color="Color.Primary" />
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        Растровые объекты (текст Windows, логотипы, штрихкоды-картинки) — точный вывод;
-                        текст шрифтом принтера и рамки — приближение, их печатает сам принтер.
-                    </MudText>
-                </MudStack>
-            </div>
-        </MudItem>
-
-        <MudItem xs="12" md="3">
-            <MudPaper Class="pa-2" Elevation="1">
+            <MudPaper Class="pa-2 mt-2" Elevation="1">
                 @if (Selected == null)
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Выберите объект на макете или в списке — здесь его свойства в единицах
-                        линейки. Мышью объекты двигаются с П12.4, пока — полями.
+                        Выберите объект — здесь его описание и свойства в единицах линейки.
                     </MudText>
                 }
                 else
@@ -137,35 +116,44 @@ else
                     @if (Selected.IsRaster)
                     {
                         <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy" FullWidth="true"
-                                   OnClick="RebuildRasterAsync">Пересобрать картинку (данные изменились)</MudButton>
+                                   OnClick="RebuildRasterAsync">Пересобрать картинку</MudButton>
                     }
                     else
                     {
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                            Векторный объект — канва обновляется сама при правке полей.
+                            Векторный объект — макет обновляется сразу при правке полей.
                         </MudText>
                     }
                 }
             </MudPaper>
-        </MudItem>
 
-        <MudItem xs="12">
-            <MudExpansionPanels Elevation="1">
-                <MudExpansionPanel Text="EZPL — что порт шлёт принтеру (отладка П5)">
-                    @if (Model.EzplOk)
+            @if (Model.Counters.Count > 0 || Model.Variables.Count > 0)
+            {
+                <MudPaper Class="pa-2 mt-2" Elevation="1">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Счётчики и переменные</MudText>
+                    @foreach (var line in Model.Counters.Concat(Model.Variables))
                     {
-                        <pre class="sync-editor-ezpl">@Model.EzplText</pre>
+                        <MudText Typo="Typo.caption" Style="font-family:monospace;">@line</MudText>
                     }
-                    else
-                    {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
-                            <pre class="sync-editor-ezpl">@Model.EzplText</pre>
-                        </MudAlert>
-                    }
-                </MudExpansionPanel>
-            </MudExpansionPanels>
-        </MudItem>
-    </MudGrid>
+                </MudPaper>
+            }
+        </div>
+    </div>
+
+    <MudExpansionPanels Elevation="1" Class="mt-2">
+        <MudExpansionPanel Text="EZPL — что порт шлёт принтеру (отладка П5)">
+            @if (Model.EzplOk)
+            {
+                <pre class="sync-editor-ezpl">@Model.EzplText</pre>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                    <pre class="sync-editor-ezpl">@Model.EzplText</pre>
+                </MudAlert>
+            }
+        </MudExpansionPanel>
+    </MudExpansionPanels>
 }
 
 @code {
@@ -196,12 +184,6 @@ else
     private double CanvasWidthPx => PxPerMm * Zoom * (Model?.WidthMm ?? 0);
 
     private double CanvasHeightPx => PxPerMm * Zoom * (Model?.HeightMm ?? 0);
-
-    private IReadOnlyList<BreadcrumbItem> Breadcrumbs => new List<BreadcrumbItem>
-    {
-        new("Шаблоны печати", "templates"),
-        new(Model?.Name ?? "…", null),
-    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -304,9 +286,7 @@ else
         while (position <= lengthUnits + minor / 2 && ticks.Count < 4000)
         {
             bool isMajor = step % stepsPerMajor == 0;
-            ticks.Add(new RulerTick(
-                Math.Round(position * pxPerUnit, 2), isMajor,
-                isMajor ? FormatTick(position) : null));
+            ticks.Add(new RulerTick(Math.Round(position * pxPerUnit, 2), isMajor, FormatTick(position)));
             position += minor;
             step++;
         }
@@ -314,20 +294,10 @@ else
         return ticks;
     }
 
-    private static string FormatTick(double value)
-    {
-        return Math.Abs(value - Math.Round(value)) < 0.001
+    private static string FormatTick(double value) =>
+        Math.Abs(value - Math.Round(value)) < 0.001
             ? Math.Round(value).ToString("0")
             : value.ToString("0.###");
-    }
-
-    // ── Отрисовка объектов (SVG, координаты в мм; разметка строкой — внутри
-    //    Razor тег <text> конфликтует со служебным <text>, поэтому слой собирается
-    //    кодом и вставляется как разметка) ─────────────────────────────────────
-
-    private static string Fmt(float mm) => mm.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-
-    private static string FormatNumber(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>SVG линейки. Тег <text> в Razor зарезервирован, поэтому разметка строкой.</summary>
     private static string RulerSvg(List<RulerTick> ticks, bool horizontal)
@@ -335,8 +305,12 @@ else
         var svg = new StringBuilder();
         foreach (var tick in ticks)
         {
-            string from = horizontal ? $"y1=\"{(tick.Major ? 0 : 14)}\" y2=\"22\"" : $"x1=\"{(tick.Major ? 0 : 14)}\" x2=\"22\"";
-            string to = horizontal ? $"x2=\"{FormatNumber(tick.PositionPx)}\"" : $"y2=\"{FormatNumber(tick.PositionPx)}\"";
+            string from = horizontal
+                ? $"y1=\"{(tick.Major ? 0 : 14)}\" y2=\"22\""
+                : $"x1=\"{(tick.Major ? 0 : 14)}\" x2=\"22\"";
+            string to = horizontal
+                ? $"x2=\"{FormatNumber(tick.PositionPx)}\""
+                : $"y2=\"{FormatNumber(tick.PositionPx)}\"";
             svg.Append($"<line {from} {to} class=\"sync-ruler-tick\"/>");
             if (tick.Label != null)
             {
@@ -347,6 +321,14 @@ else
         }
         return svg.ToString();
     }
+
+    // ── Отрисовка объектов (SVG, координаты в мм; слой собирается строкой — тег
+    //    <text> в Razor зарезервирован) ─────────────────────────────────────────
+
+    private static string FormatNumber(double v) =>
+        v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Fmt(float mm) => mm.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
     private (double Width, double Height) BboxMm(TemplateEditorShapeDto shape)
     {

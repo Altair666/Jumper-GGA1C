@@ -39,20 +39,35 @@
     background-position: center;
 }
 
-/* Редактор наклеек (П12.1п): рабочая область по модели GoLabel — канва в мм от
-   физического размера, линейки с единицами, векторная отрисовка */
-.sync-workspace {
+/* Редактор наклеек (П12.1п + П12.1л): канва с линейками по центру, блок объектов
+   и его описание — справа (раскладка по GoLabel, пожелание пользователя 2026-11-24) */
+.sync-editor-body {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.sync-editor-canvas-area {
+    flex: 1 1 auto;
     overflow: auto;
-    max-width: 100%;
-    max-height: 78vh;
+    max-height: 80vh;
     background: var(--mud-palette-background-grey);
     border: 1px solid var(--mud-palette-lines-default);
+}
+
+.sync-editor-side {
+    flex: 0 0 320px;
+    max-height: 80vh;
+    overflow: auto;
 }
 
 .sync-workspace-grid {
     display: grid;
     grid-template-columns: 22px auto;
     grid-template-rows: 22px auto;
+    margin: 16px auto;
+    width: max-content;
+    box-shadow: 2px 2px 8px rgba(0, 0, 0, .25);
 }
 
 .sync-corner {
