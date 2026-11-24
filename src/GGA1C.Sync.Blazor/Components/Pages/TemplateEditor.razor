@@ -49,13 +49,13 @@ else
         </MudStack>
     </MudPaper>
 
-    <div class="sync-editor-body">
-        <div class="sync-editor-canvas-area">
-            <div class="sync-workspace-grid" style="width:@(CornerPx + CanvasWidthPx)px;">
-                <div class="sync-corner" style="width:@(CornerPx)px;height:@(RulerPx)px;"></div>
-                <svg class="sync-ruler" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))</svg>
-                <svg class="sync-ruler" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))</svg>
-                <svg class="sync-canvas" viewBox="0 0 @FormatNumber(Model.WidthMm) @FormatNumber(Model.HeightMm)"
+    <div style="display:flex;gap:8px;align-items:stretch;">
+        <div style="flex:1 1 auto;overflow:auto;max-height:80vh;border:1px solid #bdbdbd;">
+            <div style="position:relative;width:@(CornerPx + CanvasWidthPx)px;height:@(CornerPx + CanvasHeightPx)px;margin:16px auto;box-shadow:2px 2px 8px rgba(0,0,0,.25);">
+                <div style="position:absolute;left:0;top:0;width:@(CornerPx)px;height:@(RulerPx)px;background:white;z-index:2;"></div>
+                <svg style="position:absolute;left:@(CornerPx)px;top:0;background:white;z-index:2;" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))</svg>
+                <svg style="position:absolute;left:0;top:@(RulerPx)px;background:white;z-index:2;" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))</svg>
+                <svg style="position:absolute;left:@(CornerPx)px;top:@(RulerPx)px;background:white;" viewBox="0 0 @FormatNumber(Model.WidthMm) @FormatNumber(Model.HeightMm)"
                      width="@FormatNumber(CanvasWidthPx)" height="@FormatNumber(CanvasHeightPx)">
                     <rect x="0" y="0" width="@FormatNumber(Model.WidthMm)" height="@FormatNumber(Model.HeightMm)"
                           fill="white" stroke="#bdbdbd" stroke-width="0.2" />
@@ -64,7 +64,7 @@ else
             </div>
         </div>
 
-        <div class="sync-editor-side">
+        <div style="flex:0 0 320px;max-height:80vh;overflow:auto;">
             <MudPaper Class="pa-2" Elevation="1">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Объекты</MudText>
                 <MudList T="int" Dense="true" Class="sync-editor-list" Style="max-height:34vh;overflow:auto;">
@@ -278,16 +278,35 @@ else
         double pxPerUnit = Unit == EditorUnit.Px
             ? PxPerMm * Zoom / Model.DotsPerMm
             : PxPerMm * Zoom * UnitsPerMm;
-        var (minor, major) = TickSteps;
-        int stepsPerMajor = Math.Max(1, (int)Math.Round(major / minor));
+        var (minorStep, majorStep) = TickSteps;
+
+        // Адаптивно, как в GoLabel: подпись ставится только на крупные деления, разнесённые
+        // хотя бы на ~36 px (пока плотнее — шаг крупного удваивается: 10 → 20 → 40 мм…), а
+        // мелкие деления рисуются, только когда разнесены хотя бы на ~5 px. Иначе линейка
+        // превращается в чернильный смаз из подписей на каждый миллиметр.
+        double majorPx = majorStep * pxPerUnit;
+        while (majorPx < 36)
+        {
+            majorStep *= 2;
+            majorPx = majorStep * pxPerUnit;
+        }
+
+        double minorPx = minorStep * pxPerUnit;
+        bool drawMinors = minorStep < majorStep && minorPx >= 5;
+        int stepsPerMajor = Math.Max(1, (int)Math.Round(majorStep / minorStep));
 
         double position = 0;
         int step = 0;
-        while (position <= lengthUnits + minor / 2 && ticks.Count < 4000)
+        while (position <= lengthUnits + minorStep / 2 && ticks.Count < 4000)
         {
             bool isMajor = step % stepsPerMajor == 0;
-            ticks.Add(new RulerTick(Math.Round(position * pxPerUnit, 2), isMajor, FormatTick(position)));
-            position += minor;
+            if (isMajor || drawMinors)
+            {
+                ticks.Add(new RulerTick(
+                    Math.Round(position * pxPerUnit, 2), isMajor,
+                    isMajor ? FormatTick(position) : null));
+            }
+            position += minorStep;
             step++;
         }
 
