@@ -82,6 +82,10 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         var template = await GetLabelTemplateAsync(input.TemplateId);
         var file = await ReadFileAsync(template);
         var editor = EzpxEditor.Load(new MemoryStream(file));
+        if ((input.Setup?.WidthMm ?? editor.Template.Setup.LabelWidth) > PrintTemplateConsts.MaxPageWidthMm)
+        {
+            throw new UserFriendlyException($"Ширина страницы не может превышать {PrintTemplateConsts.MaxPageWidthMm} мм.");
+        }
         editor.Apply(ToEdits(input.Changes));
 
         // Настройки страницы — до сохранения: размер канвы в ответе пересчитается сам.
@@ -115,7 +119,7 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
 
         using var saved = new MemoryStream();
         editor.Save(saved);
-        var content = saved.ToArray();
+        var content = PrintTemplatesAppService.StripDatabaseCredentials(saved.ToArray());
 
         string fileRef;
         using (var stream = new MemoryStream(content, writable: false))
@@ -146,7 +150,7 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         return new PrintTemplateFileDto
         {
             FileName = template.FileName,
-            Content = file,
+            Content = PrintTemplatesAppService.StripDatabaseCredentials(file),
         };
     }
 

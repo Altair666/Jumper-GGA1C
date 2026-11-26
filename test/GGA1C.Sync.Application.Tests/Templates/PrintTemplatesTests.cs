@@ -32,6 +32,7 @@ public abstract class PrintTemplatesTests<TStartupModule> : SyncApplicationTestB
 {
     private readonly MemoryFileStore _files = new();
     private readonly IPrintTemplatesAppService _templates;
+    private readonly IPrintTemplateEditorAppService _editor;
     private readonly ITemplateTestPrintAppService _testPrint;
     private readonly ILabelClientStore _clients;
     private readonly IRepository<LabelRow, long> _rows;
@@ -39,6 +40,7 @@ public abstract class PrintTemplatesTests<TStartupModule> : SyncApplicationTestB
     protected PrintTemplatesTests()
     {
         _templates = GetRequiredService<IPrintTemplatesAppService>();
+        _editor = GetRequiredService<IPrintTemplateEditorAppService>();
         _testPrint = GetRequiredService<ITemplateTestPrintAppService>();
         _clients = GetRequiredService<ILabelClientStore>();
         _rows = GetRequiredService<IRepository<LabelRow, long>>();
@@ -110,8 +112,60 @@ public abstract class PrintTemplatesTests<TStartupModule> : SyncApplicationTestB
         cleaned.ShouldNotContain("secret");
         cleaned.ShouldNotContain("a.morozov");
         cleaned.ShouldContain("<UserID />");
+        cleaned.ShouldContain("<EncryptPwd>false</EncryptPwd>");
         cleaned.ShouldStartWith("\uFEFF");
     }
+
+    [Fact]
+    public async Task Legacy_Empty_EncryptPwd_Is_Repaired_In_Exports_And_New_Versions()
+    {
+        var template = await UploadEditableLabelAsync();
+        var stored = _files.Files.ShouldHaveSingleItem();
+        var invalid = Encoding.UTF8.GetString(stored.Value).Replace("<EncryptPwd>false</EncryptPwd>", "<EncryptPwd />");
+        _files.Files[stored.Key] = Encoding.UTF8.GetBytes(invalid);
+
+        var normalDownload = await _templates.DownloadAsync(template.Id);
+        var editorDownload = await _editor.DownloadAsync(template.Id);
+        Encoding.UTF8.GetString(normalDownload.Content).ShouldContain("<EncryptPwd>false</EncryptPwd>");
+        editorDownload.Content.ShouldBe(normalDownload.Content);
+        Encoding.UTF8.GetString(_files.Files[stored.Key]).ShouldBe(invalid);
+
+        await _editor.SaveAsync(new TemplateEditorChangesDto { TemplateId = template.Id });
+        var revision = _files.Files.Single(p => p.Key != stored.Key);
+        Encoding.UTF8.GetString(revision.Value).ShouldContain("<EncryptPwd>false</EncryptPwd>");
+        Encoding.UTF8.GetString(_files.Files[stored.Key]).ShouldBe(invalid);
+    }
+
+    [Fact]
+    public async Task Width_Is_Limited_To_106Mm_Without_Limiting_Height()
+    {
+        var template = await UploadEditableLabelAsync();
+        var input = new TemplateEditorChangesDto
+        {
+            TemplateId = template.Id,
+            Setup = new TemplateSetupChangeDto { WidthMm = 106.01f, HeightMm = 420 },
+        };
+        await Should.ThrowAsync<UserFriendlyException>(() => _editor.SaveAsync(input));
+        _files.Files.Count.ShouldBe(1);
+        (await _editor.OpenAsync(template.Id)).WidthMm.ShouldBe(104);
+
+        input.Setup.WidthMm = 106;
+        await _editor.SaveAsync(input);
+        var reopened = await _editor.OpenAsync(template.Id);
+        reopened.WidthMm.ShouldBe(106);
+        reopened.HeightMm.ShouldBe(420);
+    }
+
+    private Task<PrintTemplateDto> UploadEditableLabelAsync() => _templates.UploadAsync(new PrintTemplateUploadDto
+    {
+        Name = "Проверка редактора", Kind = PrintTemplateKind.ProductLabel, BasePlatformId = 4,
+        FileName = "test.ezpx",
+        Content = Encoding.UTF8.GetBytes("""
+            <PrintJob><FormatVersion>1</FormatVersion><GraphicMode>true</GraphicMode><PrinterLanguage>EZPL</PrinterLanguage>
+            <Label><qlabel /><EncryptPwd>true</EncryptPwd></Label>
+            <Setup LabelWidth="104" LabelLength="30"><UnitType>Mm</UnitType><Dpi>203</Dpi></Setup></PrintJob>
+            """),
+    });
 
     [Fact]
     public void Admin_Only()

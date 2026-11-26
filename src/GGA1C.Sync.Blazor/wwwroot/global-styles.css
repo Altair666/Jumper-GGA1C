@@ -627,10 +627,11 @@
 .sync-native-preset-row button img { width: 100%; height: 100%; }
 .sync-native-preset-row button:disabled { filter: grayscale(1); opacity: .45; cursor: default; }
 .sync-preview-caption { margin: 12px 0 6px; color: var(--sync-text); font-size: 12px; white-space: nowrap; }
-.sync-preview-stage { width: 252px; height: 174px; max-width: 100%; margin: 0 auto 12px; padding: 0; display: block; border: 0; background: #fff; cursor: pointer; }
+.sync-preview-stage { --sync-preview-label-ink: #800000; width: 252px; height: 174px; max-width: 100%; margin: 0 auto 12px; padding: 0; display: block; border: 0; background: #fff; cursor: pointer; }
 .sync-preview-stage svg { display: block; width: 100%; height: 100%; }
 .sync-preview-paper { fill: none; stroke: #000; stroke-width: 1; }
-.sync-preview-label { fill: none; stroke: #800000; stroke-width: 2; }
+.sync-preview-label { fill: none; stroke: var(--sync-preview-label-ink); stroke-width: 2; }
+.sync-preview-number { fill: var(--sync-preview-label-ink); text-anchor: middle; dominant-baseline: central; pointer-events: none; user-select: none; }
 .sync-preview-blackmark { fill: #000; }
 .sync-native-size { display: grid; grid-template-columns: 96px 45px 36px 16px 45px 36px; align-items: baseline; column-gap: 4px; margin: 5px 0; color: var(--sync-text); font-size: 11px; white-space: nowrap; }
 .sync-native-size b { text-align: right; font-weight: 400; }

@@ -14,6 +14,9 @@
 Старые http-адреса (`:8484`, `:8080`, `:5080`) живут для скриптов стенда. Хаб с http отвечает
 307 на https, Grist по http уводит на тот же вход.
 
+С 2026-11-26 у хаба один экземпляр: :5443/:5080. Отдельный бэкенд :5444/:5081
+выведен из эксплуатации; для проверки через интерфейс используется штатный хаб.
+
 **Порт 443 оставлен Docmost.** Пока Grist висел на 443, голый `http://192.168.88.238` (адрес
 Docmost) браузеры превращали в https и уводили в Grist. Поэтому Grist на 8444.
 
@@ -63,7 +66,7 @@ Issuer — `https://192.168.88.238:8443/realms/test`, настройка хаб�
 `https://192.168.88.238:5443/widget_report_grist/*` и web origins. Старые http-адреса оставлены
 на время перехода. `gga1c-hub` (с 28.10.2026) — вход людей в сам хаб: confidential, PKCE,
 redirect `https://192.168.88.238:5443/signin-oidc` и `https://localhost:5444/signin-oidc`
-(dev), секрет — `C:\GGA1C\keycloak-hub-secret.txt` (см. `docs/platform/p7-keycloak-login.md`).
+(бывший dev, выведен из эксплуатации; настройки Keycloak не менялись), секрет — `C:\GGA1C\keycloak-hub-secret.txt` (см. `docs/platform/p7-keycloak-login.md`).
 
 Настройки виджета в документе (секция 70): адрес
 `https://192.168.88.238:5443/widget_report_grist/index.html`,

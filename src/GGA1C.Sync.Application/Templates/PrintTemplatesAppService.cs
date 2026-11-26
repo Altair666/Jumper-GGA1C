@@ -123,7 +123,7 @@ public class PrintTemplatesAppService : SyncAppService, IPrintTemplatesAppServic
         {
             FileName = template.FileName,
             ContentType = template.Kind == PrintTemplateKind.Pdf ? "application/pdf" : "application/xml",
-            Content = memory.ToArray(),
+            Content = template.Kind == PrintTemplateKind.Pdf ? memory.ToArray() : StripDatabaseCredentials(memory.ToArray()),
         };
     }
 
@@ -184,16 +184,19 @@ public class PrintTemplatesAppService : SyncAppService, IPrintTemplatesAppServic
 
     /// <summary>
     /// Логин и пароль базы, сохранённые GoLabel в шаблоне, хабу не нужны (данные он даёт сам) —
-    /// не храним их: значения UserID, Password, EncryptPwd вычищаются, как при съёме эталонов.
+    /// не храним их. EncryptPwd — логический флаг, а не пароль: GoLabel не принимает пустой элемент.
     /// </summary>
     internal static byte[] StripDatabaseCredentials(byte[] content)
     {
         var text = System.Text.Encoding.UTF8.GetString(content);
         var cleaned = text;
-        foreach (var tag in new[] { "UserID", "Password", "EncryptPwd" })
+        foreach (var tag in new[] { "UserID", "Password" })
         {
             cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, "<" + tag + ">[^<]*</" + tag + ">", "<" + tag + " />");
         }
+        // Старые загрузки могли оставить <EncryptPwd />. Восстанавливаем булево значение.
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned,
+            @"<EncryptPwd\s*/>|<EncryptPwd\s*>[^<]*</EncryptPwd>", "<EncryptPwd>false</EncryptPwd>");
         if (cleaned == text)
         {
             return content;

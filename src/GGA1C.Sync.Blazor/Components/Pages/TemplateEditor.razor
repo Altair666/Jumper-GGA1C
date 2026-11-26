@@ -41,7 +41,7 @@ else
                             <fieldset>
                                 <legend>Размер страницы</legend>
                                 <div class="sync-native-measure">
-                                    <PageSetupMeasurement Id="setup-page-width" IconSrc="images/golabel-page/page-width.png" Caption="Ширина страницы" Unit="@SetupUnitShort" @bind-Value="SetupWidthValue" />
+                                    <PageSetupMeasurement Id="setup-page-width" IconSrc="images/golabel-page/page-width.png" Caption="Ширина страницы" Hint="@($"Максимальная ширина: {PrintTemplateConsts.MaxPageWidthMm} мм")" Unit="@SetupUnitShort" @bind-Value="SetupWidthValue" />
                                 </div>
                                 <div class="sync-native-measure">
                                     <PageSetupMeasurement Id="setup-page-height" IconSrc="images/golabel-page/page-height.png" Caption="Высота страницы" Unit="@SetupUnitShort" @bind-Value="SetupHeightValue" />
@@ -185,6 +185,10 @@ else
                                                     <rect class="sync-preview-label" vector-effect="non-scaling-stroke" x="@PreviewNumber(x)" y="@PreviewNumber(y)"
                                                           width="@PreviewNumber(SetupUsableWidthMm)" height="@PreviewNumber(SetupUsableHeightMm)"
                                                           rx="@PreviewNumber(SetupEdits.Shape == 2 ? Math.Min(SetupUsableWidthMm, SetupUsableHeightMm) * .13 : 0)" />
+                                                }
+                                                @if (SetupPreviewShowsPrintOrder)
+                                                {
+                                                    @SetupPreviewLabelNumber(column, row, x, y)
                                                 }
                                             }
                                         }
@@ -465,7 +469,9 @@ else
 
     private double SetupHeightMm => SetupEdits.HeightMm ?? Model?.Setup.HeightMm ?? 0;
 
-    private double SetupWidthValue { get => SetupMmToUnit(SetupWidthMm); set => SetupEdits.WidthMm = (float)Math.Max(1, SetupUnitToMm(value)); }
+    private static float LimitPageWidth(double widthMm) => (float)Math.Clamp(widthMm, 1, PrintTemplateConsts.MaxPageWidthMm);
+
+    private double SetupWidthValue { get => SetupMmToUnit(SetupWidthMm); set => SetupEdits.WidthMm = LimitPageWidth(SetupUnitToMm(value)); }
 
     private double SetupHeightValue { get => SetupMmToUnit(SetupHeightMm); set => SetupEdits.HeightMm = (float)Math.Max(1, SetupUnitToMm(value)); }
 
@@ -520,13 +526,31 @@ else
     private double SetupUsableHeightMm => Math.Max(0,
         (SetupHeightMm - SetupMargins.Top - SetupMargins.Bottom - (SetupPreviewRows - 1) * (SetupEdits.VerGapMm ?? 0)) / SetupPreviewRows);
 
+    private bool SetupPreviewShowsPrintOrder => SettingsTab == 1 && IsMultiRow && SetupEdits.AcrossType is 1 or 2;
+
+    private double SetupPreviewScale => Math.Min(176 / Math.Max(1, SetupWidthMm), 124 / Math.Max(1, SetupHeightMm));
+
+    private MarkupString SetupPreviewLabelNumber(int column, int row, double x, double y)
+    {
+        // Как в GoLabel FrmPageSetup.pageLayout_Paint: строки считаются снизу, столбцы — сверху.
+        var number = SetupEdits.AcrossType == 1
+            ? (long)(SetupPreviewRows - 1 - row) * SetupPreviewColumns + column + 1
+            : (long)column * SetupPreviewRows + row + 1;
+        var text = number.ToString(CultureInfo.InvariantCulture);
+        var fontSize = Math.Min(10 / SetupPreviewScale, Math.Min(SetupUsableHeightMm * .45, SetupUsableWidthMm * .7 / text.Length));
+        var cx = PreviewNumber(x + SetupUsableWidthMm / 2);
+        var cy = PreviewNumber(y + SetupUsableHeightMm / 2);
+        // Razor reserves <text>; the SVG contains only formatted numbers.
+        return new MarkupString($"<text class=\"sync-preview-number\" x=\"{cx}\" y=\"{cy}\" font-size=\"{PreviewNumber(fontSize)}\">{text}</text>");
+    }
+
     private string SetupPreviewTransform
     {
         get
         {
             // Leave space around the tape, like the GoLabel pane. Use a uniform
             // transform for media, margins, gaps, labels and black mark.
-            var scale = Math.Min(176 / Math.Max(1, SetupWidthMm), 124 / Math.Max(1, SetupHeightMm));
+            var scale = SetupPreviewScale;
             var x = (252 - SetupWidthMm * scale) / 2;
             var y = (174 - SetupHeightMm * scale) / 2;
             return FormattableString.Invariant($"translate({x} {y}) scale({scale})");
@@ -570,6 +594,7 @@ else
     {
         if (Model == null) return;
         SetupEdits = ToSetupEdits(Model.Setup);
+        SetupEdits.WidthMm = LimitPageWidth(Model.Setup.WidthMm);
         SetupMargins = new(Model.Setup.LeftMarginDots / SetupDotsPerMm, Model.Setup.RightMarginDots / SetupDotsPerMm,
             Model.Setup.TopMarginDots / SetupDotsPerMm, Model.Setup.BottomMarginDots / SetupDotsPerMm);
     }
@@ -587,6 +612,7 @@ else
             if (preset.Setup.Deserialize<TemplateSetupChangeDto>() is { } saved)
             {
                 saved.LabelMode ??= Model?.Setup.LabelMode;
+                if (saved.WidthMm is { } widthMm) saved.WidthMm = LimitPageWidth(widthMm);
                 SetupEdits = saved;
                 SetupMargins = preset.Margins;
                 SetupPresetName = preset.Name;
@@ -721,7 +747,7 @@ else
         }
 
         var current = Model.Setup;
-        current.WidthMm = Math.Max(1, SetupEdits.WidthMm ?? current.WidthMm);
+        current.WidthMm = LimitPageWidth(SetupEdits.WidthMm ?? current.WidthMm);
         current.HeightMm = Math.Max(1, SetupEdits.HeightMm ?? current.HeightMm);
         current.GapMm = Math.Max(0, SetupEdits.GapMm ?? current.GapMm);
         current.LeftMarginDots = MarginToDots(SetupMargins.Left);

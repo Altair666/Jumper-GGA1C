@@ -13,6 +13,7 @@ public static class PrintTemplateConsts
     public const int MaxNameLength = 256;
     public const int MaxFileNameLength = 256;
     public const int MaxFileRefLength = 512;
+    public const int MaxPageWidthMm = 106;
 
     /// <summary>Шаблон наклейки или PDF — не больше 5 МБ (самый большой .ezpx стенда ~1 МБ).</summary>
     public const int MaxFileBytes = 5 * 1024 * 1024;
