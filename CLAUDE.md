@@ -54,9 +54,9 @@ cd src\GGA1C.Sync.Blazor && dotnet run --no-launch-profile -c Release --urls "ht
 - **Перед «готово» — самопроверка** скиллом `superpowers:verification-before-completion`, в отчёте
   раздел «Самопроверка»; непроверенное помечать «не проверено». Касается и субагентов.
 - В конце: карточка в `roadmap.md`, новые грабли — в docs модуля.
-- **Живая схема** — https://claude.ai/artifact/Dm1hmtUDMhaavNtNwR4wTy (`nodes`, `edges`, `inbox`;
-  инструмент `ArtifactData`). Поменял промпт или структуру — обнови схему в той же сессии;
-  в начале сессии разбери `inbox` и пометь `done: true` с ответом.
+- **Схема проекта** — https://claude.ai/artifact/Dm1hmtUDMhaavNtNwR4wTy. Обновлять артефакт
+  только по отдельному явному запросу пользователя. Правки roadmap, кода и статусов сами по себе
+  не требуют синхронизации; обычные задачи ведём в `docs/roadmap.md`.
 
 ## Грабли кода — коротко (подробно в `docs/platform/environment.md`)
 
