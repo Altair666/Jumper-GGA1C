@@ -18,11 +18,25 @@ public sealed record EzpxSetupEdit(
     float? HeightMm = null,
     float? GapMm = null,
     int? LeftMarginDots = null,
+    int? RightMarginDots = null,
     int? TopMarginDots = null,
+    int? BottomMarginDots = null,
+    int? HorAcross = null,
+    int? VerAcross = null,
+    float? HorGapMm = null,
+    float? VerGapMm = null,
+    int? AcrossType = null,
+    int? Shape = null,
+    int? LabelType = null,
+    float? FeedMm = null,
+    float? BlackMarkMm = null,
+    bool? BlackMarkAfter = null,
     int? Speed = null,
     int? Darkness = null,
     int? Copies = null,
-    bool? DirectThermal = null);
+    bool? DirectThermal = null,
+    float? BlackMarkPositionMm = null,
+    int? LabelMode = null);
 
 /// <summary>Правка одного объекта по его номеру в списке Shapes. null — не менять.
 /// Remove = true удаляет объект; другие поля при этом игнорируются.</summary>
@@ -59,7 +73,7 @@ public sealed class EzpxEditor
         {
             throw new FormatException($"Корневой элемент .ezpx — {root.Name.LocalName}, ожидался PrintJob");
         }
-        return new EzpxEditor(doc, EzpxReader.Read(root));
+        return new EzpxEditor(doc, EzpxReader.ReadForEditing(root));
     }
 
     /// <summary>
@@ -259,8 +273,7 @@ public sealed class EzpxEditor
     {
         var setup = _root.Element("Setup") ?? throw new InvalidOperationException("В шаблоне нет Setup.");
 
-        void Set(string name, float value) =>
-            setup.SetAttributeValue(name, value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
+        void Set(string name, float value) => setup.SetAttributeValue(name, value);
 
         void SetInt(string name, int value) => setup.SetAttributeValue(name, value);
 
@@ -271,13 +284,13 @@ public sealed class EzpxEditor
         }
         if (edit.HeightMm is { } h)
         {
-            Template.Setup.LabelLength = h;
-            Set("LabelLength", h);
+            Template.Setup.LabelLength = Template.Setup.MediaLengthFromMm(h);
+            Set("LabelLength", Template.Setup.LabelLength);
         }
         if (edit.GapMm is { } gap)
         {
-            Template.Setup.GapLength = gap;
-            Set("GapLength", gap);
+            Template.Setup.GapLength = Template.Setup.MediaLengthFromMm(gap);
+            Set("GapLength", Template.Setup.GapLength);
         }
         if (edit.LeftMarginDots is { } lm)
         {
@@ -306,9 +319,109 @@ public sealed class EzpxEditor
         }
         if (edit.DirectThermal is { } direct)
         {
-            // 0 = ^AT термоперенос, 1 = ^AD прямая печать (SetupCommands.GetCommandEZPL)
-            Template.Setup.PrintMode = direct ? 1 : 0;
+            // DirectThermal=true: 0 = ^AT термоперенос; false: 1 = ^AD прямая печать.
+            Template.Setup.PrintMode = direct ? 0 : 1;
             SetInt("PrintMode", Template.Setup.PrintMode);
+        }
+
+        // Вкладка «Размещение»: Layout — дочерний элемент Setup с атрибутами
+        var layout = setup.Element("Layout") ?? new XElement("Layout");
+
+        var settings = Template.Setup.Layout;
+        var mode = edit.LabelMode ?? settings.LabelMode;
+        var changedMode = mode != settings.LabelMode;
+        var hor = edit.HorAcross ?? (changedMode ? settings.PageHorAcross : (int?)null);
+        var ver = edit.VerAcross ?? (changedMode ? settings.PageVerAcross : (int?)null);
+        var horGap = edit.HorGapMm ?? (changedMode ? settings.PageHorGap : (float?)null);
+        var verGap = edit.VerGapMm ?? (changedMode ? settings.PageVerGap : (float?)null);
+
+        if (edit.LabelMode is not null)
+        {
+            settings.LabelMode = mode;
+            layout.SetAttributeValue("LabelMode", mode);
+        }
+
+        // Mode 1 keeps a visual sub-label grid, but the printer sees a single
+        // full label. The four *Mode1 attributes are metadata for that grid.
+        if (mode == 1)
+        {
+            if (hor.HasValue) layout.SetAttributeValue("HorAcrossMode1", settings.HorAcrossMode1 = hor.Value);
+            if (ver.HasValue) layout.SetAttributeValue("VerAcrossMode1", settings.VerAcrossMode1 = ver.Value);
+            if (horGap.HasValue) layout.SetAttributeValue("HorGapMode1", settings.HorGapMode1 = horGap.Value);
+            if (verGap.HasValue) layout.SetAttributeValue("VerGapMode1", settings.VerGapMode1 = verGap.Value);
+
+            if (edit.LabelMode.HasValue || hor.HasValue || ver.HasValue || horGap.HasValue || verGap.HasValue)
+            {
+                layout.SetAttributeValue("HorAcross", settings.HorAcross = 1);
+                layout.SetAttributeValue("VerAcross", settings.VerAcross = 1);
+                layout.SetAttributeValue("HorGap", settings.HorGap = 0f);
+                layout.SetAttributeValue("VerGap", settings.VerGap = 0f);
+            }
+        }
+        else
+        {
+            if (hor.HasValue) layout.SetAttributeValue("HorAcross", settings.HorAcross = hor.Value);
+            if (ver.HasValue) layout.SetAttributeValue("VerAcross", settings.VerAcross = ver.Value);
+            if (horGap.HasValue) layout.SetAttributeValue("HorGap", settings.HorGap = horGap.Value);
+            if (verGap.HasValue) layout.SetAttributeValue("VerGap", settings.VerGap = verGap.Value);
+        }
+        if (edit.AcrossType is { } across)
+        {
+            settings.AcrossType = (AcrossType)across;
+            // GoLabel's XmlSerializer expects an enum member name, not its integer value.
+            layout.SetAttributeValue("AcrossType", settings.AcrossType.ToString());
+        }
+        if (edit.Shape is { } shape)
+        {
+            Template.Setup.Layout.Shape = shape;
+            layout.SetAttributeValue("Shape", shape);
+        }
+        if (edit.RightMarginDots is { } right)
+        {
+            Template.Setup.Layout.RightMargin = right;
+            layout.SetAttributeValue("RightMargin", right);
+        }
+        if (edit.BottomMarginDots is { } bottom)
+        {
+            Template.Setup.Layout.BottomMargin = bottom;
+            layout.SetAttributeValue("BottomMargin", bottom);
+        }
+
+        if (setup.Element("Layout") == null)
+        {
+            setup.Add(layout);
+        }
+
+        // Вкладка «Тип бумаги»
+        if (edit.LabelType is { } labelType)
+        {
+            // 0 — этикетка с зазором, 1 — непрерывный носитель, 2 — черная отметка
+            Template.Setup.LabelType = labelType;
+            SetInt("LabelType", labelType);
+        }
+        if (edit.FeedMm is { } feed)
+        {
+            Template.Setup.FeedLength = Template.Setup.MediaLengthFromMm(feed);
+            Set("FeedLength", Template.Setup.FeedLength);
+        }
+        if (edit.BlackMarkMm is { } mark)
+        {
+            Template.Setup.BlackMark = Template.Setup.MediaLengthFromMm(mark);
+            Set("BlackMark", Template.Setup.BlackMark);
+        }
+        if (edit.BlackMarkPositionMm is { } position)
+        {
+            Template.Setup.Position = Template.Setup.MediaLengthFromMm(position);
+            Set("Position", Template.Setup.Position);
+        }
+        if (edit.BlackMarkAfter is { } after)
+        {
+            // Черная отметка за этикеткой — «+», внутри этикетки — «−» (ZSign)
+            Template.Setup.ZSign = after ? '+' : '-';
+            // XmlSerializer writes char attributes as their numeric UTF-16 code.
+            // EzpxReader follows that format (ZSign=43/45), so a literal '-' would
+            // make the edited template unreadable on the next open.
+            setup.SetAttributeValue("ZSign", (int)Template.Setup.ZSign);
         }
     }
 

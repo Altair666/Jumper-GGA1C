@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Volo.Abp;
@@ -8,16 +8,15 @@ namespace GGA1C.Sync.Templates;
 
 /// <summary>
 /// Веб-редактор наклеек (П12): рабочая область по модели GoLabel — канва в миллиметрах от
-/// физического размера, линейки мм/см/дюймы/пиксели, отрисовка вектором; растровые объекты
-/// принтера (логотипы, штрихкоды-картинки, текст Windows) приходят готовыми картинками из того
-/// же кода, что печать. Правка положения/размера/данных, EZPL-текст задания для отладки П5,
-/// сохранение новой версией файла. Только Sync.Admin.
-/// Свойства шрифтов — П12.2, счётчики — П12.3, добавление объектов — П12.4.
+/// физического размера, линейки мм/см/дюймы/пиксели, мышь (перетаскивание, маркеры),
+/// настройки страницы в трёх вкладках как в диалоге GoLabel (размер носителя, размещение,
+/// тип бумаги), EZPL-текст задания для отладки П5, сохранение новой версией файла.
+/// Только Sync.Admin. Свойства шрифтов — П12.2, счётчики — П12.3.
 /// </summary>
 [RemoteService(IsEnabled = false)]
 public interface IPrintTemplateEditorAppService : IApplicationService
 {
-    /// <summary>Открыть шаблон: геометрия, растры объектов, EZPL, счётчики и переменные.</summary>
+    /// <summary>Открыть шаблон: геометрия, растры объектов, настройки страницы, EZPL.</summary>
     Task<TemplateEditorDto> OpenAsync(int templateId);
 
     /// <summary>
@@ -28,7 +27,6 @@ public interface IPrintTemplateEditorAppService : IApplicationService
 
     /// <summary>Применить правки и сохранить новую версией файла шаблона.</summary>
     Task<TemplateEditorDto> SaveAsync(TemplateEditorChangesDto input);
-
 
     /// <summary>Содержимое текущего файла — для скачивания из редактора.</summary>
     Task<PrintTemplateFileDto> DownloadAsync(int templateId);
@@ -81,33 +79,95 @@ public class TemplateEditorDto
     public long Size { get; set; }
 }
 
+/// <summary>
+/// Настройки страницы — те же поля, что в диалоге GoLabel «Настройки страницы»:
+/// размер носителя (вкладка 1), размещение на листе (вкладка 2), тип бумаги (вкладка 3).
+/// Единицы хранения: размеры в мм, отступы и координаты объектов — точки принтера.
+/// </summary>
 public class TemplateSetupDto
 {
+    // ── Вкладка 1: размер носителя ────────────────────────────────────────────
+
     /// <summary>Ширина наклейки в мм.</summary>
     public float WidthMm { get; set; }
 
     /// <summary>Высота наклейки в мм.</summary>
     public float HeightMm { get; set; }
 
-    /// <summary>Зазор между наклейками в мм.</summary>
-    public float GapMm { get; set; }
-
     /// <summary>Отступ слева, точек принтера.</summary>
     public int LeftMarginDots { get; set; }
+
+    /// <summary>Отступ справа, точек принтера (Layout.RightMargin).</summary>
+    public int RightMarginDots { get; set; }
 
     /// <summary>Отступ сверху, точек принтера.</summary>
     public int TopMarginDots { get; set; }
 
+    /// <summary>Отступ снизу, точек принтера (Layout.BottomMargin).</summary>
+    public int BottomMarginDots { get; set; }
+
+    // ── Вкладка 2: размещение ─────────────────────────────────────────────────
+
+    /// <summary>0 — печать по отдельным этикеткам, 1 — печать на целом листе (Layout.LabelMode).</summary>
+    public int LabelMode { get; set; }
+
+    /// <summary>Коэффициент перевода для измерений в настройках страницы.</summary>
+    public float? DotsPerMm { get; set; }
+
+    /// <summary>Сколько наклеек по горизонтали в выбранном режиме.</summary>
+    public int HorAcross { get; set; } = 1;
+
+    /// <summary>Сколько наклеек по вертикали на листе.</summary>
+    public int VerAcross { get; set; } = 1;
+
+    /// <summary>Зазор между наклейками по горизонтали, мм.</summary>
+    public float HorGapMm { get; set; }
+
+    /// <summary>Зазор между наклейками по вертикали, мм.</summary>
+    public float VerGapMm { get; set; }
+
+    /// <summary>Порядок печати: 0 — копировать, 1 — слева направо, 2 — сверху вниз
+    /// (AcrossType из шаблона).</summary>
+    public int AcrossType { get; set; }
+
+    /// <summary>Форма этикетки на листе: 0 — квадрат, 1 — круг, 2 — скруглённый
+    /// (Layout.Shape из шаблона).</summary>
+    public int Shape { get; set; }
+
+    // ── Вкладка 3: тип бумаги ─────────────────────────────────────────────────
+
+    /// <summary>Тип носителя: 0 — этикетка с зазором, 1 — непрерывный, 2 — черная отметка
+    /// (LabelType из шаблона).</summary>
+    public int LabelType { get; set; }
+
+    /// <summary>Ширина зазора в мм (носитель «с зазором»).</summary>
+    public float GapMm { get; set; }
+
+    /// <summary>Длина подачи в мм (непрерывный носитель).</summary>
+    public float FeedMm { get; set; }
+
+    /// <summary>Ширина черной отметки в мм.</summary>
+    public float BlackMarkMm { get; set; }
+
+    /// <summary>Положение черной отметки в мм.</summary>
+    public float BlackMarkPositionMm { get; set; }
+
+    /// <summary>Черная отметка за этикеткой (true, ZSign = +) или внутри этикетки
+    /// (false, ZSign = −).</summary>
+    public bool BlackMarkAfter { get; set; } = true;
+
+    // ── Общие ─────────────────────────────────────────────────────────────────
+
     /// <summary>Скорость печати (единицы GoLabel, 1–6).</summary>
-    public int Speed { get; set; }
+    public int Speed { get; set; } = 20;
 
     /// <summary>Плотность (темнота) печати, 0–19.</summary>
-    public int Darkness { get; set; }
+    public int Darkness { get; set; } = 5;
 
     /// <summary>Копий каждой наклейки.</summary>
-    public int Copies { get; set; }
+    public int Copies { get; set; } = 1;
 
-    /// <summary>Термоперенос (лента) — true; прямая печать — false.</summary>
+    /// <summary>Термоперенос (лента, ^AT) — true; прямая печать (^AD) — false.</summary>
     public bool DirectThermal { get; set; }
 }
 
@@ -137,13 +197,6 @@ public class TemplateEditorShapeDto
     public bool IsPrint { get; set; }
 
     /// <summary>
-    /// Высота знака «текста принтера» в пунктах (FontHeight шаблона). В предпросмотре GoLabel
-    /// она рисуется как FontHeight × Dpi/72 точек (Text.Draw, QLabelSDK/Text.cs:2860), в мм это
-    /// FontHeight × 25.4/72.
-    /// </summary>
-    public float FontHeightPoints { get; set; } = 1f;
-
-    /// <summary>
     /// Объект печатается растром: картинка ниже — ровно то, что уйдёт на принтер. Векторные
     /// (текст принтера, рамки, штрихкод командой) канва рисует сама.
     /// </summary>
@@ -155,6 +208,13 @@ public class TemplateEditorShapeDto
     public int RasterWidthDots { get; set; }
 
     public int RasterHeightDots { get; set; }
+
+    /// <summary>
+    /// Высота знака «текста принтера» в пунктах (FontHeight шаблона). В предпросмотре GoLabel
+    /// она рисуется как FontHeight × Dpi/72 точек (Text.Draw, QLabelSDK/Text.cs:2860), в мм это
+    /// FontHeight × 25.4/72.
+    /// </summary>
+    public float FontHeightPoints { get; set; } = 1f;
 }
 
 public class TemplateEditorChangesDto
@@ -187,33 +247,58 @@ public class TemplateEditorShapeChangeDto
     public bool Remove { get; set; }
 }
 
+/// <summary>Правка настроек страницы; null-поля не меняются.</summary>
 public class TemplateSetupChangeDto
 {
-    /// <summary>Ширина наклейки в мм.</summary>
     public float? WidthMm { get; set; }
 
-    /// <summary>Высота наклейки в мм.</summary>
     public float? HeightMm { get; set; }
 
-    /// <summary>Зазор между наклейками в мм.</summary>
     public float? GapMm { get; set; }
 
-    /// <summary>Отступ слева, точек принтера.</summary>
     public int? LeftMarginDots { get; set; }
 
-    /// <summary>Отступ сверху, точек принтера.</summary>
+    public int? RightMarginDots { get; set; }
+
     public int? TopMarginDots { get; set; }
 
-    /// <summary>Скорость печати (единицы GoLabel, 1–6).</summary>
+    public int? BottomMarginDots { get; set; }
+
+    /// <summary>Режим размещения: 0 — отдельные этикетки, 1 — целый лист.</summary>
+    public int? LabelMode { get; set; }
+
+    public int? HorAcross { get; set; }
+
+    public int? VerAcross { get; set; }
+
+    public float? HorGapMm { get; set; }
+
+    public float? VerGapMm { get; set; }
+
+    /// <summary>Порядок печати: 0 — копировать, 1 — слева направо, 2 — сверху вниз.</summary>
+    public int? AcrossType { get; set; }
+
+    /// <summary>Форма этикетки: 0 — квадрат, 1 — круг, 2 — скруглённый.</summary>
+    public int? Shape { get; set; }
+
+    /// <summary>Тип носителя: 0 — с зазором, 1 — непрерывный, 2 — черная отметка.</summary>
+    public int? LabelType { get; set; }
+
+    public float? FeedMm { get; set; }
+
+    public float? BlackMarkMm { get; set; }
+
+    public float? BlackMarkPositionMm { get; set; }
+
+    /// <summary>Черная отметка за этикеткой (+) — true; внутри этикетки (−) — false.</summary>
+    public bool? BlackMarkAfter { get; set; }
+
     public int? Speed { get; set; }
 
-    /// <summary>Плотность (темнота) печати, 0–19.</summary>
     public int? Darkness { get; set; }
 
-    /// <summary>Копий каждой наклейки.</summary>
     public int? Copies { get; set; }
 
-    /// <summary>Термоперенос (лента) — true; прямая печать — false. null — не менять.</summary>
     public bool? DirectThermal { get; set; }
 }
 

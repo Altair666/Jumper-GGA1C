@@ -212,7 +212,114 @@ public class EzpxEditorSetupTests
         reloaded.Setup.Speed.ShouldBe(3);
         reloaded.Setup.Darkness.ShouldBe(12);
         reloaded.Setup.Copy.ShouldBe(2);
-        reloaded.Setup.PrintMode.ShouldBe(0);   // DirectThermal: false = термоперенос, ^AT
+        reloaded.Setup.PrintMode.ShouldBe(1);   // DirectThermal: false = прямая печать, ^AD
+    }
+
+    [Fact]
+    public void Настройка_страницы_сохраняет_размер_размещение_и_тип_бумаги()
+    {
+        var saved = Edited(editor => editor.ApplySetup(new EzpxSetupEdit(
+            RightMarginDots: 7, BottomMarginDots: 9,
+            HorAcross: 2, VerAcross: 3, HorGapMm: 1.25f, VerGapMm: 2.5f,
+            AcrossType: (int)AcrossType.LeftToRight, Shape: 2,
+            LabelType: 2, FeedMm: 18, BlackMarkMm: 4.5f, BlackMarkPositionMm: 2.25f, BlackMarkAfter: false)));
+
+        var reloaded = EzpxReader.Load(new MemoryStream(saved));
+        reloaded.Setup.Layout.RightMargin.ShouldBe(7);
+        reloaded.Setup.Layout.BottomMargin.ShouldBe(9);
+        reloaded.Setup.Layout.HorAcross.ShouldBe(2);
+        reloaded.Setup.Layout.VerAcross.ShouldBe(3);
+        reloaded.Setup.Layout.HorGap.ShouldBe(1.25f);
+        reloaded.Setup.Layout.VerGap.ShouldBe(2.5f);
+        reloaded.Setup.Layout.AcrossType.ShouldBe(AcrossType.LeftToRight);
+        reloaded.Setup.Layout.Shape.ShouldBe(2);
+        reloaded.Setup.LabelType.ShouldBe(2);
+        reloaded.Setup.FeedLength.ShouldBe(18f);
+        reloaded.Setup.BlackMark.ShouldBe(4.5f);
+        reloaded.Setup.Position.ShouldBe(2.25f);
+        reloaded.Setup.ZSign.ShouldBe('-');
+    }
+
+    [Theory]
+    [InlineData(203, 8)]
+    [InlineData(300, 12)]
+    [InlineData(600, 24)]
+    public void Точечный_шаблон_редактируется_в_мм_и_печатается_в_точках(int dpi, int dotsPerMm)
+    {
+        using var input = new MemoryStream(Encoding.UTF8.GetBytes($"""
+            <PrintJob>
+              <FormatVersion>1</FormatVersion>
+              <GraphicMode>true</GraphicMode>
+              <Setup LabelWidth="72" LabelLength="{50 * dotsPerMm}" LabelType="2"
+                     GapLength="{3 * dotsPerMm}" FeedLength="{10 * dotsPerMm}"
+                     BlackMark="{5 * dotsPerMm}" Position="{2 * dotsPerMm}">
+                <UnitType>Dot</UnitType><Dpi>{dpi}</Dpi>
+              </Setup>
+            </PrintJob>
+            """));
+        var editor = EzpxEditor.Load(input);
+        var setup = editor.Template.Setup;
+        setup.LabelWidth.ShouldBe(72f);
+        setup.MediaLengthToMm(setup.LabelLength).ShouldBe(50f);
+        setup.MediaLengthToMm(setup.GapLength).ShouldBe(3f);
+        setup.MediaLengthToMm(setup.FeedLength).ShouldBe(10f);
+        setup.MediaLengthToMm(setup.BlackMark).ShouldBe(5f);
+        setup.MediaLengthToMm(setup.Position).ShouldBe(2f);
+
+        editor.ApplySetup(new EzpxSetupEdit(WidthMm: 73.125f, HeightMm: 60, GapMm: 2.5f,
+            FeedMm: 12.5f, BlackMarkMm: 4.5f, BlackMarkPositionMm: 2.25f, BlackMarkAfter: false));
+        using var output = new MemoryStream();
+        editor.Save(output);
+        output.Position = 0;
+        var actual = EzpxEditor.Load(output).Template.Setup;
+        actual.UnitType.ShouldBe(Unit.Dot);
+        actual.LabelWidth.ShouldBe(73.125f);
+        actual.LabelLength.ShouldBe(60f * dotsPerMm);
+        actual.GapLength.ShouldBe(2.5f * dotsPerMm);
+        actual.FeedLength.ShouldBe(12.5f * dotsPerMm);
+        actual.BlackMark.ShouldBe(4.5f * dotsPerMm);
+        actual.Position.ShouldBe(2.25f * dotsPerMm);
+        actual.ZSign.ShouldBe('-');
+
+        output.Position = 0;
+        // The print driver normalizes a dot-format file to millimetres, just like GoLabel.
+        string job = Encoding.UTF8.GetString(new GoLabel.GoLabelDriver().Build(output, new PrintValues()));
+        job.ShouldContain("^Q60,4.5,2.25-\r\n");
+        job.ShouldContain("^W73.125\r\n");
+    }
+
+    [Fact]
+    public void Полная_этикетка_хранит_сетку_Mode1_но_печатает_одну_этикетку()
+    {
+        var saved = Edited(editor => editor.ApplySetup(new EzpxSetupEdit(
+            LabelMode: 1, HorAcross: 3, VerAcross: 2, HorGapMm: 1.25f, VerGapMm: 2.5f,
+            AcrossType: (int)AcrossType.Copied, Shape: 2)));
+        var result = EzpxReader.Load(new MemoryStream(saved));
+        var layout = result.Setup.Layout;
+        layout.LabelMode.ShouldBe(1);
+        layout.PageHorAcross.ShouldBe(3);
+        layout.PageVerAcross.ShouldBe(2);
+        layout.PageHorGap.ShouldBe(1.25f);
+        layout.PageVerGap.ShouldBe(2.5f);
+        layout.HorAcross.ShouldBe(1);
+        layout.VerAcross.ShouldBe(1);
+        layout.HorGap.ShouldBe(0f);
+        layout.VerGap.ShouldBe(0f);
+
+        var editor = EzpxEditor.Load(new MemoryStream(saved));
+        editor.ApplySetup(new EzpxSetupEdit(LabelMode: 0, AcrossType: (int)AcrossType.LeftToRight));
+        using var output = new MemoryStream();
+        editor.Save(output);
+        output.Position = 0;
+        var sub = EzpxReader.Load(output).Setup.Layout;
+        sub.LabelMode.ShouldBe(0);
+        sub.HorAcross.ShouldBe(3);
+        sub.VerAcross.ShouldBe(2);
+        sub.HorGap.ShouldBe(1.25f);
+        sub.VerGap.ShouldBe(2.5f);
+        sub.Number.ShouldBe(6);
+        sub.HorAcrossMode1.ShouldBe(3);
+        Encoding.UTF8.GetString(output.ToArray()).ShouldContain("AcrossType=\"LeftToRight\"");
     }
 
     [Fact]
@@ -230,12 +337,12 @@ public class EzpxEditorSetupTests
     [Fact]
     public void Термоперенос_и_прямая_печать_меняют_PrintMode()
     {
-        // Прямая печать (DirectThermal = true) — ^AD, PrintMode = 1;
-        // термоперенос с лентой — ^AT, PrintMode = 0 (SetupCommands.GetCommandEZPL).
+        // Термоперенос (DirectThermal = true) — ^AT, PrintMode = 0;
+        // прямая печать — ^AD, PrintMode = 1 (SetupCommands.GetCommandEZPL).
         var direct = Edited(editor => editor.ApplySetup(new EzpxSetupEdit(DirectThermal: true)));
         var transfer = Edited(editor => editor.ApplySetup(new EzpxSetupEdit(DirectThermal: false)));
 
-        EzpxReader.Load(new MemoryStream(direct)).Setup.PrintMode.ShouldBe(1);
-        EzpxReader.Load(new MemoryStream(transfer)).Setup.PrintMode.ShouldBe(0);
+        EzpxReader.Load(new MemoryStream(direct)).Setup.PrintMode.ShouldBe(0);
+        EzpxReader.Load(new MemoryStream(transfer)).Setup.PrintMode.ShouldBe(1);
     }
 }

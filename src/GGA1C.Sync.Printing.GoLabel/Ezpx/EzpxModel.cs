@@ -95,6 +95,16 @@ public sealed class EzpxSetup
     /// </summary>
     public float DotsPerMm => Units.ConvertFactor(Unit.Mm, Dpi);
 
+    // GoLabel's media dialog uses the printer's actual step for lengths stored
+    // in dots. LabelWidth and the Layout gaps are always stored in millimetres.
+    public float PageSetupDotsPerMm => UnitType == Unit.Dot ? Units.DpiZoom((int)Dpi) : DotsPerMm;
+
+    public float MediaLengthToMm(float stored) => UnitType == Unit.Dot ? stored / PageSetupDotsPerMm : stored;
+
+    public float MediaLengthFromMm(float mm) => UnitType == Unit.Dot
+        ? MathF.Round(mm * PageSetupDotsPerMm, MidpointRounding.AwayFromZero)
+        : mm;
+
     // Setup._WidthInPixel и др.: размеры в точках принтера.
     public int WidthInPixel => (int)Math.Round(Units.ConvertFactor(Unit.Mm, Dpi) * LabelWidth, 0);
     public int HeightInPixel => (int)Math.Round(Units.ConvertFactor(UnitType, Dpi) * LabelLength, 0);
@@ -113,6 +123,15 @@ public sealed class EzpxLayout
     public float HorGap { get; set; }
     public float VerGap { get; set; }
     public int LabelMode { get; set; }
+    public int HorAcrossMode1 { get; set; } = 1;
+    public int VerAcrossMode1 { get; set; } = 1;
+    public float HorGapMode1 { get; set; }
+    public float VerGapMode1 { get; set; }
+
+    public int PageHorAcross => LabelMode == 1 ? HorAcrossMode1 : HorAcross;
+    public int PageVerAcross => LabelMode == 1 ? VerAcrossMode1 : VerAcross;
+    public float PageHorGap => LabelMode == 1 ? HorGapMode1 : HorGap;
+    public float PageVerGap => LabelMode == 1 ? VerGapMode1 : VerGap;
     public int BottomMargin { get; set; }
     public int RightMargin { get; set; }
 

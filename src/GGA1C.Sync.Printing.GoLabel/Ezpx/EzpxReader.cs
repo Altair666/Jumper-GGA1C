@@ -42,7 +42,11 @@ public static class EzpxReader
 
     /// <summary>Разбор уже загруженного корня PrintJob — для правки с сохранением (EzpxEditor),
     /// которой нужен и документ целиком, и модель.</summary>
-    public static EzpxTemplate Read(XElement root)
+    public static EzpxTemplate Read(XElement root) => Read(root, normalizeMediaUnits: true);
+
+    internal static EzpxTemplate ReadForEditing(XElement root) => Read(root, normalizeMediaUnits: false);
+
+    private static EzpxTemplate Read(XElement root, bool normalizeMediaUnits)
     {
         var template = new EzpxTemplate
         {
@@ -59,7 +63,7 @@ public static class EzpxReader
         {
             template.Label = ReadLabel(label);
         }
-        InitLabel(template);
+        InitLabel(template, normalizeMediaUnits);
         return template;
     }
 
@@ -114,6 +118,10 @@ public static class EzpxReader
                 HorGap = Float(l.Attribute("HorGap"), 0f),
                 VerGap = Float(l.Attribute("VerGap"), 0f),
                 LabelMode = Int(l.Attribute("LabelMode"), 0),
+                HorAcrossMode1 = Int(l.Attribute("HorAcrossMode1"), 1),
+                VerAcrossMode1 = Int(l.Attribute("VerAcrossMode1"), 1),
+                HorGapMode1 = Float(l.Attribute("HorGapMode1"), 0f),
+                VerGapMode1 = Float(l.Attribute("VerGapMode1"), 0f),
                 BottomMargin = Int(l.Attribute("BottomMargin"), 0),
                 RightMargin = Int(l.Attribute("RightMargin"), 0),
             };
@@ -355,7 +363,7 @@ public static class EzpxReader
     /// <summary>
     /// Правки после загрузки: GlobalPrint.InitLabel (GlobalInfo) и QLabelTools.XMLLoad.
     /// </summary>
-    private static void InitLabel(EzpxTemplate t)
+    private static void InitLabel(EzpxTemplate t, bool normalizeMediaUnits)
     {
         if (t.FormatVersion < 1)
         {
@@ -369,7 +377,7 @@ public static class EzpxReader
 
         // GlobalInfo.UnitTypeDot = false (по умолчанию и на стенде): единицы Setup — миллиметры.
         var s = t.Setup;
-        if (s.UnitType == Unit.Dot)
+        if (normalizeMediaUnits && s.UnitType == Unit.Dot)
         {
             int zoom = Units.DpiZoom((int)s.Dpi);
             s.UnitType = Unit.Mm;

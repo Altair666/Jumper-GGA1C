@@ -1,0 +1,9 @@
+<div class="sync-native-steppers">
+    <button type="button" tabindex="-1" aria-label="Увеличить: @Caption" disabled="@Disabled" data-setup-step="1"></button>
+    <button type="button" tabindex="-1" aria-label="Уменьшить: @Caption" disabled="@Disabled" data-setup-step="-1"></button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Caption { get; set; } = string.Empty;
+    [Parameter] public bool Disabled { get; set; }
+}

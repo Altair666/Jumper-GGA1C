@@ -1,6 +1,7 @@
 @page "/templates"
 @attribute [Authorize(GGA1C.Sync.Permissions.SyncPermissions.Admin)]
 @using GGA1C.Sync.Templates
+@using System.Threading
 @using Microsoft.AspNetCore.Components.Forms
 @using GGA1C.Sync.Blazor.Components.Templates
 @inherits SyncComponentBase
@@ -30,8 +31,9 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="6" md="2">
-                <MudNumericField T="int?" @bind-Value="NewPlatform" Label="Платформа (rowId)" Min="1"
-                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
+                <MudAutocomplete T="string" @bind-Text="PlatformText" Label="Базовая платформа"
+                                 SearchFunc="SearchPlatformsAsync" Clearable="true" ResetValueOnEmptyText="true"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="Название или rowId" />
             </MudItem>
             <MudItem xs="6" md="3">
                 <MudNumericField T="int?" @bind-Value="NewModification" Label="Исполнение (rowId, необяз.)" Min="1"
@@ -102,6 +104,10 @@
 }
 
 @code {
+    // TODO(P7-GRIST-TEMP-GKV1): удалить временный вариант после подключения Basic_platforms из Grist.
+    private const string TemporaryPlatformLabel = "ГКВ-1 (временно)";
+    private const int TemporaryPlatformId = 4; // Basic_platforms: «ГКВ-1-OEM (v3)» на стенде.
+
     private List<PrintTemplateDto> Items { get; set; } = new();
 
     private bool Busy { get; set; }
@@ -110,7 +116,7 @@
 
     private PrintTemplateKind NewKind { get; set; } = PrintTemplateKind.ProductLabel;
 
-    private int? NewPlatform { get; set; }
+    private string? PlatformText { get; set; }
 
     private int? NewModification { get; set; }
 
@@ -138,13 +144,35 @@
         }
     }
 
+    private static Task<IEnumerable<string>> SearchPlatformsAsync(string? text, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var query = text?.Trim() ?? "";
+        var rowId = ParsePlatformId(query);
+        IEnumerable<string> matches = rowId == TemporaryPlatformId || TemporaryPlatformLabel.Contains(query, StringComparison.OrdinalIgnoreCase)
+            ? [TemporaryPlatformLabel]
+            : rowId.HasValue ? [query] : [];
+        return Task.FromResult(matches);
+    }
+
+    private static int? ParsePlatformId(string? text)
+    {
+        var value = text?.Trim();
+        if (string.Equals(value, TemporaryPlatformLabel, StringComparison.OrdinalIgnoreCase))
+        {
+            return TemporaryPlatformId;
+        }
+        return int.TryParse(value, out var rowId) && rowId > 0 ? rowId : null;
+    }
+
     private async Task UploadAsync(IBrowserFile? file)
     {
         if (file == null)
         {
             return;
         }
-        if (string.IsNullOrWhiteSpace(NewName) || NewPlatform == null)
+        var basePlatformId = ParsePlatformId(PlatformText);
+        if (string.IsNullOrWhiteSpace(NewName) || basePlatformId == null)
         {
             await Notify.Error("Сначала укажите название и платформу.");
             return;
@@ -166,7 +194,7 @@
             {
                 Name = NewName,
                 Kind = NewKind,
-                BasePlatformId = NewPlatform.Value,
+                BasePlatformId = basePlatformId.Value,
                 ModificationId = NewModification,
                 FileName = file.Name,
                 Content = memory.ToArray(),

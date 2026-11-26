@@ -1,0 +1,39 @@
+@using System.Globalization
+
+<div class="sync-native-measure-field">
+    <label for="@Id">@Caption</label>
+    <div class="sync-native-input-unit">
+        @if (IconSrc is not null)
+        {
+            <img class="sync-native-measure-icon" src="@IconSrc" alt="" />
+        }
+        <input id="@Id" class="sync-setup-decimal" type="text" inputmode="decimal" autocomplete="off"
+               spellcheck="false" disabled="@Disabled" @bind:get="DisplayValue" @bind:set="CommitValue" />
+        <span aria-hidden="true">@Unit</span>
+        <PageSetupSteppers Caption="@Caption" Disabled="@Disabled" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Caption { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Unit { get; set; } = string.Empty;
+    [Parameter] public string? IconSrc { get; set; }
+    [Parameter] public double Value { get; set; }
+    [Parameter] public EventCallback<double> ValueChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private string DisplayValue => Format(Value);
+
+    internal static string Format(double value) => Math.Round(value, 2, MidpointRounding.AwayFromZero)
+        .ToString("0.##", CultureInfo.InvariantCulture).Replace('.', ',');
+
+    private async Task CommitValue(string text)
+    {
+        if (!Disabled && decimal.TryParse(text.Replace(',', '.'), NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture, out var number) && number >= 0)
+        {
+            await ValueChanged.InvokeAsync((double)Math.Round(number, 2, MidpointRounding.AwayFromZero));
+        }
+    }
+}

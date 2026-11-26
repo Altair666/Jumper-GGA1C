@@ -2,6 +2,8 @@
 @attribute [Authorize(GGA1C.Sync.Permissions.SyncPermissions.Admin)]
 @using GGA1C.Sync.Templates
 @using System.Text
+@using System.Text.Json
+@using System.Globalization
 @inherits SyncComponentBase
 @inject IPrintTemplateEditorAppService EditorService
 @inject NavigationManager NavigationManager
@@ -21,32 +23,219 @@
 }
 else
 {
+    @if (SettingsOpen)
+    {
+        <div class="sync-settings-backdrop" role="presentation" style="position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);isolation:isolate;">
+            <section class="sync-settings-window" role="dialog" aria-modal="true" aria-labelledby="sync-settings-title" @onclick:stopPropagation="true">
+                <header class="sync-native-titlebar"><span id="sync-settings-title">Настройка страницы</span><button type="button" class="sync-native-close" @onclick="CancelSettings">×</button></header>
+                <nav class="sync-native-tabs" aria-label="Разделы настроек">
+                    <button class="@(SettingsTab == 0 ? "active" : "")" @onclick="@(() => SettingsTab = 0)">Размер носителя</button>
+                    <button class="@(SettingsTab == 1 ? "active" : "")" @onclick="@(() => SettingsTab = 1)">Размещение</button>
+                    <button class="@(SettingsTab == 2 ? "active" : "")" @onclick="@(() => SettingsTab = 2)">Тип бумаги</button>
+                </nav>
+
+                <div class="sync-native-body">
+                    @if (SettingsTab == 0)
+                    {
+                        <div class="sync-native-left">
+                            <fieldset>
+                                <legend>Размер страницы</legend>
+                                <div class="sync-native-measure">
+                                    <PageSetupMeasurement Id="setup-page-width" IconSrc="images/golabel-page/page-width.png" Caption="Ширина страницы" Unit="@SetupUnitShort" @bind-Value="SetupWidthValue" />
+                                </div>
+                                <div class="sync-native-measure">
+                                    <PageSetupMeasurement Id="setup-page-height" IconSrc="images/golabel-page/page-height.png" Caption="Высота страницы" Unit="@SetupUnitShort" @bind-Value="SetupHeightValue" />
+                                </div>
+                            </fieldset>
+                            <fieldset>
+                                <legend>Отступы</legend>
+                                <div class="sync-native-margin-grid">
+                                    <div class="sync-native-measure">
+                                        <PageSetupMeasurement Id="setup-margin-left" IconSrc="images/golabel-page/margin-left.png" Caption="Левое поле" Unit="@SetupUnitShort" @bind-Value="SetupLeftMarginValue" />
+                                    </div>
+                                    <div class="sync-native-measure">
+                                        <PageSetupMeasurement Id="setup-margin-right" IconSrc="images/golabel-page/margin-right.png" Caption="Правый край" Unit="@SetupUnitShort" @bind-Value="SetupRightMarginValue" />
+                                    </div>
+                                    <div class="sync-native-measure">
+                                        <PageSetupMeasurement Id="setup-margin-top" IconSrc="images/golabel-page/margin-top.png" Caption="Верхнее поле" Unit="@SetupUnitShort" @bind-Value="SetupTopMarginValue" />
+                                    </div>
+                                    <div class="sync-native-measure">
+                                        <PageSetupMeasurement Id="setup-margin-bottom" IconSrc="images/golabel-page/margin-bottom.png" Caption="Нижний край" Unit="@SetupUnitShort" @bind-Value="SetupBottomMarginValue" />
+                                    </div>
+                                </div>
+                            </fieldset>
+                        </div>
+                    }
+                    else if (SettingsTab == 1)
+                    {
+                        <div class="sync-native-left sync-native-placement">
+                            <fieldset>
+                                <legend>Edit Mode</legend>
+                                <div class="sync-native-radio-row">
+                                    <label><input type="radio" name="nativeRows" checked="@IsMultiRow" @onchange="@(() => SetMultiRow(true))" /> Многорядная печать</label>
+                                    <label><input type="radio" name="nativeRows" checked="@(!IsMultiRow)" @onchange="@(() => SetMultiRow(false))" /> Однорядная печать</label>
+                                </div>
+                                <div class="sync-native-placement-grid">
+                                    <label for="setup-print-order">Порядок печати</label>
+                                    <select id="setup-print-order" @bind="SetupEdits.AcrossType" disabled="@(!IsMultiRow)">
+                                        <option value="0">Копировать</option><option value="1">Слева направо</option><option value="2">Сверху вниз</option>
+                                    </select>
+                                    <label for="setup-count-x">Горизонтально</label>
+                                    <div class="sync-native-input-unit sync-native-count-unit">
+                                        <input id="setup-count-x" class="sync-setup-count" type="number" min="1" @bind="SetupEdits.HorAcross" />
+                                        <PageSetupSteppers Caption="Горизонтально" />
+                                    </div>
+                                    <PageSetupMeasurement Id="setup-gap-x" Caption="Горизонтальный зазор" Unit="@SetupUnitShort" @bind-Value="SetupHorGapValue" />
+                                    <label for="setup-count-y">Вертикальный</label>
+                                    <div class="sync-native-input-unit sync-native-count-unit">
+                                        <input id="setup-count-y" class="sync-setup-count" type="number" min="1" @bind="SetupEdits.VerAcross" />
+                                        <PageSetupSteppers Caption="Вертикальный" />
+                                    </div>
+                                    <PageSetupMeasurement Id="setup-gap-y" Caption="Вертикальный зазор" Unit="@SetupUnitShort" @bind-Value="SetupVerGapValue" />
+                                </div>
+                            </fieldset>
+                            <fieldset>
+                                <legend>Форма этикетки</legend>
+                                <div class="sync-native-shapes">
+                                    <label><input type="radio" name="nativeShape" aria-label="Квадрат" checked="@(SetupEdits.Shape == 0)" @onchange="@(() => SetShape(0))" /><img src="images/golabel-page/shape-rectangle.png" alt="" /></label>
+                                    <label><input type="radio" name="nativeShape" aria-label="Круг" checked="@(SetupEdits.Shape == 1)" @onchange="@(() => SetShape(1))" /><img src="images/golabel-page/shape-ellipse.png" alt="" /></label>
+                                    <label><input type="radio" name="nativeShape" aria-label="Скруглённый квадрат" checked="@(SetupEdits.Shape == 2)" @onchange="@(() => SetShape(2))" /><img src="images/golabel-page/shape-rounded.png" alt="" /></label>
+                                </div>
+                            </fieldset>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="sync-native-left sync-native-paper-list">
+                            <div class="sync-native-paper-row">
+                                <img src="images/golabel-page/paper-gap.png" alt="" />
+                                <label class="sync-native-paper-kind"><input type="radio" name="nativePaper" checked="@(SetupEdits.LabelType == 0)" @onchange="@(() => SetLabelType(0))" /> Этикетка с зазором</label>
+                                <PageSetupMeasurement Id="setup-paper-gap" Caption="Ширина зазора" Unit="@SetupUnitShort" Disabled="@(SetupEdits.LabelType != 0)" @bind-Value="SetupGapValue" />
+                            </div>
+                            <div class="sync-native-paper-row">
+                                <img src="images/golabel-page/paper-continuous.png" alt="" />
+                                <label class="sync-native-paper-kind"><input type="radio" name="nativePaper" checked="@(SetupEdits.LabelType == 1)" @onchange="@(() => SetLabelType(1))" /> Непрерывный носитель</label>
+                                <PageSetupMeasurement Id="setup-paper-continuous" Caption="Длина подачи бумаги" Unit="@SetupUnitShort" Disabled="@(SetupEdits.LabelType != 1)" @bind-Value="SetupFeedValue" />
+                            </div>
+                            <div class="sync-native-paper-row sync-native-paper-blackmark">
+                                <img src="images/golabel-page/paper-blackmark.png" alt="" />
+                                <label class="sync-native-paper-kind"><input type="radio" name="nativePaper" checked="@(SetupEdits.LabelType == 2)" @onchange="@(() => SetLabelType(2))" /> Бумага с черной отметкой</label>
+                                <div class="sync-native-blackmark-fields">
+                                    <PageSetupMeasurement Id="setup-mark-width" Caption="Ширина" Unit="@SetupUnitShort" Disabled="@(SetupEdits.LabelType != 2)" @bind-Value="SetupBlackMarkValue" />
+                                    <PageSetupMeasurement Id="setup-mark-offset" Caption="Положение" Unit="@SetupUnitShort" Disabled="@(SetupEdits.LabelType != 2)" @bind-Value="SetupBlackMarkPositionValue" />
+                                    <div class="sync-native-measure-field">
+                                        <label for="setup-mark-position">Положение черной отметки</label>
+                                        <select id="setup-mark-position" disabled="@(SetupEdits.LabelType != 2)" @bind="SetupBlackMarkSide">
+                                            <option value="after">+ за этикеткой</option>
+                                            <option value="inside">- внутри этикетки</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    <div class="sync-native-preview">
+                        <div class="sync-native-preset-row">
+                            <label>Стандарт формы этикетки
+                                <select @bind="SelectedSetupPresetId" @bind:after="SelectSetupPreset" disabled="@(SetupPresetsBusy || SetupPresets.Count == 0)">
+                                    <option value=""></option>
+                                    @foreach (var preset in SetupPresets)
+                                    {
+                                        <option value="@preset.Id">@preset.Name</option>
+                                    }
+                                </select>
+                            </label>
+                            <button class="sync-preview-delete" type="button" title="Удалить стандарт формы" aria-label="Удалить стандарт формы"
+                                    disabled="@(SetupPresetsBusy || SelectedSetupPresetId.Length == 0)" @onclick="ClearSetupPreset">
+                                <img src="images/golabel-page/preview-delete.png" alt="" />
+                            </button>
+                        </div>
+                        <div class="sync-native-preset-row">
+                            <label>Описание<input type="text" @bind="SetupPresetName" @bind:event="oninput" disabled="@SetupPresetsBusy" /></label>
+                            <button class="sync-preview-save" type="button" title="Сохранить стандарт формы" aria-label="Сохранить стандарт формы"
+                                    disabled="@(SetupPresetsBusy || string.IsNullOrWhiteSpace(SetupPresetName))" @onclick="SaveSetupPreset">
+                                <img src="images/golabel-page/preview-save.png" alt="" />
+                            </button>
+                        </div>
+                        <div class="sync-preview-caption">Предварительный просмотр назначения этикетки</div>
+                        <button type="button" class="sync-preview-stage" @onclick="OpenPreviewPlacement" aria-label="Открыть размещение и сменить форму">
+                            <svg viewBox="0 0 252 174" width="252" height="174" aria-hidden="true">
+                                <g transform="@SetupPreviewTransform">
+                                    @if (SetupEdits.LabelType == 2 && SetupPreviewBlackMarkHeight > 0)
+                                    {
+                                        <rect class="sync-preview-blackmark" x="0" y="@PreviewNumber(SetupPreviewBlackMarkTop)"
+                                              width="@PreviewNumber(SetupWidthMm)" height="@PreviewNumber(SetupPreviewBlackMarkHeight)" />
+                                    }
+                                    @if (SetupUsableWidthMm > 0 && SetupUsableHeightMm > 0)
+                                    {
+                                        @for (var row = 0; row < SetupPreviewRows; row++)
+                                        {
+                                            @for (var column = 0; column < SetupPreviewColumns; column++)
+                                            {
+                                                var x = SetupMargins.Left + column * (SetupUsableWidthMm + (SetupEdits.HorGapMm ?? 0));
+                                                var y = SetupMargins.Top + row * (SetupUsableHeightMm + (SetupEdits.VerGapMm ?? 0));
+                                                @if (SetupEdits.Shape == 1)
+                                                {
+                                                    <ellipse class="sync-preview-label" vector-effect="non-scaling-stroke"
+                                                             cx="@PreviewNumber(x + SetupUsableWidthMm / 2)" cy="@PreviewNumber(y + SetupUsableHeightMm / 2)"
+                                                             rx="@PreviewNumber(SetupUsableWidthMm / 2)" ry="@PreviewNumber(SetupUsableHeightMm / 2)" />
+                                                }
+                                                else
+                                                {
+                                                    <rect class="sync-preview-label" vector-effect="non-scaling-stroke" x="@PreviewNumber(x)" y="@PreviewNumber(y)"
+                                                          width="@PreviewNumber(SetupUsableWidthMm)" height="@PreviewNumber(SetupUsableHeightMm)"
+                                                          rx="@PreviewNumber(SetupEdits.Shape == 2 ? Math.Min(SetupUsableWidthMm, SetupUsableHeightMm) * .13 : 0)" />
+                                                }
+                                            }
+                                        }
+                                    }
+                                    <rect class="sync-preview-paper" vector-effect="non-scaling-stroke" x="0" y="0"
+                                          width="@PreviewNumber(SetupWidthMm)" height="@PreviewNumber(SetupHeightMm)" />
+                                </g>
+                            </svg>
+                        </button>
+                        <div class="sync-native-size"><span>Размер</span><b>@SetupDisplay(SetupWidthMm)</b><span>@SetupUnitShort</span><em>×</em><b>@SetupDisplay(SetupHeightMm)</b><span>@SetupUnitShort</span></div>
+                        <div class="sync-native-size"><span>Размер этикетки</span><b>@SetupDisplay(SetupUsableWidthMm)</b><span>@SetupUnitShort</span><em>×</em><b>@SetupDisplay(SetupUsableHeightMm)</b><span>@SetupUnitShort</span></div>
+                    </div>
+                </div>
+                <footer class="sync-native-footer">
+                    <button type="button" class="sync-native-unit-cycle" aria-label="Единицы измерения: @SetupUnitShort" @onclick="CycleSetupUnit">@SetupUnitShort</button>
+                    <span></span>
+                    <button type="button" @onclick="CancelSettings">Отмена</button>
+                    <button type="button" class="primary" @onclick="ApplySetup">ОК</button>
+                </footer>
+            </section>
+        </div>
+    }
+
+
     <MudPaper Class="pa-2 mb-2" Elevation="1">
         <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="К шаблонам"
                            OnClick="@(() => NavigationManager.NavigateTo("templates"))" />
             <MudText Typo="Typo.h6" Class="mb-0">@Model.Name</MudText>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                @FormatNumber(Model.WidthMm) × @FormatNumber(Model.HeightMm) мм · @(Math.Round(Model.Dpi)) dpi ·
+                @FormatNumber(Model.WidthMm) × @FormatNumber(Model.HeightMm) mm · @(Math.Round(Model.Dpi)) dpi ·
                 @Model.FileName (@(Model.Size / 1024) КБ)
             </MudText>
             <MudSpacer />
-            <MudSelect T="EditorUnit" @bind-Value="Unit" Label="Единицы линейки" Variant="Variant.Outlined"
+            <MudSelect T="EditorUnit" @bind-Value="Unit" Label="Ruler units" Variant="Variant.Outlined"
                        Margin="Margin.Dense" Style="width:180px;">
-                <MudSelectItem Value="@EditorUnit.Mm">мм</MudSelectItem>
-                <MudSelectItem Value="@EditorUnit.Cm">см</MudSelectItem>
-                <MudSelectItem Value="@EditorUnit.Inch">дюймы</MudSelectItem>
-                <MudSelectItem Value="@EditorUnit.Px">пиксели (принтер)</MudSelectItem>
+                <MudSelectItem Value="@EditorUnit.Mm">mm</MudSelectItem>
+                <MudSelectItem Value="@EditorUnit.Cm">cm</MudSelectItem>
+                <MudSelectItem Value="@EditorUnit.Inch">inch</MudSelectItem>
+                <MudSelectItem Value="@EditorUnit.Px">dot</MudSelectItem>
             </MudSelect>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">Масштаб</MudText>
             <MudSlider T="double" @bind-Value="Zoom" Min="0.5" Max="6" Step="0.25" Style="width:150px;" />
             <MudText Typo="Typo.caption" Style="width:44px;">@FormatNumber(Zoom) ×</MudText>
-            <span id="sync-pos-readout" class="sync-pos-readout">— / — мм</span>
+            <span id="sync-pos-readout" class="sync-pos-readout">— / — mm</span>
             <MudSwitch T="bool" @bind-Value="ShowHidden" Label="Скрытые" Color="Color.Primary" />
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy"
                        StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Сохранить</MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@Busy"
                        StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadAsync">Скачать</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy" StartIcon="@Icons.Material.Filled.Settings" OnClick="OpenSettings">Настройки страницы</MudButton>
         </MudStack>
     </MudPaper>
 
@@ -54,17 +243,20 @@ else
         <div style="flex:1 1 auto;overflow:auto;max-height:80vh;border:1px solid #bdbdbd;">
             <div style="position:relative;width:@(CornerPx + CanvasWidthPx)px;height:@(CornerPx + CanvasHeightPx)px;margin:16px auto;box-shadow:2px 2px 8px rgba(0,0,0,.25);">
                 <div style="position:absolute;left:0;top:0;width:@(CornerPx)px;height:@(RulerPx)px;background:white;z-index:2;"></div>
-                <svg style="position:absolute;left:@(CornerPx)px;top:0;background:white;z-index:2;" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))<line id="sync-marker-top" visibility="hidden" class="sync-ruler-marker" y1="0" y2="@RulerPx" /></svg>
-                <svg style="position:absolute;left:0;top:@(RulerPx)px;background:white;z-index:2;" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))<line id="sync-marker-left" visibility="hidden" class="sync-ruler-marker" x1="0" x2="@RulerPx" /></svg>
+                <svg id="sync-ruler-top" class="sync-ruler" style="position:absolute;left:@(CornerPx)px;top:0;background:white;z-index:2;" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))<line id="sync-marker-top" visibility="hidden" class="sync-ruler-marker" y1="0" y2="@RulerPx" /></svg>
+                <svg id="sync-ruler-left" class="sync-ruler" style="position:absolute;left:0;top:@(RulerPx)px;background:white;z-index:2;" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))<line id="sync-marker-left" visibility="hidden" class="sync-ruler-marker" x1="0" x2="@RulerPx" /></svg>
                 <svg id="sync-canvas-svg" style="position:absolute;left:@(CornerPx)px;top:@(RulerPx)px;background:white;" viewBox="0 0 @FormatNumber(Model.WidthMm) @FormatNumber(Model.HeightMm)"
                      width="@FormatNumber(CanvasWidthPx)" height="@FormatNumber(CanvasHeightPx)"
                      class="sync-canvas">
-                    <line id="sync-cross-x" visibility="hidden" class="sync-cross" y1="0" y2="@FormatNumber(Model.HeightMm)" />
-                    <line id="sync-cross-y" visibility="hidden" class="sync-cross" x1="0" x2="@FormatNumber(Model.WidthMm)" />
                     <rect x="0" y="0" width="@FormatNumber(Model.WidthMm)" height="@FormatNumber(Model.HeightMm)"
                           fill="white" stroke="#bdbdbd" stroke-width="0.2" />
                     @((MarkupString)ShapesSvg())
+                    <!-- The guides must be after the white background and objects, otherwise SVG paints them underneath. -->
+                    <line id="sync-cross-x" visibility="hidden" class="sync-cross sync-guide-line" y1="0" y2="@FormatNumber(Model.HeightMm)" />
+                    <line id="sync-cross-y" visibility="hidden" class="sync-cross sync-guide-line" x1="0" x2="@FormatNumber(Model.WidthMm)" />
                 </svg>
+                <div id="sync-guide-vertical" class="sync-guide-overlay sync-guide-vertical" aria-hidden="true"></div>
+                <div id="sync-guide-horizontal" class="sync-guide-overlay sync-guide-horizontal" aria-hidden="true"></div>
             </div>
         </div>
 
@@ -146,36 +338,9 @@ else
                 </MudPaper>
             }
 
-            <MudPaper Class="pa-2 mt-2" Elevation="1">
-                <MudText Typo="Typo.subtitle2" Class="mb-1">Настройки страницы</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-                    Как в диалоге GoLabel: размер наклейки и зазор — мм, отступы — точки принтера.
-                </MudText>
-
-                <MudNumericField T="float?" Label="Ширина, мм" @bind-Value="SetupEdits.WidthMm"
-                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
-                <MudNumericField T="float?" Label="Высота, мм" @bind-Value="SetupEdits.HeightMm"
-                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
-                <MudNumericField T="float?" Label="Зазор, мм" @bind-Value="SetupEdits.GapMm" Min="0"
-                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
-                <MudNumericField T="int?" Label="Отступ слева, точек" @bind-Value="SetupEdits.LeftMarginDots" Min="0"
-                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
-                <MudNumericField T="int?" Label="Отступ сверху, точек" @bind-Value="SetupEdits.TopMarginDots" Min="0"
-                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
-                <MudNumericField T="int?" Label="Скорость (1–6)" @bind-Value="SetupEdits.Speed" Min="1" Max="6"
-                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
-                <MudNumericField T="int?" Label="Плотность (0–19)" @bind-Value="SetupEdits.Darkness" Min="0" Max="19"
-                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
-                <MudNumericField T="int?" Label="Копий наклейки" @bind-Value="SetupEdits.Copies" Min="1"
-                                 Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" Class="mb-1" />
-                <MudSwitch T="bool?" @bind-Value="SetupEdits.DirectThermal" Label="Термоперенос (лента)"
-                           Color="Color.Primary" Class="mb-2" />
-
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy" FullWidth="true"
-                           OnClick="ApplySetupAsync">Применить к макету</MudButton>
-            </MudPaper>
         </div>
     </div>
+
 
     <MudExpansionPanels Elevation="1" Class="mt-2">
         <MudExpansionPanel Text="EZPL — что порт шлёт принтеру (отладка П5)">
@@ -243,12 +408,295 @@ else
         }
     }
 
-    /// <summary>Правки настроек страницы — локальная копия, канва читает из неё же.</summary>
     private TemplateSetupChangeDto SetupEdits { get; set; } = new();
+
+    private bool SettingsOpen { get; set; }
+
+    private int SettingsTab { get; set; }
+
+    private string SetupUnitShort => UnitShort(Unit);
+
+    private void CycleSetupUnit() => Unit = Unit switch
+    {
+        EditorUnit.Mm => EditorUnit.Cm,
+        EditorUnit.Cm => EditorUnit.Px,
+        EditorUnit.Px => EditorUnit.Inch,
+        _ => EditorUnit.Mm,
+    };
+
+    private static string UnitShort(EditorUnit unit) => unit switch
+    {
+        EditorUnit.Mm => "mm",
+        EditorUnit.Cm => "cm",
+        EditorUnit.Inch => "inch",
+        _ => "dot",
+    };
+
+    private double SetupDotsPerMm => Model?.Setup.DotsPerMm ?? Model?.DotsPerMm ?? 8;
+
+    private double SetupMmToUnit(double value) => Unit switch
+    {
+        EditorUnit.Cm => value / 10,
+        EditorUnit.Inch => value / 25.4,
+        EditorUnit.Px => value * SetupDotsPerMm,
+        _ => value,
+    };
+
+    private double SetupUnitToMm(double value) => Unit switch
+    {
+        EditorUnit.Cm => value * 10,
+        EditorUnit.Inch => value * 25.4,
+        EditorUnit.Px => value / SetupDotsPerMm,
+        _ => value,
+    };
+
+    // The EZPX model stores margins as whole printer dots. Keep the draft in mm
+    // until Apply so a 0.1 step is not lost to early quantization.
+    private sealed record PageSetupMargins(double Left, double Right, double Top, double Bottom);
+
+    private PageSetupMargins SetupMargins { get; set; } = new(0, 0, 0, 0);
+
+    private int MarginToDots(double mm) => (int)Math.Clamp(
+        Math.Round(mm * SetupDotsPerMm, MidpointRounding.AwayFromZero), 0, int.MaxValue);
+
+    private string SetupDisplay(double mm) => PageSetupMeasurement.Format(SetupMmToUnit(mm));
+
+    private double SetupWidthMm => SetupEdits.WidthMm ?? Model?.Setup.WidthMm ?? 0;
+
+    private double SetupHeightMm => SetupEdits.HeightMm ?? Model?.Setup.HeightMm ?? 0;
+
+    private double SetupWidthValue { get => SetupMmToUnit(SetupWidthMm); set => SetupEdits.WidthMm = (float)Math.Max(1, SetupUnitToMm(value)); }
+
+    private double SetupHeightValue { get => SetupMmToUnit(SetupHeightMm); set => SetupEdits.HeightMm = (float)Math.Max(1, SetupUnitToMm(value)); }
+
+    private double SetupLeftMarginValue { get => SetupMmToUnit(SetupMargins.Left); set => SetupMargins = SetupMargins with { Left = SetupUnitToMm(value) }; }
+
+    private double SetupRightMarginValue { get => SetupMmToUnit(SetupMargins.Right); set => SetupMargins = SetupMargins with { Right = SetupUnitToMm(value) }; }
+
+    private double SetupTopMarginValue { get => SetupMmToUnit(SetupMargins.Top); set => SetupMargins = SetupMargins with { Top = SetupUnitToMm(value) }; }
+
+    private double SetupBottomMarginValue { get => SetupMmToUnit(SetupMargins.Bottom); set => SetupMargins = SetupMargins with { Bottom = SetupUnitToMm(value) }; }
+
+    private double SetupHorGapValue { get => SetupMmToUnit(SetupEdits.HorGapMm ?? 0); set => SetupEdits.HorGapMm = (float)Math.Max(0, SetupUnitToMm(value)); }
+
+    private double SetupVerGapValue { get => SetupMmToUnit(SetupEdits.VerGapMm ?? 0); set => SetupEdits.VerGapMm = (float)Math.Max(0, SetupUnitToMm(value)); }
+
+    private double SetupGapValue { get => SetupMmToUnit(SetupEdits.GapMm ?? 0); set => SetupEdits.GapMm = (float)Math.Max(0, SetupUnitToMm(value)); }
+
+    private double SetupFeedValue { get => SetupMmToUnit(SetupEdits.FeedMm ?? 0); set => SetupEdits.FeedMm = (float)Math.Max(0, SetupUnitToMm(value)); }
+
+    private double SetupBlackMarkValue { get => SetupMmToUnit(SetupEdits.BlackMarkMm ?? 0); set => SetupEdits.BlackMarkMm = (float)Math.Max(0, SetupUnitToMm(value)); }
+
+    private double SetupBlackMarkPositionValue { get => SetupMmToUnit(SetupEdits.BlackMarkPositionMm ?? 0); set => SetupEdits.BlackMarkPositionMm = (float)Math.Max(0, SetupUnitToMm(value)); }
+
+    private bool IsMultiRow => (SetupEdits.LabelMode ?? Model?.Setup.LabelMode ?? 0) == 0;
+
+    private void SetMultiRow(bool multiRow)
+    {
+        SetupEdits.LabelMode = multiRow ? 0 : 1;
+        if (!multiRow)
+        {
+            SetupEdits.AcrossType = 0;
+        }
+    }
+
+    private void SetShape(int shape) => SetupEdits.Shape = shape;
+
+    private void SetLabelType(int type) => SetupEdits.LabelType = type;
+
+    private string SetupBlackMarkSide
+    {
+        get => SetupEdits.BlackMarkAfter == true ? "after" : "inside";
+        set => SetupEdits.BlackMarkAfter = value == "after";
+    }
+
+    private int SetupPreviewColumns => Math.Max(1, SetupEdits.HorAcross ?? 1);
+
+    private int SetupPreviewRows => Math.Max(1, SetupEdits.VerAcross ?? 1);
+
+    private double SetupUsableWidthMm => Math.Max(0,
+        (SetupWidthMm - SetupMargins.Left - SetupMargins.Right - (SetupPreviewColumns - 1) * (SetupEdits.HorGapMm ?? 0)) / SetupPreviewColumns);
+
+    private double SetupUsableHeightMm => Math.Max(0,
+        (SetupHeightMm - SetupMargins.Top - SetupMargins.Bottom - (SetupPreviewRows - 1) * (SetupEdits.VerGapMm ?? 0)) / SetupPreviewRows);
+
+    private string SetupPreviewTransform
+    {
+        get
+        {
+            // Leave space around the tape, like the GoLabel pane. Use a uniform
+            // transform for media, margins, gaps, labels and black mark.
+            var scale = Math.Min(176 / Math.Max(1, SetupWidthMm), 124 / Math.Max(1, SetupHeightMm));
+            var x = (252 - SetupWidthMm * scale) / 2;
+            var y = (174 - SetupHeightMm * scale) / 2;
+            return FormattableString.Invariant($"translate({x} {y}) scale({scale})");
+        }
+    }
+
+    private double SetupPreviewBlackMarkHeight => Math.Clamp(SetupEdits.BlackMarkMm ?? 0, 0, Math.Max(0, SetupHeightMm));
+
+    private double SetupPreviewBlackMarkTop
+    {
+        get
+        {
+            var available = Math.Max(0, SetupHeightMm - SetupPreviewBlackMarkHeight);
+            var offset = Math.Clamp(SetupEdits.BlackMarkPositionMm ?? 0, 0, available);
+            return SetupEdits.BlackMarkAfter == true ? available - offset : offset;
+        }
+    }
+
+    private static string PreviewNumber(double value) => value.ToString("R", CultureInfo.InvariantCulture);
+
+    private sealed record PageSetupPreset(string Id, string Name, JsonElement Setup, PageSetupMargins Margins);
+
+    // Shared across EZPX documents, but not across accounts on a shared browser.
+    private string? SetupPresetKey => CurrentUser.Id is { } userId
+        ? $"gga1c:page-setup-presets:{CurrentUser.TenantId}:{userId:N}"
+        : null;
+
+    private List<PageSetupPreset> SetupPresets { get; set; } = [];
+    private string SelectedSetupPresetId { get; set; } = "";
+    private string SetupPresetName { get; set; } = "";
+    private bool SetupPresetsBusy { get; set; }
+    private int _setupOpenVersion;
+
+    private void OpenPreviewPlacement()
+    {
+        SettingsTab = 1;
+        SetupEdits.Shape = ((SetupEdits.Shape ?? 0) + 1) % 3;
+    }
+
+    private void ResetSetupDraft()
+    {
+        if (Model == null) return;
+        SetupEdits = ToSetupEdits(Model.Setup);
+        SetupMargins = new(Model.Setup.LeftMarginDots / SetupDotsPerMm, Model.Setup.RightMarginDots / SetupDotsPerMm,
+            Model.Setup.TopMarginDots / SetupDotsPerMm, Model.Setup.BottomMarginDots / SetupDotsPerMm);
+    }
+
+    private async Task SelectSetupPreset()
+    {
+        var preset = SetupPresets.Find(p => p.Id == SelectedSetupPresetId);
+        if (preset == null)
+        {
+            SetupPresetName = "";
+            return;
+        }
+        try
+        {
+            if (preset.Setup.Deserialize<TemplateSetupChangeDto>() is { } saved)
+            {
+                saved.LabelMode ??= Model?.Setup.LabelMode;
+                SetupEdits = saved;
+                SetupMargins = preset.Margins;
+                SetupPresetName = preset.Name;
+            }
+        }
+        catch (JsonException)
+        {
+            await Notify.Error("Не удалось прочитать сохранённые настройки страницы.");
+        }
+    }
+
+    private async Task SaveSetupPreset()
+    {
+        var key = SetupPresetKey;
+        var name = SetupPresetName.Trim();
+        if (key == null || name.Length == 0 || SetupPresetsBusy) return;
+        var next = new List<PageSetupPreset>(SetupPresets);
+        var existing = next.FindIndex(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        var preset = new PageSetupPreset(existing >= 0 ? next[existing].Id : Guid.NewGuid().ToString("N"),
+            name, JsonSerializer.SerializeToElement(SetupEdits), SetupMargins);
+        if (existing >= 0) next[existing] = preset;
+        else next.Add(preset);
+        if (await StoreSetupPresets(key, next))
+        {
+            SelectedSetupPresetId = preset.Id;
+            SetupPresetName = name;
+            await Notify.Success("Настройки страницы сохранены отдельно от файла шаблона.");
+        }
+    }
+
+    private async Task ClearSetupPreset()
+    {
+        var key = SetupPresetKey;
+        if (key == null || SelectedSetupPresetId.Length == 0 || SetupPresetsBusy) return;
+        if (await StoreSetupPresets(key, SetupPresets.Where(p => p.Id != SelectedSetupPresetId).ToList()))
+        {
+            SelectedSetupPresetId = "";
+            SetupPresetName = "";
+            await Notify.Success("Отдельные настройки страницы удалены.");
+        }
+    }
+
+    private async Task<bool> StoreSetupPresets(string key, List<PageSetupPreset> next)
+    {
+        var version = _setupOpenVersion;
+        SetupPresetsBusy = true;
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("localStorage.setItem", key, JsonSerializer.Serialize(next));
+            if (version != _setupOpenVersion) return false;
+            SetupPresets = next;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            await Notify.Error($"Не удалось записать настройки страницы: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            if (version == _setupOpenVersion) SetupPresetsBusy = false;
+        }
+    }
+
+    private async Task OpenSettings()
+    {
+        if (Model == null) return;
+        ResetSetupDraft();
+        SelectedSetupPresetId = "";
+        SetupPresetName = "";
+        SetupPresets = [];
+        SettingsTab = 0;
+        SettingsOpen = true;
+        var version = ++_setupOpenVersion;
+        if (SetupPresetKey is not { } key) return;
+        SetupPresetsBusy = true;
+        try
+        {
+            var json = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", key);
+            if (version == _setupOpenVersion && !string.IsNullOrWhiteSpace(json))
+            {
+                SetupPresets = JsonSerializer.Deserialize<List<PageSetupPreset>>(json) ?? [];
+            }
+        }
+        catch (Exception)
+        {
+            // Private browsing or disabled storage must not prevent opening the dialog.
+        }
+        finally
+        {
+            if (version == _setupOpenVersion) SetupPresetsBusy = false;
+        }
+    }
+
+    private void CancelSettings() => CloseSetup();
+
+    private void CloseSetup()
+    {
+        SettingsOpen = false;
+        SetupPresetsBusy = false;
+        _setupOpenVersion++;
+    }
+
+    private bool _editorInitialized;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || Model == null)
+        // Первичный рендер Blazor происходит ещё с Model == null, потому проверяем
+        // Model на каждом рендере, а не только по firstRender.
+        if (Model == null || _editorInitialized)
         {
             return;
         }
@@ -256,7 +704,8 @@ else
         _module = await JsRuntime.InvokeAsync<IJSObjectReference>(
             "import", "./js/sync-editor.js");
         _callbacks = DotNetObjectReference.Create(new TemplateEditorCallbacks(this));
-        await _module.InvokeVoidAsync("initEditor", "sync-canvas-svg", _callbacks);
+        _editorInitialized = await _module.InvokeAsync<bool>(
+            "initEditor", "sync-canvas-svg", _callbacks);
     }
 
     public void Dispose()
@@ -264,23 +713,42 @@ else
         _callbacks?.Dispose();
     }
 
-    /// <summary>
-    /// Канва читает размер из Model.Setup: «Применить» кладёт значения из формы туда, и
-    /// наклейка меняет размер до сохранения.
-    /// </summary>
-    private async Task ApplySetupAsync()
+    private void ApplySetup()
     {
         if (Model == null)
         {
             return;
         }
 
-        Model.Setup.WidthMm = Math.Max(1, SetupEdits.WidthMm ?? (float)Model.Setup.WidthMm);
-        Model.Setup.HeightMm = Math.Max(1, SetupEdits.HeightMm ?? (float)Model.Setup.HeightMm);
-        Model.Setup.GapMm = Math.Max(0, SetupEdits.GapMm ?? (float)Model.Setup.GapMm);
-        Model.Setup.LeftMarginDots = Math.Max(0, SetupEdits.LeftMarginDots ?? Model.Setup.LeftMarginDots);
-        Model.Setup.TopMarginDots = Math.Max(0, SetupEdits.TopMarginDots ?? Model.Setup.TopMarginDots);
-        await InvokeAsync(StateHasChanged);
+        var current = Model.Setup;
+        current.WidthMm = Math.Max(1, SetupEdits.WidthMm ?? current.WidthMm);
+        current.HeightMm = Math.Max(1, SetupEdits.HeightMm ?? current.HeightMm);
+        current.GapMm = Math.Max(0, SetupEdits.GapMm ?? current.GapMm);
+        current.LeftMarginDots = MarginToDots(SetupMargins.Left);
+        current.RightMarginDots = MarginToDots(SetupMargins.Right);
+        current.TopMarginDots = MarginToDots(SetupMargins.Top);
+        current.BottomMarginDots = MarginToDots(SetupMargins.Bottom);
+        current.LabelMode = SetupEdits.LabelMode ?? current.LabelMode;
+        current.HorAcross = Math.Max(1, SetupEdits.HorAcross ?? current.HorAcross);
+        current.VerAcross = Math.Max(1, SetupEdits.VerAcross ?? current.VerAcross);
+        current.HorGapMm = Math.Max(0, SetupEdits.HorGapMm ?? current.HorGapMm);
+        current.VerGapMm = Math.Max(0, SetupEdits.VerGapMm ?? current.VerGapMm);
+        current.AcrossType = SetupEdits.AcrossType ?? current.AcrossType;
+        current.Shape = SetupEdits.Shape ?? current.Shape;
+        current.LabelType = SetupEdits.LabelType ?? current.LabelType;
+        current.FeedMm = Math.Max(0, SetupEdits.FeedMm ?? current.FeedMm);
+        current.BlackMarkMm = Math.Max(0, SetupEdits.BlackMarkMm ?? current.BlackMarkMm);
+        current.BlackMarkPositionMm = Math.Max(0, SetupEdits.BlackMarkPositionMm ?? current.BlackMarkPositionMm);
+        current.BlackMarkAfter = SetupEdits.BlackMarkAfter ?? current.BlackMarkAfter;
+        current.Speed = SetupEdits.Speed ?? current.Speed;
+        current.Darkness = SetupEdits.Darkness ?? current.Darkness;
+        current.Copies = Math.Max(1, SetupEdits.Copies ?? current.Copies);
+        current.DirectThermal = SetupEdits.DirectThermal ?? current.DirectThermal;
+        // Канва и заголовок используют эти свойства DTO, а Setup — источник сохранения.
+        Model.WidthMm = current.WidthMm;
+        Model.HeightMm = current.HeightMm;
+        CloseSetup();
+        StateHasChanged();
     }
 
     private async Task DeleteShapeAsync(int index)
@@ -362,13 +830,7 @@ else
         _ => (float)value,
     };
 
-    private string UnitLabel(string field) => Unit switch
-    {
-        EditorUnit.Mm => $"{field}, мм",
-        EditorUnit.Cm => $"{field}, см",
-        EditorUnit.Inch => $"{field}, дюймы",
-        _ => $"{field}, точки",
-    };
+    private string UnitLabel(string field) => $"{field}, {UnitShort(Unit)}";
 
     /// <summary>Единица линейки: сколько единиц в миллиметре пространства наклейки.</summary>
     private double UnitsPerMm => Unit switch
@@ -555,6 +1017,7 @@ else
                 svg.Append($"<image href=\"data:image/png;base64,{shape.RasterPngBase64}\" x=\"{Fmt((float)x)}\" " +
                            $"y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" height=\"{Fmt((float)h)}\" " +
                            $"preserveAspectRatio=\"none\" opacity=\"{opacity:0.##}\"/>");
+                svg.Append("</g>");
                 continue;
             }
 
@@ -564,7 +1027,7 @@ else
                     // Многострочный «Текст» GoLabel: строки по \n, шаг ~1.2 размера знака
                     var textLines = Esc(shape.Data).Split('\n');
                     var textSvg = new StringBuilder(
-                        $"<text x=\"{Fmt((float)x)}\" font-family=\"sans-serif\" " +
+                        $"<text x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" font-family=\"sans-serif\" " +
                         $"font-size=\"{Fmt((float)FontSizeMm(shape))}\" opacity=\"{opacity:0.##}\">");
                     for (int li = 0; li < textLines.Length; li++)
                     {
@@ -708,7 +1171,7 @@ else
         {
             var file = await EditorService.DownloadAsync(Model.TemplateId);
             await JsRuntime.InvokeVoidAsync(
-                "syncEditor.downloadFile", file.FileName, Convert.ToBase64String(file.Content));
+                "syncEditorDownloadFile", file.FileName, Convert.ToBase64String(file.Content));
         }
         catch (Exception ex)
         {
@@ -741,7 +1204,21 @@ else
         HeightMm = Model.Setup.HeightMm,
         GapMm = Model.Setup.GapMm,
         LeftMarginDots = Model.Setup.LeftMarginDots,
+        RightMarginDots = Model.Setup.RightMarginDots,
         TopMarginDots = Model.Setup.TopMarginDots,
+        BottomMarginDots = Model.Setup.BottomMarginDots,
+        LabelMode = Model.Setup.LabelMode,
+        HorAcross = Model.Setup.HorAcross,
+        VerAcross = Model.Setup.VerAcross,
+        HorGapMm = Model.Setup.HorGapMm,
+        VerGapMm = Model.Setup.VerGapMm,
+        AcrossType = Model.Setup.AcrossType,
+        Shape = Model.Setup.Shape,
+        LabelType = Model.Setup.LabelType,
+        FeedMm = Model.Setup.FeedMm,
+        BlackMarkMm = Model.Setup.BlackMarkMm,
+        BlackMarkPositionMm = Model.Setup.BlackMarkPositionMm,
+        BlackMarkAfter = Model.Setup.BlackMarkAfter,
         Speed = Model.Setup.Speed,
         Darkness = Model.Setup.Darkness,
         Copies = Model.Setup.Copies,
@@ -754,7 +1231,21 @@ else
         HeightMm = s.HeightMm,
         GapMm = s.GapMm,
         LeftMarginDots = s.LeftMarginDots,
+        RightMarginDots = s.RightMarginDots,
         TopMarginDots = s.TopMarginDots,
+        BottomMarginDots = s.BottomMarginDots,
+        LabelMode = s.LabelMode,
+        HorAcross = s.HorAcross,
+        VerAcross = s.VerAcross,
+        HorGapMm = s.HorGapMm,
+        VerGapMm = s.VerGapMm,
+        AcrossType = s.AcrossType,
+        Shape = s.Shape,
+        LabelType = s.LabelType,
+        FeedMm = s.FeedMm,
+        BlackMarkMm = s.BlackMarkMm,
+        BlackMarkPositionMm = s.BlackMarkPositionMm,
+        BlackMarkAfter = s.BlackMarkAfter,
         Speed = s.Speed,
         Darkness = s.Darkness,
         Copies = s.Copies,
