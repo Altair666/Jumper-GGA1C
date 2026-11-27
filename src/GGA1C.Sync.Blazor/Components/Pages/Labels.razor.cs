@@ -16,8 +16,6 @@ public partial class Labels
 
     private List<LabelClientDto> Clients { get; set; } = new();
 
-    private List<BufferContentsDto> Buffers { get; set; } = new();
-
     private string NewName { get; set; } = "";
     private string NewEmail { get; set; } = "";
 
@@ -46,20 +44,6 @@ public partial class Labels
         try
         {
             Clients = await ClientsAppService.GetListAsync();
-            Buffers = await ClientsAppService.GetBuffersAsync();
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
-    private async Task LoadBuffersAsync()
-    {
-        Busy = true;
-        try
-        {
-            Buffers = await ClientsAppService.GetBuffersAsync();
         }
         finally
         {
@@ -195,30 +179,6 @@ public partial class Labels
         }
     }
 
-    private async Task DeleteFolderAsync(BufferContentsDto buffer)
-    {
-        var confirmed = await Message.Confirm(
-            $"Удалить строки «{buffer.Slug}»? Учётной записи у них нет, " +
-            $"этикеток: {buffer.RowCount}.");
-
-        if (!confirmed)
-        {
-            return;
-        }
-
-        Busy = true;
-        try
-        {
-            await ClientsAppService.DeleteBufferFolderAsync(buffer.Slug);
-            await LoadBuffersAsync();
-            await Notify.Success("Строки удалены");
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
     // ── Учётные данные во внешних системах ────────────────────────────────────
 
     /// <summary>Виден ли пароль MySQL: его, в отличие от прочих, разрешено смотреть.</summary>
@@ -332,24 +292,5 @@ public partial class Labels
     private static string FormatWhen(DateTime? utc)
     {
         return utc?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—";
-    }
-
-    private static string Plural(int count)
-    {
-        // Этикетка / этикетки / этикеток - иначе в заголовке буфера читается коряво
-        var last = count % 10;
-        var lastTwo = count % 100;
-
-        if (last == 1 && lastTwo != 11)
-        {
-            return "этикетка";
-        }
-
-        if (last is >= 2 and <= 4 && lastTwo is < 12 or > 14)
-        {
-            return "этикетки";
-        }
-
-        return "этикеток";
     }
 }

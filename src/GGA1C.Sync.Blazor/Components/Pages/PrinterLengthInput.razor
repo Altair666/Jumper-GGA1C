@@ -1,0 +1,21 @@
+@using GGA1C.Sync.Printing
+@using GGA1C.Sync.Printing.Profiles
+
+<PageSetupMeasurement @key="(Unit, SavedMillimetres)" Id="@Id" Caption="@Field.Caption" Hint="@Field.Hint"
+                      Unit="@LengthUnits.Symbol(Unit)" Disabled="@Disabled" UpdateWhileTyping="@UpdateWhileTyping"
+                      Value="@LengthUnits.FromMillimetres(Millimetres, Unit, DotsPerMm)" ValueChanged="SetValue" />
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+    [Parameter, EditorRequired] public PrinterFieldDefinition Field { get; set; } = default!;
+    [Parameter] public LengthUnit Unit { get; set; }
+    [Parameter] public double DotsPerMm { get; set; }
+    [Parameter] public double Millimetres { get; set; }
+    [Parameter] public double SavedMillimetres { get; set; }
+    [Parameter] public EventCallback<double> MillimetresChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool UpdateWhileTyping { get; set; }
+
+    private Task SetValue(double value) =>
+        MillimetresChanged.InvokeAsync(LengthUnits.ToMillimetres(value, Unit, DotsPerMm));
+}

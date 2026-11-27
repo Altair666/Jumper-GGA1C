@@ -1,21 +1,19 @@
 @page "/templates/{Id:int}/edit"
 @attribute [Authorize(GGA1C.Sync.Permissions.SyncPermissions.Admin)]
 @using GGA1C.Sync.Templates
+@using GGA1C.Sync.Printing
+@using GGA1C.Sync.Printing.Profiles
 @using System.Text
 @using System.Text.Json
 @using System.Globalization
-@inherits SyncComponentBase
+@inherits PrinterProfileComponent
+@implements IAsyncDisposable
 @inject IPrintTemplateEditorAppService EditorService
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JsRuntime
 
-@* П12.1п + П12.1л: рабочая область по модели GoLabel. Данные шаблона — в мм; канва рисуется
-   от физического размера (пикселей на мм — от экрана, ~3.78 при 96 dpi), масштаб — множитель
-   слайдера (как fZoomRate у GoLabel). Линейки сверху и слева переключают мм/см/дюймы/пиксели
-   (RulerControl.enumScaleMode). Векторные объекты (текст принтера, рамки, линии, штрихкод
-   командой) канва рисует сама; растровые (текст Windows, логотипы, штрихкоды-картинки)
-   вставлены картинками из кода печати. Раскладка: канва с линейками по центру, блок объектов
-   и его описание — справа. Правка числами; перетаскивание — П12.4. *@
+@* П12.1п: документ в миллиметрах; при 100% — 96 CSS px на дюйм.
+   Линейки закреплены у окна просмотра; координаты берутся из одной матрицы SVG. *@
 
 @if (Model == null)
 {
@@ -32,6 +30,7 @@ else
                     <button class="@(SettingsTab == 0 ? "active" : "")" @onclick="@(() => SettingsTab = 0)">Размер носителя</button>
                     <button class="@(SettingsTab == 1 ? "active" : "")" @onclick="@(() => SettingsTab = 1)">Размещение</button>
                     <button class="@(SettingsTab == 2 ? "active" : "")" @onclick="@(() => SettingsTab = 2)">Тип бумаги</button>
+                    <button class="@(SettingsTab == 3 ? "active" : "")" @onclick="@(() => SettingsTab = 3)">Печать</button>
                 </nav>
 
                 <div class="sync-native-body">
@@ -101,10 +100,16 @@ else
                                     <label><input type="radio" name="nativeShape" aria-label="Круг" checked="@(SetupEdits.Shape == 1)" @onchange="@(() => SetShape(1))" /><img src="images/golabel-page/shape-ellipse.png" alt="" /></label>
                                     <label><input type="radio" name="nativeShape" aria-label="Скруглённый квадрат" checked="@(SetupEdits.Shape == 2)" @onchange="@(() => SetShape(2))" /><img src="images/golabel-page/shape-rounded.png" alt="" /></label>
                                 </div>
+                                @if (SetupEdits.Shape == 2)
+                                {
+                                    <div class="sync-native-measure sync-setup-radius">
+                                        <PageSetupMeasurement Id="setup-canvas-radius" Caption="Радиус скругления" Unit="@SetupUnitShort" @bind-Value="SetupCanvasRadiusValue" />
+                                    </div>
+                                }
                             </fieldset>
                         </div>
                     }
-                    else
+                    else if (SettingsTab == 2)
                     {
                         <div class="sync-native-left sync-native-paper-list">
                             <div class="sync-native-paper-row">
@@ -132,6 +137,27 @@ else
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="sync-native-left">
+                            <fieldset>
+                                <legend>Настройки печати</legend>
+                                @if (Profile is not null)
+                                {
+                                    <div class="sync-native-measure">
+                                        <PrinterLengthInput Id="setup-non-printable-length" Field="NonPrintableField" Unit="Unit"
+                                                            DotsPerMm="EditorPrinter.DotsPerMm" Millimetres="CanvasNonPrintableMm"
+                                                            SavedMillimetres="SavedNonPrintableMm" UpdateWhileTyping="true"
+                                                            Disabled="@_savingProfile" MillimetresChanged="SetNonPrintableDraft" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span>Профиль принтера недоступен.</span>
+                                }
+                            </fieldset>
                         </div>
                     }
                     <div class="sync-native-preview">
@@ -184,7 +210,7 @@ else
                                                 {
                                                     <rect class="sync-preview-label" vector-effect="non-scaling-stroke" x="@PreviewNumber(x)" y="@PreviewNumber(y)"
                                                           width="@PreviewNumber(SetupUsableWidthMm)" height="@PreviewNumber(SetupUsableHeightMm)"
-                                                          rx="@PreviewNumber(SetupEdits.Shape == 2 ? Math.Min(SetupUsableWidthMm, SetupUsableHeightMm) * .13 : 0)" />
+                                                          rx="@PreviewNumber(SetupEdits.Shape == 2 ? SetupCanvasRadiusMm : 0)" />
                                                 }
                                                 @if (SetupPreviewShowsPrintOrder)
                                                 {
@@ -203,18 +229,20 @@ else
                     </div>
                 </div>
                 <footer class="sync-native-footer">
-                    <button type="button" class="sync-native-unit-cycle" aria-label="Единицы измерения: @SetupUnitShort" @onclick="CycleSetupUnit">@SetupUnitShort</button>
+                    @UnitCycleButton()
                     <span></span>
-                    <button type="button" @onclick="CancelSettings">Отмена</button>
-                    <button type="button" class="primary" @onclick="ApplySetup">ОК</button>
+                    <button type="button" @onclick="CancelSettings" disabled="@_savingProfile">Отмена</button>
+                    <button type="button" class="primary" @onclick="ApplySetup" disabled="@_savingProfile">ОК</button>
                 </footer>
             </section>
         </div>
     }
 
 
+    <div @ref="_editorRoot" data-unit="@UnitShort(Unit)" data-units-per-mm="@GeometryNumber(UnitsPerMm)"
+         data-settings-open="@(SettingsOpen ? "true" : "false")">
     <MudPaper Class="pa-2 mb-2" Elevation="1">
-        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="sync-editor-toolbar">
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="К шаблонам"
                            OnClick="@(() => NavigationManager.NavigateTo("templates"))" />
             <MudText Typo="Typo.h6" Class="mb-0">@Model.Name</MudText>
@@ -223,17 +251,12 @@ else
                 @Model.FileName (@(Model.Size / 1024) КБ)
             </MudText>
             <MudSpacer />
-            <MudSelect T="EditorUnit" @bind-Value="Unit" Label="Ruler units" Variant="Variant.Outlined"
-                       Margin="Margin.Dense" Style="width:180px;">
-                <MudSelectItem Value="@EditorUnit.Mm">mm</MudSelectItem>
-                <MudSelectItem Value="@EditorUnit.Cm">cm</MudSelectItem>
-                <MudSelectItem Value="@EditorUnit.Inch">inch</MudSelectItem>
-                <MudSelectItem Value="@EditorUnit.Px">dot</MudSelectItem>
-            </MudSelect>
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">Масштаб</MudText>
-            <MudSlider T="double" @bind-Value="Zoom" Min="0.5" Max="6" Step="0.25" Style="width:150px;" />
-            <MudText Typo="Typo.caption" Style="width:44px;">@FormatNumber(Zoom) ×</MudText>
-            <span id="sync-pos-readout" class="sync-pos-readout">— / — mm</span>
+            <div class="sync-editor-zoom" role="group" aria-label="Масштаб холста">
+                <input type="range" id="sync-zoom" min="0.1" max="6" step="0.01" value="1" aria-label="Масштаб холста" />
+                <button type="button" id="sync-zoom-reset" title="Вернуть масштаб 100 % и исходное положение">100 %</button>
+                <button type="button" id="sync-zoom-fit" title="Показать наклейку целиком">Вписать</button>
+            </div>
+            <span id="sync-pos-readout" class="sync-pos-readout">—</span>
             <MudSwitch T="bool" @bind-Value="ShowHidden" Label="Скрытые" Color="Color.Primary" />
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@Busy"
                        StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Сохранить</MudButton>
@@ -243,35 +266,56 @@ else
         </MudStack>
     </MudPaper>
 
-    <div style="display:flex;gap:8px;align-items:stretch;">
-        <div style="flex:1 1 auto;overflow:auto;max-height:80vh;border:1px solid #bdbdbd;">
-            <div style="position:relative;width:@(CornerPx + CanvasWidthPx)px;height:@(CornerPx + CanvasHeightPx)px;margin:16px auto;box-shadow:2px 2px 8px rgba(0,0,0,.25);">
-                <div style="position:absolute;left:0;top:0;width:@(CornerPx)px;height:@(RulerPx)px;background:white;z-index:2;"></div>
-                <svg id="sync-ruler-top" class="sync-ruler" style="position:absolute;left:@(CornerPx)px;top:0;background:white;z-index:2;" width="@FormatNumber(CanvasWidthPx)" height="@RulerPx">@((MarkupString)RulerSvg(TopTicks, horizontal: true))<line id="sync-marker-top" visibility="hidden" class="sync-ruler-marker" y1="0" y2="@RulerPx" /></svg>
-                <svg id="sync-ruler-left" class="sync-ruler" style="position:absolute;left:0;top:@(RulerPx)px;background:white;z-index:2;" width="@RulerPx" height="@FormatNumber(CanvasHeightPx)">@((MarkupString)RulerSvg(LeftTicks, horizontal: false))<line id="sync-marker-left" visibility="hidden" class="sync-ruler-marker" x1="0" x2="@RulerPx" /></svg>
-                <svg id="sync-canvas-svg" style="position:absolute;left:@(CornerPx)px;top:@(RulerPx)px;background:white;" viewBox="0 0 @FormatNumber(Model.WidthMm) @FormatNumber(Model.HeightMm)"
-                     width="@FormatNumber(CanvasWidthPx)" height="@FormatNumber(CanvasHeightPx)"
-                     class="sync-canvas">
-                    <rect x="0" y="0" width="@FormatNumber(Model.WidthMm)" height="@FormatNumber(Model.HeightMm)"
-                          fill="white" stroke="#bdbdbd" stroke-width="0.2" />
-                    @((MarkupString)ShapesSvg())
-                    <!-- The guides must be after the white background and objects, otherwise SVG paints them underneath. -->
-                    <line id="sync-cross-x" visibility="hidden" class="sync-cross sync-guide-line" y1="0" y2="@FormatNumber(Model.HeightMm)" />
-                    <line id="sync-cross-y" visibility="hidden" class="sync-cross sync-guide-line" x1="0" x2="@FormatNumber(Model.WidthMm)" />
-                </svg>
-                <div id="sync-guide-vertical" class="sync-guide-overlay sync-guide-vertical" aria-hidden="true"></div>
-                <div id="sync-guide-horizontal" class="sync-guide-overlay sync-guide-horizontal" aria-hidden="true"></div>
+    <div class="sync-editor-body">
+        <div class="sync-workspace" id="sync-workspace">
+            @UnitCycleButton("sync-ruler-corner")
+            <svg id="sync-ruler-top" class="sync-ruler sync-ruler-top" aria-hidden="true">
+                <g class="sync-ruler-scale"></g>
+                <line class="sync-ruler-marker" visibility="hidden" />
+            </svg>
+            <svg id="sync-ruler-left" class="sync-ruler sync-ruler-left" aria-hidden="true">
+                <g class="sync-ruler-scale"></g>
+                <line class="sync-ruler-marker" visibility="hidden" />
+            </svg>
+            <div id="sync-viewport" class="sync-viewport" tabindex="0" role="region" aria-label="Рабочая область наклейки">
+                <div class="sync-canvas-stage sync-canvas-stage-docked">
+                    <svg id="sync-canvas-svg" class="sync-canvas sync-canvas-sheet" aria-label="Макет наклейки"
+                         data-non-printable-mm="@GeometryNumber(CanvasNonPrintableMm)"
+                         preserveAspectRatio="none"
+                         viewBox="@GeometryNumber(-CanvasNonPrintableMm) 0 @GeometryNumber(CanvasWidthMm + CanvasNonPrintableMm) @GeometryNumber(CanvasHeightMm)"
+                         width="@GeometryNumber(PxPerMm * (CanvasWidthMm + CanvasNonPrintableMm))" height="@GeometryNumber(PxPerMm * CanvasHeightMm)">
+                        @if (CanvasNonPrintableMm > 0)
+                        {
+                            <rect class="sync-canvas-unprintable" x="@GeometryNumber(-CanvasNonPrintableMm)" y="0"
+                                  width="@GeometryNumber(CanvasNonPrintableMm)" height="@GeometryNumber(CanvasHeightMm)" />
+                        }
+                        @if (CanvasShape == 1)
+                        {
+                            <ellipse class="sync-canvas-paper" cx="@GeometryNumber(CanvasWidthMm / 2)" cy="@GeometryNumber(CanvasHeightMm / 2)"
+                                     rx="@GeometryNumber(CanvasWidthMm / 2)" ry="@GeometryNumber(CanvasHeightMm / 2)" />
+                        }
+                        else
+                        {
+                            <rect class="sync-canvas-paper" width="@GeometryNumber(CanvasWidthMm)" height="@GeometryNumber(CanvasHeightMm)"
+                                  rx="@GeometryNumber(CanvasShape == 2 ? RadiusMm(ActiveCanvasOptions, CanvasWidthMm, CanvasHeightMm) : 0)" />
+                        }
+                        <g class="sync-canvas-objects">@((MarkupString)ShapesSvg())</g>
+                    </svg>
+                </div>
             </div>
+            <svg id="sync-crosshair" class="sync-crosshair" aria-hidden="true">
+                <line class="sync-cross" visibility="hidden" />
+                <line class="sync-cross" visibility="hidden" />
+            </svg>
         </div>
 
-        <div style="flex:0 0 320px;max-height:80vh;overflow:auto;">
+        <div class="sync-editor-side">
             <MudPaper Class="pa-2" Elevation="1">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Объекты</MudText>
-                <MudList T="int" Dense="true" Class="sync-editor-list" Style="max-height:34vh;overflow:auto;">
+                <MudList T="int?" @bind-SelectedValue="SelectedIndex" Dense="true" Class="sync-editor-list" Style="max-height:34vh;overflow:auto;">
                     @foreach (var shape in Model.Shapes)
                     {
-                        <MudListItem T="int" Value="@shape.Index" @onclick="@(() => SelectedIndex = shape.Index)"
-                                     Class="@(SelectedIndex == shape.Index ? "sync-editor-list-selected" : "")">
+                        <MudListItem T="int?" Value="@shape.Index">
                             <MudText Typo="Typo.caption">
                                 @shape.Index. @shape.KindCaption@(shape.IsPrint ? "" : " · скрыт")
                             </MudText>
@@ -344,7 +388,7 @@ else
 
         </div>
     </div>
-
+    </div>
 
     <MudExpansionPanels Elevation="1" Class="mt-2">
         <MudExpansionPanel Text="EZPL — что порт шлёт принтеру (отладка П5)">
@@ -362,6 +406,11 @@ else
     </MudExpansionPanels>
 }
 
+@if (Profile is { } printerProfile)
+{
+    <LegacyPrinterLengthDialog Profile="printerProfile" />
+}
+
 @code {
     [Parameter] public int Id { get; set; }
 
@@ -374,25 +423,17 @@ else
 
     private bool ShowHidden { get; set; } = true;
 
-    private double Zoom { get; set; } = 1;
-
-    private EditorUnit Unit { get; set; } = EditorUnit.Mm;
+    private LengthUnit Unit { get; set; }
 
     private bool Busy { get; set; }
 
     /// <summary>Пикселей CSS на мм при масштабе ×1 (экран 96 dpi — определение CSS-пикселя).</summary>
     private const double PxPerMm = 96.0 / 25.4;
 
-    private const int CornerPx = 22;
-
-    private const int RulerPx = 22;
-
     private TemplateEditorShapeDto? Selected =>
         Model?.Shapes.FirstOrDefault(s => s.Index == SelectedIndex);
 
-    private double CanvasWidthPx => PxPerMm * Zoom * (Model?.WidthMm ?? 0);
-
-    private double CanvasHeightPx => PxPerMm * Zoom * (Model?.HeightMm ?? 0);
+    private ElementReference _editorRoot;
 
     protected override async Task OnInitializedAsync()
     {
@@ -401,6 +442,7 @@ else
         {
             Model = await EditorService.OpenAsync(Id);
             SetupEdits = ToSetupEdits(Model.Setup);
+            await TrackProfileAsync(EditorPrinter.Id);
         }
         catch (Exception ex)
         {
@@ -414,45 +456,64 @@ else
 
     private TemplateSetupChangeDto SetupEdits { get; set; } = new();
 
+    // Радиус по-прежнему локальная настройка вида конкретного шаблона.
+    private sealed record CanvasOptions(double? RadiusMm = null);
+    private static readonly PrinterDefinition EditorPrinter = PrinterCatalog.Get(PrinterCatalog.Zx430i);
+    private static readonly PrinterFieldDefinition NonPrintableField = EditorPrinter.Field(PrinterCatalog.NonPrintableLength);
+    private double? _draftNonPrintableMm;
+    private bool _savingProfile;
+    private IJSObjectReference? _profileStorageModule;
+
+    private CanvasOptions SavedCanvasOptions { get; set; } = new();
+    private CanvasOptions DraftCanvasOptions { get; set; } = new();
+    private CanvasOptions ActiveCanvasOptions => SettingsOpen ? DraftCanvasOptions : SavedCanvasOptions;
+    private string? CanvasOptionsKey => CurrentUser.Id is { } userId && Model != null
+        ? $"gga1c:label-canvas:{CurrentUser.TenantId}:{userId:N}:{Model.TemplateId}"
+        : null;
+
+    private double CanvasWidthMm => SettingsOpen ? SetupWidthMm : Model!.WidthMm;
+    private double CanvasHeightMm => SettingsOpen ? SetupHeightMm : Model!.HeightMm;
+    private int CanvasShape => SettingsOpen ? SetupEdits.Shape ?? 0 : Model!.Setup.Shape;
+    private double SavedNonPrintableMm => Profile?.Value(NonPrintableField.Id) ?? NonPrintableField.DefaultValue;
+    private double CanvasNonPrintableMm => (SettingsOpen ? _draftNonPrintableMm : null) ?? SavedNonPrintableMm;
+
+    private static double RadiusMm(CanvasOptions options, double width, double height) =>
+        Math.Clamp(options.RadiusMm ?? Math.Min(width, height) * .13, 0, Math.Min(width, height) / 2);
+
+    private double SetupCanvasRadiusMm => RadiusMm(DraftCanvasOptions, SetupWidthMm, SetupHeightMm);
+    private double SetupCanvasRadiusValue
+    {
+        get => SetupMmToUnit(SetupCanvasRadiusMm);
+        set => DraftCanvasOptions = DraftCanvasOptions with { RadiusMm = Math.Max(0, SetupUnitToMm(value)) };
+    }
+
+    private void SetNonPrintableDraft(double value) =>
+        _draftNonPrintableMm = value == SavedNonPrintableMm ? null : value;
+
+    protected override void ProfileReceived(PrinterProfile? previous, PrinterProfile profile)
+    {
+        if (previous?.Value(NonPrintableField.Id) != profile.Value(NonPrintableField.Id))
+            _draftNonPrintableMm = null;
+    }
+
     private bool SettingsOpen { get; set; }
 
     private int SettingsTab { get; set; }
 
     private string SetupUnitShort => UnitShort(Unit);
 
-    private void CycleSetupUnit() => Unit = Unit switch
-    {
-        EditorUnit.Mm => EditorUnit.Cm,
-        EditorUnit.Cm => EditorUnit.Px,
-        EditorUnit.Px => EditorUnit.Inch,
-        _ => EditorUnit.Mm,
-    };
+    private RenderFragment UnitCycleButton(string? layoutClass = null) =>
+        @<button type="button" class="sync-native-unit-cycle @layoutClass"
+                 aria-label="Единицы измерения: @SetupUnitShort" @onclick="CycleSetupUnit">@SetupUnitShort</button>;
 
-    private static string UnitShort(EditorUnit unit) => unit switch
-    {
-        EditorUnit.Mm => "mm",
-        EditorUnit.Cm => "cm",
-        EditorUnit.Inch => "inch",
-        _ => "dot",
-    };
+    private void CycleSetupUnit() => Unit = LengthUnits.Next(Unit);
+
+    private static string UnitShort(LengthUnit unit) => LengthUnits.Symbol(unit);
 
     private double SetupDotsPerMm => Model?.Setup.DotsPerMm ?? Model?.DotsPerMm ?? 8;
 
-    private double SetupMmToUnit(double value) => Unit switch
-    {
-        EditorUnit.Cm => value / 10,
-        EditorUnit.Inch => value / 25.4,
-        EditorUnit.Px => value * SetupDotsPerMm,
-        _ => value,
-    };
-
-    private double SetupUnitToMm(double value) => Unit switch
-    {
-        EditorUnit.Cm => value * 10,
-        EditorUnit.Inch => value * 25.4,
-        EditorUnit.Px => value / SetupDotsPerMm,
-        _ => value,
-    };
+    private double SetupMmToUnit(double value) => LengthUnits.FromMillimetres(value, Unit, SetupDotsPerMm);
+    private double SetupUnitToMm(double value) => LengthUnits.ToMillimetres(value, Unit, SetupDotsPerMm);
 
     // The EZPX model stores margins as whole printer dots. Keep the draft in mm
     // until Apply so a 0.1 step is not lost to early quantization.
@@ -594,6 +655,8 @@ else
     {
         if (Model == null) return;
         SetupEdits = ToSetupEdits(Model.Setup);
+        DraftCanvasOptions = SavedCanvasOptions;
+        _draftNonPrintableMm = null;
         SetupEdits.WidthMm = LimitPageWidth(Model.Setup.WidthMm);
         SetupMargins = new(Model.Setup.LeftMarginDots / SetupDotsPerMm, Model.Setup.RightMarginDots / SetupDotsPerMm,
             Model.Setup.TopMarginDots / SetupDotsPerMm, Model.Setup.BottomMarginDots / SetupDotsPerMm);
@@ -712,6 +775,7 @@ else
     private void CloseSetup()
     {
         SettingsOpen = false;
+        _draftNonPrintableMm = null;
         SetupPresetsBusy = false;
         _setupOpenVersion++;
     }
@@ -728,22 +792,59 @@ else
         }
 
         _module = await JsRuntime.InvokeAsync<IJSObjectReference>(
-            "import", "./js/sync-editor.js");
+            "import", "./js/sync-editor-viewport-left-band.js?v=zero-scroll");
         _callbacks = DotNetObjectReference.Create(new TemplateEditorCallbacks(this));
         _editorInitialized = await _module.InvokeAsync<bool>(
-            "initEditor", "sync-canvas-svg", _callbacks);
-    }
-
-    public void Dispose()
-    {
-        _callbacks?.Dispose();
-    }
-
-    private void ApplySetup()
-    {
-        if (Model == null)
+            "initEditor", _editorRoot, _callbacks);
+        if (!_editorInitialized || CanvasOptionsKey is not { } key) return;
+        try
         {
-            return;
+            var json = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", key);
+            if (json is { } && !SettingsOpen && JsonSerializer.Deserialize<CanvasOptions>(json) is { } options
+                && (options.RadiusMm == null || double.IsFinite(options.RadiusMm.Value) && options.RadiusMm >= 0))
+            {
+                SavedCanvasOptions = options;
+                StateHasChanged();
+            }
+        }
+        catch (Exception)
+        {
+            // Заблокированное или повреждённое хранилище не мешает редактировать этикетку.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        StopTrackingProfiles();
+        _callbacks?.Dispose();
+        try
+        {
+            if (_profileStorageModule != null) await _profileStorageModule.DisposeAsync();
+            if (_module != null) await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // Наблюдатель JS освобождает обработчики после удаления редактора из DOM.
+        }
+    }
+
+    private async Task ApplySetup()
+    {
+        if (Model == null || _savingProfile) return;
+        if (_draftNonPrintableMm is { } length && Profile is { } profile)
+        {
+            _savingProfile = true;
+            try
+            {
+                ReceiveProfile(await Profiles.SaveAsync(profile.Definition.Id, profile.Revision,
+                    new Dictionary<string, double> { [NonPrintableField.Id] = length }));
+            }
+            catch (Exception ex)
+            {
+                await Notify.Error(ex.Message);
+                return;
+            }
+            finally { _savingProfile = false; }
         }
 
         var current = Model.Setup;
@@ -773,8 +874,21 @@ else
         // Канва и заголовок используют эти свойства DTO, а Setup — источник сохранения.
         Model.WidthMm = current.WidthMm;
         Model.HeightMm = current.HeightMm;
+        var canvasOptionsChanged = SavedCanvasOptions != DraftCanvasOptions;
+        SavedCanvasOptions = DraftCanvasOptions;
         CloseSetup();
-        StateHasChanged();
+        if (canvasOptionsChanged && CanvasOptionsKey is { } key)
+        {
+            try
+            {
+                _profileStorageModule ??= await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/printer-profile-storage.js");
+                await _profileStorageModule.InvokeVoidAsync("writeCanvasRadius", key, SavedCanvasOptions.RadiusMm);
+            }
+            catch (Exception)
+            {
+                // Новые параметры действуют для открытого редактора и без хранилища.
+            }
+        }
     }
 
     private async Task DeleteShapeAsync(int index)
@@ -806,66 +920,48 @@ else
     }
 
     /// <summary>JS отдал итог перетаскивания — координаты в мм, переводим в точки.</summary>
-    private void OnShapeDragged(int index, double xMm, double yMm)
+    private Task OnShapeDragged(int index, double xMm, double yMm)
     {
         var shape = Model?.Shapes.FirstOrDefault(s => s.Index == index);
         if (shape == null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         shape.X = (float)(xMm * Model!.DotsPerMm);
         shape.Y = (float)(yMm * Model!.DotsPerMm);
         SelectedIndex = index;
-        InvokeAsync(StateHasChanged);
+        return InvokeAsync(StateHasChanged);
     }
 
     /// <summary>Клик по объекту на канве — выделить.</summary>
-    private void OnShapeClicked(int index)
+    private Task OnShapeClicked(int? index)
     {
         SelectedIndex = index;
-        InvokeAsync(StateHasChanged);
+        return InvokeAsync(StateHasChanged);
     }
 
     private sealed class TemplateEditorCallbacks(TemplateEditor page)
     {
         [JSInvokable]
-        public void ShapeDragged(int index, double xMm, double yMm) => page.OnShapeDragged(index, xMm, yMm);
+        public Task ShapeDragged(int index, double xMm, double yMm) => page.OnShapeDragged(index, xMm, yMm);
 
         [JSInvokable]
-        public void ShapeClicked(int index) => page.OnShapeClicked(index);
+        public Task ShapeClicked(int? index) => page.OnShapeClicked(index);
     }
 
     // ── Единицы и координаты ──────────────────────────────────────────────────
 
-    private enum EditorUnit { Mm, Cm, Inch, Px }
+    private double DotsToUnit(double dots) => Unit == LengthUnit.Dot ? dots
+        : LengthUnits.FromMillimetres(dots / Model!.DotsPerMm, Unit, Model.DotsPerMm);
 
-    private double DotsToUnit(double dots) => Unit switch
-    {
-        EditorUnit.Mm => dots / Model!.DotsPerMm,
-        EditorUnit.Cm => dots / Model!.DotsPerMm / 10,
-        EditorUnit.Inch => dots / Model!.DotsPerMm / 25.4,
-        _ => dots,
-    };
-
-    private float UnitToDots(double value) => Unit switch
-    {
-        EditorUnit.Mm => (float)(value * Model!.DotsPerMm),
-        EditorUnit.Cm => (float)(value * 10 * Model!.DotsPerMm),
-        EditorUnit.Inch => (float)(value * 25.4 * Model!.DotsPerMm),
-        _ => (float)value,
-    };
+    private float UnitToDots(double value) => Unit == LengthUnit.Dot ? (float)value
+        : (float)(LengthUnits.ToMillimetres(value, Unit, Model!.DotsPerMm) * Model.DotsPerMm);
 
     private string UnitLabel(string field) => $"{field}, {UnitShort(Unit)}";
 
-    /// <summary>Единица линейки: сколько единиц в миллиметре пространства наклейки.</summary>
-    private double UnitsPerMm => Unit switch
-    {
-        EditorUnit.Mm => 1,
-        EditorUnit.Cm => 0.1,
-        EditorUnit.Inch => 1.0 / 25.4,
-        _ => Model?.DotsPerMm ?? 8,
-    };
+    // Dot coordinates of existing EZPX files retain the template's scale.
+    private double UnitsPerMm => LengthUnits.PerMillimetre(Unit, Model?.DotsPerMm ?? 8);
 
     // ── Правки выбранного объекта в единицах линейки ─────────────────────────
 
@@ -877,103 +973,13 @@ else
 
     private double EditsHeight { get => Selected?.Height == null ? 0 : Math.Round(DotsToUnit(Selected.Height.Value), 3); set { if (Selected?.Height != null) Selected.Height = UnitToDots(value); } }
 
-    // ── Линейки ───────────────────────────────────────────────────────────────
-
-    private sealed record RulerTick(double PositionPx, bool Major, string? Label);
-
-    private (double Minor, double Major) TickSteps => Unit switch
-    {
-        EditorUnit.Mm => (1, 10),
-        EditorUnit.Cm => (0.1, 1),
-        EditorUnit.Inch => (0.125, 0.5),
-        _ => (8, 80),
-    };
-
-    private List<RulerTick> TopTicks => RulerTicks(Model?.WidthMm ?? 0);
-
-    private List<RulerTick> LeftTicks => RulerTicks(Model?.HeightMm ?? 0);
-
-    /// <summary>Деления по выбранной единице: экран-пиксели = единицы · единиц-в-мм · px/мм · зум.</summary>
-    private List<RulerTick> RulerTicks(float lengthMm)
-    {
-        var ticks = new List<RulerTick>();
-        if (Model == null || lengthMm <= 0)
-        {
-            return ticks;
-        }
-
-        double lengthUnits = lengthMm * UnitsPerMm;
-        double pxPerUnit = Unit == EditorUnit.Px
-            ? PxPerMm * Zoom / Model.DotsPerMm
-            : PxPerMm * Zoom * UnitsPerMm;
-        var (minorStep, majorStep) = TickSteps;
-
-        // Адаптивно, как в GoLabel: подпись ставится только на крупные деления, разнесённые
-        // хотя бы на ~36 px (пока плотнее — шаг крупного удваивается: 10 → 20 → 40 мм…), а
-        // мелкие деления рисуются, только когда разнесены хотя бы на ~5 px. Иначе линейка
-        // превращается в чернильный смаз из подписей на каждый миллиметр.
-        double majorPx = majorStep * pxPerUnit;
-        while (majorPx < 36)
-        {
-            majorStep *= 2;
-            majorPx = majorStep * pxPerUnit;
-        }
-
-        double minorPx = minorStep * pxPerUnit;
-        bool drawMinors = minorStep < majorStep && minorPx >= 5;
-        int stepsPerMajor = Math.Max(1, (int)Math.Round(majorStep / minorStep));
-
-        double position = 0;
-        int step = 0;
-        while (position <= lengthUnits + minorStep / 2 && ticks.Count < 4000)
-        {
-            bool isMajor = step % stepsPerMajor == 0;
-            if (isMajor || drawMinors)
-            {
-                ticks.Add(new RulerTick(
-                    Math.Round(position * pxPerUnit, 2), isMajor,
-                    isMajor ? FormatTick(position) : null));
-            }
-            position += minorStep;
-            step++;
-        }
-
-        return ticks;
-    }
-
-    private static string FormatTick(double value) =>
-        Math.Abs(value - Math.Round(value)) < 0.001
-            ? Math.Round(value).ToString("0")
-            : value.ToString("0.###");
-
-    /// <summary>SVG линейки. Тег <text> в Razor зарезервирован, поэтому разметка строкой.</summary>
-    private static string RulerSvg(List<RulerTick> ticks, bool horizontal)
-    {
-        var svg = new StringBuilder();
-        foreach (var tick in ticks)
-        {
-            string from = horizontal
-                ? $"y1=\"{(tick.Major ? 0 : 14)}\" y2=\"22\""
-                : $"x1=\"{(tick.Major ? 0 : 14)}\" x2=\"22\"";
-            string to = horizontal
-                ? $"x2=\"{FormatNumber(tick.PositionPx)}\""
-                : $"y2=\"{FormatNumber(tick.PositionPx)}\"";
-            svg.Append($"<line {from} {to} class=\"sync-ruler-tick\"/>");
-            if (tick.Label != null)
-            {
-                string x = horizontal ? FormatNumber(tick.PositionPx + 2) : "2";
-                string y = horizontal ? "10" : FormatNumber(tick.PositionPx - 2);
-                svg.Append($"<text x=\"{x}\" y=\"{y}\" class=\"sync-ruler-label\">{tick.Label}</text>");
-            }
-        }
-        return svg.ToString();
-    }
-
     // ── Отрисовка объектов (SVG, координаты в мм; слой собирается строкой — тег
     //    <text> в Razor зарезервирован) ─────────────────────────────────────────
 
     private static string FormatNumber(double v) =>
         v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string GeometryNumber(double value) => value.ToString("R", CultureInfo.InvariantCulture);
 
     private static string Fmt(float mm) => mm.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
@@ -990,7 +996,7 @@ else
 
         // Текст шрифтом принтера: ширины в шаблоне нет, оценка по самой длинной строке
         // (многострочный «Текст» — строки по \n).
-        var lines = (shape.Data ?? "").Split('\n');
+        var lines = TextLines(shape.Data);
         double longest = lines.Length == 0 ? 0 : lines.Max(l => l.Length);
         double height = FontSizeMm(shape) * Math.Max(1, lines.Length) * 1.2;
         double width = Math.Max(8, longest * FontSizeMm(shape) * 0.62);
@@ -1003,6 +1009,9 @@ else
     /// </summary>
     private static double FontSizeMm(TemplateEditorShapeDto shape) =>
         Math.Clamp(shape.FontHeightPoints * 25.4 / 72.0, 0.8, 30);
+
+    private static string[] TextLines(string? value) =>
+        (value ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
     private static string Esc(string? value) =>
         (value ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
@@ -1018,7 +1027,8 @@ else
         var svg = new StringBuilder();
         double dpm = Model.DotsPerMm;
 
-        foreach (var shape in Model.Shapes)
+        // GoLabel печатает с конца списка: первый объект накладывается последним.
+        foreach (var shape in Model.Shapes.AsEnumerable().Reverse())
         {
             if (!ShowHidden && !shape.IsPrint)
             {
@@ -1032,18 +1042,18 @@ else
 
             // Группа с прозрачным «хитом» на всю площадь: рамки с fill=none сами мышь
             // не ловят, а JS-перетаскиванию (П12.4) нужен цельный клик по объекту.
-            svg.Append($"<g data-shape-index=\"{shape.Index}\" data-x=\"{Fmt((float)(shape.X / dpm))}\" " +
-                       $"data-y=\"{Fmt((float)(shape.Y / dpm))}\" class=\"sync-shape\">");
-            svg.Append($"<rect x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" " +
-                       $"height=\"{Fmt((float)h)}\" fill=\"transparent\" stroke=\"none\" " +
-                       $"pointer-events=\"all\" />");
+            var selection = SelectedIndex == shape.Index ? " is-selected" : "";
+            svg.Append($"<g data-shape-index=\"{shape.Index}\" data-x=\"{GeometryNumber(x)}\" " +
+                       $"data-y=\"{GeometryNumber(y)}\" class=\"sync-shape{selection}\">");
+            string hit = $"<rect x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" " +
+                         $"height=\"{Fmt((float)h)}\" class=\"sync-shape-hit\" />";
 
             if (shape.IsRaster && shape.RasterPngBase64 != null)
             {
                 svg.Append($"<image href=\"data:image/png;base64,{shape.RasterPngBase64}\" x=\"{Fmt((float)x)}\" " +
                            $"y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" height=\"{Fmt((float)h)}\" " +
                            $"preserveAspectRatio=\"none\" opacity=\"{opacity:0.##}\"/>");
-                svg.Append("</g>");
+                svg.Append(hit).Append("</g>");
                 continue;
             }
 
@@ -1051,7 +1061,7 @@ else
             {
                 case "Text":
                     // Многострочный «Текст» GoLabel: строки по \n, шаг ~1.2 размера знака
-                    var textLines = Esc(shape.Data).Split('\n');
+                    var textLines = TextLines(shape.Data);
                     var textSvg = new StringBuilder(
                         $"<text x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" font-family=\"sans-serif\" " +
                         $"font-size=\"{Fmt((float)FontSizeMm(shape))}\" opacity=\"{opacity:0.##}\">");
@@ -1060,7 +1070,7 @@ else
                         string dy = li == 0
                             ? Fmt((float)(FontSizeMm(shape) * 0.9))
                             : Fmt((float)(FontSizeMm(shape) * 1.2));
-                        textSvg.Append($"<tspan x=\"{Fmt((float)x)}\" dy=\"{dy}\">{textLines[li]}</tspan>");
+                        textSvg.Append($"<tspan x=\"{Fmt((float)x)}\" dy=\"{dy}\">{Esc(textLines[li])}</tspan>");
                     }
                     textSvg.Append("</text>");
                     svg.Append(textSvg);
@@ -1094,17 +1104,7 @@ else
                     break;
             }
 
-            svg.Append("</g>");
-        }
-
-        if (Selected != null)
-        {
-            var (w, h) = BboxMm(Selected);
-            double x = Selected.X / dpm;
-            double y = Selected.Y / dpm;
-            svg.Append($"<rect x=\"{Fmt((float)x)}\" y=\"{Fmt((float)y)}\" width=\"{Fmt((float)w)}\" " +
-                       $"height=\"{Fmt((float)h)}\" fill=\"none\" stroke=\"#1976d2\" stroke-width=\"0.3\" " +
-                       $"stroke-dasharray=\"1.5,1\"/>");
+            svg.Append(hit).Append("</g>");
         }
 
         return svg.ToString();
@@ -1188,7 +1188,7 @@ else
 
     private async Task DownloadAsync()
     {
-        if (Model == null)
+        if (Model == null || _module == null)
         {
             return;
         }
@@ -1196,8 +1196,8 @@ else
         try
         {
             var file = await EditorService.DownloadAsync(Model.TemplateId);
-            await JsRuntime.InvokeVoidAsync(
-                "syncEditorDownloadFile", file.FileName, Convert.ToBase64String(file.Content));
+            await _module.InvokeVoidAsync(
+                "downloadFile", file.FileName, Convert.ToBase64String(file.Content));
         }
         catch (Exception ex)
         {

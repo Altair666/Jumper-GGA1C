@@ -1,0 +1,103 @@
+@using System.Globalization
+@using GGA1C.Sync.Printing
+@using GGA1C.Sync.Printing.Profiles
+@inherits SyncComponentBase
+@implements IAsyncDisposable
+@inject IPrinterProfilesAppService Profiles
+@inject IJSRuntime JsRuntime
+
+@if (_importError)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Не удалось перенести прежнюю непечатаемую длину. Старые записи не изменены.
+        <MudButton Size="Size.Small" OnClick="ImportAsync">Повторить</MudButton>
+    </MudAlert>
+}
+
+@if (Profile.LegacyChoices.Count > 0)
+{
+    <div style="position:fixed;inset:0;z-index:2147483500;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.45);">
+        <div role="dialog" aria-modal="true" aria-labelledby="printer-length-import-title" style="width:min(100%, 30rem);max-height:90vh;overflow:auto;">
+            <MudFocusTrap>
+                <MudPaper Class="pa-5" Elevation="8">
+                    <MudStack Spacing="3">
+                        <MudText Typo="Typo.h6" id="printer-length-import-title">Перенос непечатаемой длины</MudText>
+                        <MudText Typo="Typo.body2">
+                            Найдены разные сохранённые значения. Выберите одно для общего профиля @Profile.Definition.Caption.
+                            Пока выбор не сохранён, текущее значение не меняется.
+                        </MudText>
+                        <fieldset style="border:0;padding:0;margin:0;">
+                            <legend>Сохранённые значения</legend>
+                            @foreach (var length in Profile.LegacyChoices)
+                            {
+                                <label style="display:block;margin-top:8px;" title="@length.ToString("R", CultureInfo.InvariantCulture)">
+                                    <input type="radio" name="legacy-printer-length" checked="@(_selected == length)"
+                                           disabled="@_saving" @onchange="@(() => _selected = length)" />
+                                    @PageSetupMeasurement.Format(length) мм
+                                </label>
+                            }
+                        </fieldset>
+                        @if (_saveError is not null)
+                        {
+                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_saveError</MudAlert>
+                        }
+                        <MudButton Class="align-self-start" Variant="Variant.Filled" Color="Color.Primary"
+                                   Disabled="@(_selected is null || _saving)" OnClick="ResolveAsync">Сохранить выбор</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudFocusTrap>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public PrinterProfile Profile { get; set; } = default!;
+    private IJSObjectReference? _storage;
+    private bool _importError;
+    private bool _saving;
+    private string? _saveError;
+    private double? _selected;
+
+    protected override Task OnAfterRenderAsync(bool firstRender) => firstRender ? ImportAsync() : Task.CompletedTask;
+
+    private async Task ImportAsync()
+    {
+        if (CurrentUser.Id is not { } userId) return;
+        try
+        {
+            _importError = false;
+            _storage ??= await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/printer-profile-storage.js");
+            var prefix = $"gga1c:label-canvas:{CurrentUser.TenantId}:{userId:N}:";
+            var entries = await _storage.InvokeAsync<LegacyEntry[]>("collectLegacyLengths", prefix);
+            if (entries.Length == 0) return;
+            await Profiles.OfferLegacyLengthsAsync(entries.Select(entry => entry.Length).ToArray());
+            // A string[] passed directly would be spread into the JS interop params array.
+            await _storage.InvokeVoidAsync("markLegacyLengthsOffered", (object)entries.Select(entry => entry.Key).ToArray());
+        }
+        catch (JSDisconnectedException) { }
+        catch (Exception)
+        {
+            _importError = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ResolveAsync()
+    {
+        if (_saving || _selected is not { } selected) return;
+        _saving = true;
+        _saveError = null;
+        try { await Profiles.ResolveLegacyLengthsAsync(selected); }
+        catch (Exception ex) { _saveError = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_storage == null) return;
+        try { await _storage.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private sealed record LegacyEntry(string Key, double Length);
+}
