@@ -4,14 +4,16 @@ using System.Diagnostics;
 namespace GGA1C.Sync.Printing.Profiles;
 
 public sealed record PrinterProfile(PrinterDefinition Definition, long Revision,
-    IReadOnlyDictionary<string, double> Values, IReadOnlyList<double> LegacyChoices)
+    IReadOnlyDictionary<string, double> Values, IReadOnlyList<double> LegacyChoices, PrinterConnection Connection)
 {
     public double Value(string fieldId) => Values[fieldId];
 }
 
 internal sealed record PrinterProfileData(long Revision, Dictionary<string, double> Values,
-    double[] LegacyValues, bool LegacyConflictPending, bool LegacyChoiceMade)
+    double[] LegacyValues, bool LegacyConflictPending, bool LegacyChoiceMade,
+    int SchemaVersion = 0, PrinterConnection? Connection = null)
 {
+    public const int CurrentSchemaVersion = 1;
     public static PrinterProfileData Empty() => new(0, new(StringComparer.Ordinal), [], false, false);
 }
 
@@ -52,6 +54,39 @@ public sealed class PrinterProfiles(FilePrinterProfileStore store)
         return values.Count == data.Values.Count && values.All(pair => data.Values[pair.Key] == pair.Value)
             ? data : data with { Values = values };
     });
+
+    public Task<PrinterProfile> SaveConnectionAsync(Guid? tenantId, string printerId, long revision, PrinterConnection connection) =>
+        UpdateAsync(tenantId, printerId, (_, data) =>
+        {
+            if (printerId != PrinterCatalog.Zx430i) throw new ArgumentException("Настройки пока не реализованы.");
+            if (data.Revision != revision)
+                throw new InvalidOperationException("Профиль уже изменился. Проверьте текущие значения и повторите правку.");
+            connection.Validate();
+            var current = data.Connection ?? new();
+            // Accepting, declining or entering an address explicitly closes the one-time import offer.
+            var next = connection with { ImportDecided = current.ImportDecided || connection.ImportDecided || connection.IPv4 != "" };
+            return next == current ? data : data with { Connection = next };
+        });
+
+    public async Task<PrinterApplicationOptions> ReadOptionsAsync(Guid? tenantId)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try { return await store.ReadOptionsAsync(tenantId).ConfigureAwait(false); }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<PrinterApplicationOptions> SaveOptionAsync(Guid? tenantId, string id, bool enabled)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var current = await store.ReadOptionsAsync(tenantId).ConfigureAwait(false);
+            var next = current.With(id, enabled);
+            if (next != current) await store.WriteOptionsAsync(tenantId, next).ConfigureAwait(false);
+            return next;
+        }
+        finally { _gate.Release(); }
+    }
 
     public Task<PrinterProfile> OfferLegacyLengthsAsync(Guid? tenantId, IReadOnlyList<double> lengths) =>
         UpdateAsync(tenantId, PrinterCatalog.Zx430i, (definition, data) =>
@@ -105,14 +140,15 @@ public sealed class PrinterProfiles(FilePrinterProfileStore store)
             changed = !ReferenceEquals(next, data);
             if (changed)
             {
-                next = next with { Revision = checked(data.Revision + 1) };
+                next = next with { Revision = checked(data.Revision + 1), SchemaVersion = PrinterProfileData.CurrentSchemaVersion,
+                    Connection = next.Connection ?? new() };
                 await store.WriteAsync(tenantId, definition.Id, next).ConfigureAwait(false);
             }
             var values = definition.Fields.ToDictionary(field => field.Id,
                 field => field.ReadOnly ? field.DefaultValue : next.Values.GetValueOrDefault(field.Id, field.DefaultValue),
                 StringComparer.Ordinal);
             snapshot = new(definition, next.Revision, new ReadOnlyDictionary<string, double>(values),
-                Array.AsReadOnly(LegacyChoices(next)));
+                Array.AsReadOnly(LegacyChoices(next)), next.Connection ?? new());
         }
         finally { _gate.Release(); }
 

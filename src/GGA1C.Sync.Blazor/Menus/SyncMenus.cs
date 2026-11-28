@@ -8,7 +8,6 @@ public class SyncMenus
     public const string Labels = Prefix + ".Labels";
     public const string Templates = Prefix + ".Templates";
     public const string Buffers = Prefix + ".Buffers";
-    public const string PrinterSettings = Prefix + ".PrinterSettings";
 
     public const string Keycloak = Prefix + ".Keycloak";
     public const string Altium1C = Prefix + ".Altium1C";

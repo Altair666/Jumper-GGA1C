@@ -9,20 +9,36 @@ public sealed class FilePrinterProfileStore(string folder)
 
     internal async Task<PrinterProfileData> ReadAsync(Guid? tenantId, string printerId)
     {
-        var path = ProfilePath(tenantId, printerId);
+        var data = await ReadAsync(ProfilePath(tenantId, printerId), PrinterProfileData.Empty).ConfigureAwait(false);
+        if (data.SchemaVersion is < 0 or > PrinterProfileData.CurrentSchemaVersion)
+            throw new InvalidDataException("Версия профиля принтера не поддерживается.");
+        // Version 0 is the previously deployed format (without a version or Connection).
+        return data;
+    }
+
+    internal Task WriteAsync(Guid? tenantId, string printerId, PrinterProfileData data) =>
+        WriteAsync(ProfilePath(tenantId, printerId), data);
+
+    internal Task<PrinterApplicationOptions> ReadOptionsAsync(Guid? tenantId) =>
+        ReadAsync(ProfilePath(tenantId, "application"), PrinterApplicationOptions.Defaults);
+
+    internal Task WriteOptionsAsync(Guid? tenantId, PrinterApplicationOptions options) =>
+        WriteAsync(ProfilePath(tenantId, "application"), options);
+
+    private static async Task<T> ReadAsync<T>(string path, Func<T> empty) where T : class
+    {
         try
         {
             await using var file = File.OpenRead(path);
-            return await JsonSerializer.DeserializeAsync<PrinterProfileData>(file).ConfigureAwait(false)
-                ?? throw new InvalidDataException("Не удалось прочитать профиль принтера.");
+            return await JsonSerializer.DeserializeAsync<T>(file).ConfigureAwait(false)
+                ?? throw new InvalidDataException("Не удалось прочитать настройки печати.");
         }
-        catch (FileNotFoundException) { return PrinterProfileData.Empty(); }
-        catch (DirectoryNotFoundException) { return PrinterProfileData.Empty(); }
+        catch (FileNotFoundException) { return empty(); }
+        catch (DirectoryNotFoundException) { return empty(); }
     }
 
-    internal async Task WriteAsync(Guid? tenantId, string printerId, PrinterProfileData data)
+    private static async Task WriteAsync<T>(string path, T data)
     {
-        var path = ProfilePath(tenantId, printerId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -34,7 +50,7 @@ public sealed class FilePrinterProfileStore(string folder)
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    // Both components are trusted identifiers (tenant Guid and an ID looked up in the catalog).
-    private string ProfilePath(Guid? tenantId, string printerId) =>
-        Path.Combine(_folder, tenantId?.ToString("N") ?? "host", printerId + ".json");
+    // The tenant and the file name are trusted identifiers, not user-supplied paths.
+    private string ProfilePath(Guid? tenantId, string name) =>
+        Path.Combine(_folder, tenantId?.ToString("N") ?? "host", name + ".json");
 }

@@ -8,6 +8,8 @@ using Volo.Abp.SettingManagement;
 using Volo.Abp.TenantManagement;
 using Microsoft.Extensions.DependencyInjection;
 using GGA1C.Sync.Printing.Profiles;
+using GGA1C.Sync.Printing.Devices;
+using Microsoft.Extensions.Logging;
 
 namespace GGA1C.Sync;
 
@@ -29,5 +31,12 @@ public class SyncApplicationModule : AbpModule
         var folder = context.Services.GetConfiguration()["Printing:ProfilesFolder"] ?? "C:/GGA1C/printer-profiles";
         context.Services.AddSingleton(new FilePrinterProfileStore(folder));
         context.Services.AddSingleton<PrinterProfiles>();
+        var dryRun = !bool.TryParse(context.Services.GetConfiguration()["Printing:SettingsDryRun"], out var configured) || configured;
+        context.Services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILogger<GodexPrinterSettings>>();
+            return new GodexPrinterSettings(sp.GetRequiredService<PrinterProfiles>(), dryRun,
+                message => logger.LogInformation("{PrinterSettingsMessage}", message));
+        });
     }
 }

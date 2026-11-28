@@ -2,6 +2,16 @@
 // independent of the browser locale. Commit via the normal Blazor change event.
 const measureSelector = 'input.sync-setup-decimal';
 const measure = el => el instanceof HTMLInputElement && el.matches(measureSelector) && !el.disabled;
+const printerMeasure = el => el instanceof HTMLInputElement && el.matches('input.sync-printer-number') && !el.disabled;
+function stepPrinter(input, direction) {
+    const current = Number(input.value.replace(',', '.'));
+    if (!Number.isFinite(current)) return;
+    const step = Number(input.dataset.step);
+    const next = Math.round((current + Math.sign(direction) * step) * 100) / 100;
+    if (!Number.isFinite(next)) return;
+    input.value = String(next).replace('.', ',');
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+}
 const partial = /^\d*(?:[,.]\d{0,2})?$/;
 
 function roundText(text) {
@@ -42,15 +52,21 @@ function step(input, direction) {
 
 document.addEventListener('wheel', event => {
     const input = event.target;
-    if (!measure(input) || document.activeElement !== input || !event.deltaY || event.ctrlKey) return;
+    if ((!measure(input) && !printerMeasure(input)) || document.activeElement !== input || !event.deltaY || event.ctrlKey) return;
     event.preventDefault();
-    step(input, -event.deltaY);
+    (printerMeasure(input) ? stepPrinter : step)(input, -event.deltaY);
 }, { passive: false });
 
 document.addEventListener('keydown', event => {
-    if (!measure(event.target) || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    const printer = printerMeasure(event.target);
+    if (printer && event.key === 'Enter') {
+        event.preventDefault();
+        event.target.blur();
+        return;
+    }
+    if ((!measure(event.target) && !printer) || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
     event.preventDefault();
-    step(event.target, event.key === 'ArrowUp' ? 1 : -1);
+    (printer ? stepPrinter : step)(event.target, event.key === 'ArrowUp' ? 1 : -1);
 });
 
 function stepButton(event) {
@@ -69,6 +85,8 @@ document.addEventListener('click', event => {
     input.focus();
     if (measure(input)) {
         step(input, direction);
+    } else if (printerMeasure(input)) {
+        stepPrinter(input, direction);
     } else if (input.matches('input.sync-setup-count[type="number"]')) {
         const previous = input.value;
         if (direction > 0) input.stepUp(); else input.stepDown();

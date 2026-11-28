@@ -67,14 +67,6 @@ public class SyncMenuContributor : IMenuContributor
             order: 3,
             requiredPermissionName: SyncPermissions.Admin
         ));
-        goLabel.AddItem(new ApplicationMenuItem(
-            SyncMenus.PrinterSettings,
-            "Настройка печати",
-            "/labels/printer-settings",
-            icon: "fas fa-print",
-            order: 4,
-            requiredPermissionName: SyncPermissions.Admin
-        ));
         context.Menu.Items.Insert(1, goLabel);
 
         context.Menu.Items.Insert(

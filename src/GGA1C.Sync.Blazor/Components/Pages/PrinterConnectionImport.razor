@@ -1,0 +1,64 @@
+@using GGA1C.Sync.Printing
+@using GGA1C.Sync.Printing.Profiles
+@using GGA1C.Sync.Templates
+@inherits SyncComponentBase
+@inject IPrinterProfilesAppService Profiles
+
+@if (CanOffer && EmbeddedLan is { } lan)
+{
+    <div class="sync-printer-import" role="presentation">
+        <div role="dialog" aria-modal="true" aria-labelledby="printer-import-title">
+            <MudFocusTrap>
+                <MudPaper Class="pa-5" Elevation="8">
+                    <MudStack Spacing="3">
+                        <MudText Typo="Typo.h6" id="printer-import-title">Подключение принтера из шаблона</MudText>
+                        <MudText>Профиль ZX430i пока не содержит адреса. Принять @lan.IPv4:@lan.Port из файла?</MudText>
+                        @if (_error is not null)
+                        {
+                            <MudAlert Severity="Severity.Error">@_error</MudAlert>
+                        }
+                        <div class="sync-printer-actions">
+                            <MudButton Disabled="@_busy" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => Decide(true))">Принять в профиль</MudButton>
+                            <MudButton Disabled="@_busy" OnClick="@(() => Decide(false))">Не принимать</MudButton>
+                        </div>
+                    </MudStack>
+                </MudPaper>
+            </MudFocusTrap>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public PrinterProfile Profile { get; set; } = default!;
+    [Parameter] public TemplateLanDto? EmbeddedLan { get; set; }
+    [Parameter] public EventCallback<PrinterProfile> ProfileChanged { get; set; }
+    private bool _busy, _mismatchNotified;
+    private string? _error;
+    private bool CanOffer => Profile.LegacyChoices.Count == 0 && EmbeddedLan is not null &&
+        Profile.Connection.IPv4.Length == 0 && !Profile.Connection.ImportDecided;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_mismatchNotified && EmbeddedLan is { } lan && Profile.Connection.IPv4.Length != 0 &&
+            (lan.IPv4 != Profile.Connection.IPv4 || lan.Port != Profile.Connection.Port))
+        {
+            _mismatchNotified = true;
+            await Notify.Info("Подключение в файле отличается. Хаб использует профиль; при сохранении в EZPX попадёт подключение из профиля.");
+        }
+    }
+
+    private async Task Decide(bool accept)
+    {
+        if (_busy || !CanOffer || EmbeddedLan is not { } lan) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var draft = accept ? new PrinterConnection(lan.IPv4, lan.Port) : Profile.Connection;
+            var profile = await Profiles.SaveConnectionAsync(Profile.Definition.Id, Profile.Revision, draft with { ImportDecided = true });
+            await ProfileChanged.InvokeAsync(profile);
+        }
+        catch (Exception e) { _error = e.Message; }
+        finally { _busy = false; }
+    }
+}

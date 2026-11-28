@@ -156,6 +156,26 @@ public abstract class PrintTemplatesTests<TStartupModule> : SyncApplicationTestB
         reopened.HeightMm.ShouldBe(420);
     }
 
+    [Fact]
+    public async Task PageOnlySaveDoesNotCreateEmptyVersionOrAcceptObjectChanges()
+    {
+        var template = await UploadEditableLabelAsync();
+        var original = await _editor.OpenAsync(template.Id);
+        var request = new TemplateEditorChangesDto
+        {
+            TemplateId = template.Id, PageOnly = true, ExpectedFileHash = original.FileHash,
+        };
+        (await _editor.SaveAsync(request)).FileHash.ShouldBe(original.FileHash);
+        _files.Files.Count.ShouldBe(1);
+        request.Changes.Add(new TemplateEditorShapeChangeDto { Index = 0, Data = "не сохранять" });
+        await Should.ThrowAsync<UserFriendlyException>(() => _editor.SaveAsync(request));
+        request.Changes.Clear();
+        request.Setup = new TemplateSetupChangeDto { WidthMm = 105 };
+        (await _editor.SaveAsync(request)).WidthMm.ShouldBe(105);
+        _files.Files.Count.ShouldBe(2);
+        await Should.ThrowAsync<UserFriendlyException>(() => _editor.SaveAsync(request));
+    }
+
     private Task<PrintTemplateDto> UploadEditableLabelAsync() => _templates.UploadAsync(new PrintTemplateUploadDto
     {
         Name = "Проверка редактора", Kind = PrintTemplateKind.ProductLabel, BasePlatformId = 4,

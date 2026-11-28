@@ -49,7 +49,7 @@ public sealed record EzpxShapeEdit(
     string? Data = null,
     bool Remove = false);
 
-public sealed class EzpxEditor
+public sealed partial class EzpxEditor
 {
     private readonly XDocument _doc;
     private readonly XElement _root;
@@ -387,7 +387,7 @@ public sealed class EzpxEditor
             layout.SetAttributeValue("BottomMargin", bottom);
         }
 
-        if (setup.Element("Layout") == null)
+        if (layout.Parent == null && layout.HasAttributes)
         {
             setup.Add(layout);
         }

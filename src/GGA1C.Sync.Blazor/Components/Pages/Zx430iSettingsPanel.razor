@@ -1,0 +1,354 @@
+@using System.Globalization
+@using System.Threading
+@using GGA1C.Sync.Printing
+@using GGA1C.Sync.Printing.Devices
+@using GGA1C.Sync.Printing.Profiles
+@inherits SyncComponentBase
+@implements IDisposable
+@inject IPrinterProfilesAppService Profiles
+
+@if (Profile is not { } profile)
+{
+    <p role="status">Профиль принтера недоступен.</p>
+}
+else
+{
+    <div class="sync-printer-sections">
+        <fieldset class="sync-printer-interface">
+            <legend>Интерфейс принтера — LAN</legend>
+            <div class="sync-printer-connection">
+                <div class="sync-printer-field">
+                    <label for="printer-ipv4">IPv4</label>
+                    <input id="printer-ipv4" type="text" autocomplete="off" spellcheck="false" maxlength="15" disabled="@Busy"
+                           aria-invalid="@(_addressError is not null ? "true" : null)" aria-describedby="printer-ipv4-error"
+                           @bind:get="_address" @bind:set="EditAddress" @bind:event="oninput" />
+                    <small id="printer-ipv4-error" class="sync-printer-error">@_addressError</small>
+                </div>
+                <div class="sync-printer-field">
+                    <label for="printer-port">Порт</label>
+                    <input id="printer-port" type="text" inputmode="numeric" autocomplete="off" disabled="@Busy"
+                           aria-invalid="@(_portError is not null ? "true" : null)" aria-describedby="printer-port-error"
+                           @bind:get="_port" @bind:set="EditPort" @bind:event="oninput" />
+                    <small id="printer-port-error" class="sync-printer-error">@_portError</small>
+                </div>
+            </div>
+            <div class="sync-printer-actions">
+                <button type="button" disabled="@(Busy || !ConnectionDirty)" @onclick="SaveConnection">Сохранить подключение</button>
+                <button type="button" disabled="@Busy" @onclick="Scan">Сканировать</button>
+                @if (_scanning)
+                {
+                    <button type="button" @onclick="CancelScan">Отменить поиск</button>
+                }
+                <button type="button" disabled="@Busy" @onclick="Buzzer">Buzzer</button>
+            </div>
+            <div role="status">@_scanStatus</div>
+            @foreach (var item in _found)
+            {
+                <button type="button" class="sync-printer-found" disabled="@Busy" @onclick="@(() => Choose(item))">
+                    Выбрать @item.Model — @item.IPv4:@item.Port
+                </button>
+            }
+            @if (_connectionError is not null)
+            {
+                <small class="sync-printer-error" role="alert">@_connectionError</small>
+            }
+        </fieldset>
+
+        <fieldset>
+            <legend>Параметры принтера</legend>
+            <div class="sync-printer-grid">
+                @foreach (var field in PrinterSettingsCatalog.Template)
+                {
+                    var value = field.Kind == PrinterSettingKind.ReadOnly ? profile.Value(field.Id) : TemplateValue(field.Id);
+                    var warning = field.Kind == PrinterSettingKind.Length && value is { } length ? field.Error(length) : null;
+                    <PrinterSettingInput @key="field.Id" Id="@($"template-printer-{field.Id}")" Field="field" Value="value"
+                                         Unit="Unit" DotsPerMm="profile.Definition.DotsPerMm"
+                                         Warning="@warning" Disabled="@Disabled" Changed="@(next => SetTemplate(field, next))"
+                                         ErrorChanged="@(error => TrackError(TemplateErrors, field.Id, error))" />
+                }
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Опции (общее количество для печати)</legend>
+            @if (_options is { } options)
+            {
+                @foreach (var field in PrinterSettingsCatalog.Application)
+                {
+                    <PrinterSettingInput @key="field.Id" Id="@($"app-printer-{field.Id}")" Field="field" Value="@(options.Enabled(field.Id) ? 1 : 0)"
+                                         Disabled="@Busy" Changed="@(next => SetOption(field.Id, next == 1))" />
+                }
+            }
+            @if (_optionsError is not null)
+            {
+                <small class="sync-printer-error" role="alert">@_optionsError</small>
+            }
+        </fieldset>
+
+        <fieldset class="sync-printer-misc">
+            <legend>Разное</legend>
+            <div class="sync-printer-grid">
+                @foreach (var field in PrinterSettingsCatalog.Miscellaneous)
+                {
+                    if (field.Id == PrinterCatalog.NonPrintableLength)
+                    {
+                        var length = profile.Value(field.Id);
+                        <div @key="field.Id">
+                            <PrinterSettingInput @key="_lengthInputGeneration" Id="setup-non-printable-length" Field="field" Value="length" Unit="Unit"
+                                                 DotsPerMm="profile.Definition.DotsPerMm" Disabled="@(Disabled || _operation is not null || profile.LegacyChoices.Count != 0)"
+                                                 Changed="SaveLength" ErrorChanged="@(error => TrackError(_miscErrors, field.Id, error))"
+                                                 Warning="@(length > PrinterSettingsCatalog.MaxDeviceLengthMm ? PrinterSettingsCatalog.DeviceLengthWarning : null)" />
+                            @if (_measuredLength is { } measured)
+                            {
+                                <div class="sync-printer-measured">
+                                    Считано: @PageSetupMeasurement.Format(LengthUnits.FromMillimetres(measured, Unit, profile.Definition.DotsPerMm)) @LengthUnits.Symbol(Unit)
+                                    <button type="button" disabled="@(Busy || profile.LegacyChoices.Count != 0)" @onclick="@(() => AcceptLength(measured))">Принять в профиль</button>
+                                </div>
+                            }
+                            else
+                            {
+                                <small>Из принтера: не считано</small>
+                            }
+                            @if (_lengthError is not null)
+                            {
+                                <small class="sync-printer-error" role="alert">@_lengthError</small>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <PrinterSettingInput @key="(_readGeneration, field.Id)" Id="@($"misc-printer-{field.Id}")" Field="field"
+                                             Value="@(_misc.TryGetValue(field.Id, out var value) ? value : null)" Disabled="@Busy"
+                                             Changed="@(next => _misc[field.Id] = next)"
+                                             ErrorChanged="@(error => TrackError(_miscErrors, field.Id, error))" />
+                    }
+                }
+            </div>
+            <div class="sync-printer-actions">
+                <button type="button" disabled="@Busy" @onclick="Refresh">Обновление</button>
+                <button type="button" disabled="@(Busy || _miscErrors.Count != 0)" @onclick="SetPrinter">Задать</button>
+                @if (Profiles.SettingsDryRun)
+                {
+                    <small>Dry-run: команды записи не отправляются</small>
+                }
+            </div>
+            @if (_deviceError is not null)
+            {
+                <small class="sync-printer-error" role="alert">@_deviceError</small>
+            }
+            @if (_deviceStatus is not null)
+            {
+                <div role="status">@_deviceStatus</div>
+            }
+        </fieldset>
+        @if (_messages.Count != 0)
+        {
+            <div class="sync-printer-device-notice" role="status" aria-label="Результат операции">
+                <button type="button" aria-label="Закрыть уведомление" @onclick="@(() => _messages = [])">×</button>
+                @foreach (var message in _messages)
+                {
+                    <div>@message</div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public PrinterProfile? Profile { get; set; }
+    [Parameter] public EventCallback<PrinterProfile> ProfileChanged { get; set; }
+    [Parameter] public LengthUnit Unit { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter, EditorRequired] public Dictionary<string, double> TemplateValues { get; set; } = default!;
+    [Parameter, EditorRequired] public Dictionary<string, double> TemplateChanges { get; set; } = default!;
+    [Parameter, EditorRequired] public Dictionary<string, string> TemplateErrors { get; set; } = default!;
+
+    private PrinterConnection? _lastConnection;
+    private PrinterApplicationOptions? _options;
+    private string _address = "";
+    private string _port = PrinterConnection.DefaultPort.ToString(CultureInfo.InvariantCulture);
+    private string? _addressError, _portError, _connectionError, _optionsError, _deviceError, _deviceStatus, _lengthError;
+    private string _scanStatus = "Не искали";
+    private IReadOnlyList<DiscoveredPrinter> _found = [];
+    private IReadOnlyList<string> _messages = [];
+    private Dictionary<string, double> _misc = new();
+    private readonly Dictionary<string, string> _miscErrors = new();
+    private double? _measuredLength;
+    private int _readGeneration, _lengthInputGeneration;
+    private bool _saving, _savingLength, _scanning, _disposed;
+    private PrinterProfile? _lastLengthSave;
+    private readonly SemaphoreSlim _lengthWrites = new(1, 1);
+    private CancellationTokenSource? _operation;
+    private bool Busy => Disabled || _saving || _savingLength || _operation is not null;
+    private bool ConnectionDirty => _lastConnection is { } saved && (_address != saved.IPv4 || _port != PortText(saved.Port));
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _options = await Profiles.ReadOptionsAsync(); }
+        catch (Exception e) { _optionsError = e.Message; }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Profile?.Connection is not { } connection || connection == _lastConnection) return;
+        var endpointChanged = connection.IPv4 != _lastConnection?.IPv4 || connection.Port != _lastConnection?.Port;
+        if (!ConnectionDirty || (_address == connection.IPv4 && _port == PortText(connection.Port)))
+        {
+            _address = connection.IPv4;
+            _port = PortText(connection.Port);
+        }
+        _lastConnection = connection;
+        if (endpointChanged)
+        {
+            _operation?.Cancel();
+            _misc.Clear();
+            foreach (var key in _miscErrors.Keys.Where(k => k != PrinterCatalog.NonPrintableLength).ToArray()) _miscErrors.Remove(key);
+            _measuredLength = null;
+            _deviceStatus = null;
+            _deviceError = null;
+            _messages = [];
+            _readGeneration++;
+        }
+    }
+
+    private static string PortText(int port) => port.ToString(CultureInfo.InvariantCulture);
+    private void EditAddress(string? value) { _address = value ?? ""; _addressError = null; }
+    private void EditPort(string? value) { _port = value ?? ""; _portError = null; }
+    private void Choose(DiscoveredPrinter found) { EditAddress(found.IPv4); EditPort(PortText(found.Port)); }
+
+    private PrinterConnection? GetDraft(bool requireAddress)
+    {
+        _addressError = null;
+        _portError = null;
+        if ((requireAddress || _address.Length != 0) && !PrinterConnection.TryIPv4(_address, out _))
+            _addressError = _address.Length == 0 ? "Сначала укажите IPv4 принтера." : PrinterConnection.AddressError;
+        if (!int.TryParse(_port, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || !PrinterConnection.ValidPort(number))
+            _portError = PrinterConnection.PortError;
+        return _addressError is null && _portError is null ? new(_address, number) : null;
+    }
+
+    private double? TemplateValue(string id) => TemplateChanges.TryGetValue(id, out var changed) ? changed
+        : TemplateValues.TryGetValue(id, out var original) ? original : null;
+
+    private void SetTemplate(PrinterSetting field, double value)
+    {
+        if (TemplateValues.TryGetValue(field.Id, out var original) && (value == original ||
+            (field.Kind == PrinterSettingKind.Checkbox && value == field.UncheckedValue && original != field.CheckedValue)))
+            TemplateChanges.Remove(field.Id);
+        else TemplateChanges[field.Id] = value;
+    }
+
+    private static void TrackError(Dictionary<string, string> errors, string id, string? error)
+    {
+        if (error is null) errors.Remove(id);
+        else errors[id] = error;
+    }
+
+    private async Task SaveConnection()
+    {
+        if (Busy || Profile is not { } profile || GetDraft(false) is not { } draft) return;
+        _saving = true;
+        _connectionError = null;
+        try
+        {
+            var saved = await Profiles.SaveConnectionAsync(profile.Definition.Id, profile.Revision, draft);
+            _address = saved.Connection.IPv4;
+            _port = PortText(saved.Connection.Port);
+            await ProfileChanged.InvokeAsync(saved);
+            await Notify.Success("Подключение сохранено в профиле.");
+        }
+        catch (Exception e) { _connectionError = e.Message; }
+        finally { _saving = false; }
+    }
+
+    private async Task SaveLength(double mm)
+    {
+        await _lengthWrites.WaitAsync();
+        try
+        {
+            if (_disposed || _operation is not null || Profile is not { } profile) return;
+            if (_lastLengthSave is { } local && local.Revision > profile.Revision) profile = local;
+            _savingLength = true;
+            _lengthError = null;
+            _lastLengthSave = await Profiles.SaveAsync(profile.Definition.Id, profile.Revision,
+                new Dictionary<string, double> { [PrinterCatalog.NonPrintableLength] = mm });
+            await ProfileChanged.InvokeAsync(_lastLengthSave);
+        }
+        catch (Exception e) { _lengthError = e.Message; }
+        finally { _savingLength = false; _lengthWrites.Release(); }
+    }
+
+    private async Task AcceptLength(double mm)
+    {
+        await SaveLength(mm);
+        if (_lengthError is not null) return;
+        _miscErrors.Remove(PrinterCatalog.NonPrintableLength);
+        _lengthInputGeneration++;
+    }
+
+    private async Task SetOption(string id, bool enabled)
+    {
+        if (Busy) return;
+        _saving = true;
+        _optionsError = null;
+        try { _options = await Profiles.SaveOptionAsync(id, enabled); }
+        catch (Exception e) { _optionsError = e.Message; }
+        finally { _saving = false; }
+    }
+
+    private Task Scan()
+    {
+        if (Busy || GetDraft(true) is not { } draft) return Task.CompletedTask;
+        _scanning = true;
+        _connectionError = null;
+        _found = [];
+        _scanStatus = "Поиск…";
+        return RunOperation(async ct =>
+        {
+            _found = await Profiles.ScanAsync(draft, ct);
+            _scanStatus = _found.Count != 0 ? "Найден: " + string.Join(", ", _found.Select(f => $"{f.Model} — {f.IPv4}")) : "Не найден";
+        }, ex => { _connectionError = ex.Message; _scanStatus = "Не найден"; });
+    }
+
+    private void CancelScan() => _operation?.Cancel();
+
+    private Task Refresh() => Device(async ct =>
+    {
+        var response = await Profiles.RefreshAsync(ct);
+        _misc = new(response.Values);
+        _measuredLength = response.MeasuredLengthMm;
+        foreach (var key in _miscErrors.Keys.Where(k => k != PrinterCatalog.NonPrintableLength).ToArray()) _miscErrors.Remove(key);
+        _readGeneration++;
+        _deviceStatus = response.Complete ? "Настройки считаны." : "Ответ неполный: показаны только считанные значения.";
+    });
+
+    private Task SetPrinter() => Device(async ct =>
+    {
+        if (_miscErrors.Count != 0) return;
+        _messages = (await Profiles.SetAsync(_misc, ct)).Messages;
+    });
+
+    private Task Buzzer() => Device(async ct => _messages = (await Profiles.BuzzerAsync(ct)).Messages);
+
+    private Task Device(Func<CancellationToken, Task> action)
+    {
+        if (Busy) return Task.CompletedTask;
+        _deviceError = null;
+        _deviceStatus = null;
+        _messages = [];
+        return RunOperation(action, e => _deviceError = e.Message);
+    }
+
+    private async Task RunOperation(Func<CancellationToken, Task> action, Action<Exception> onError)
+    {
+        using var cts = new CancellationTokenSource();
+        _operation = cts;
+        try { await action(cts.Token); }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        { if (_scanning) _scanStatus = "Не искали — поиск отменён"; }
+        catch (Exception e) { onError(e); }
+        finally { _operation = null; _scanning = false; }
+    }
+
+    public void Dispose() { _disposed = true; _operation?.Cancel(); }
+}

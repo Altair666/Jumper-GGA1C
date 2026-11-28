@@ -19,6 +19,7 @@ using GGA1C.Sync.Printing.GoLabel;
 using GGA1C.Sync.Printing.GoLabel.Ezpl;
 using GGA1C.Sync.Printing.GoLabel.Ezpx;
 using GGA1C.Sync.Printing.GoLabel.Preview;
+using GGA1C.Sync.Printing.Profiles;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
@@ -33,13 +34,15 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
 {
     private readonly IRepository<PrintTemplate, int> _templates;
     private readonly ITemplateFileStore _files;
+    private readonly PrinterProfiles _profiles;
 
     public PrintTemplateEditorAppService(
         IRepository<PrintTemplate, int> templates,
-        ITemplateFileStore files)
+        ITemplateFileStore files, PrinterProfiles profiles)
     {
         _templates = templates;
         _files = files;
+        _profiles = profiles;
     }
 
     public async Task<TemplateEditorDto> OpenAsync(int templateId)
@@ -48,7 +51,7 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         var file = await ReadFileAsync(template);
         var editor = EzpxEditor.Load(new MemoryStream(file));
 
-        return ToDto(template, editor.Template, file);
+        return ToDto(template, editor, file);
     }
 
     public async Task<TemplatePreviewDto> RenderPreviewAsync(TemplateEditorChangesDto input)
@@ -82,10 +85,16 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         var template = await GetLabelTemplateAsync(input.TemplateId);
         var file = await ReadFileAsync(template);
         var editor = EzpxEditor.Load(new MemoryStream(file));
-        if ((input.Setup?.WidthMm ?? editor.Template.Setup.LabelWidth) > PrintTemplateConsts.MaxPageWidthMm)
+        if (input.ExpectedFileHash is { } expected && !string.Equals(expected, template.Sha256, StringComparison.Ordinal))
+            throw new UserFriendlyException("Файл шаблона изменился. Откройте редактор заново, чтобы не перезаписать чужие правки.");
+        if (input.Setup?.WidthMm > PrintTemplateConsts.MaxPageWidthMm)
         {
             throw new UserFriendlyException($"Ширина страницы не может превышать {PrintTemplateConsts.MaxPageWidthMm} мм.");
         }
+        if (input.PageOnly && input.Changes.Count != 0)
+            throw new UserFriendlyException("Сохранение страницы не принимает правки объектов.");
+        if (input.PageOnly && input.Setup is null && input.PrinterChanges.Count == 0 && input.BindPrinterModelId is null)
+            return ToDto(template, editor, file);
         editor.Apply(ToEdits(input.Changes));
 
         // Настройки страницы — до сохранения: размер канвы в ответе пересчитается сам.
@@ -109,12 +118,23 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
                 input.Setup.FeedMm,
                 input.Setup.BlackMarkMm,
                 input.Setup.BlackMarkAfter,
-                input.Setup.Speed,
-                input.Setup.Darkness,
-                input.Setup.Copies,
-                input.Setup.DirectThermal,
-                input.Setup.BlackMarkPositionMm,
-                input.Setup.LabelMode));
+                Copies: input.Setup.Copies,
+                BlackMarkPositionMm: input.Setup.BlackMarkPositionMm,
+                LabelMode: input.Setup.LabelMode));
+        }
+
+        if (input.BindPrinterModelId is { } selection)
+            editor.BindMissingPrinterModel(selection);
+        var printer = PrinterCatalog.FromTemplateModel(editor.Template.PrinterModel);
+        if (input.PrinterChanges.Count != 0)
+        {
+            if (printer != PrinterCatalog.Zx430i) throw new UserFriendlyException("Настройки пока не реализованы.");
+            editor.ApplyPrinterSettings(input.PrinterChanges);
+        }
+        if (printer == PrinterCatalog.Zx430i)
+        {
+            var profile = await _profiles.ReadAsync(CurrentTenant.Id, printer);
+            editor.ApplyPrinterConnection(profile.Connection);
         }
 
         using var saved = new MemoryStream();
@@ -140,7 +160,7 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
             "Шаблон отредактирован: {User} — {TemplateId} «{Name}», новая версия {File}, {Size} байт",
             CurrentUser.UserName, template.Id, template.Name, template.FileName, template.Size);
 
-        return ToDto(template, editor.Template, content);
+        return ToDto(template, editor, content);
     }
 
     public async Task<PrintTemplateFileDto> DownloadAsync(int templateId)
@@ -183,8 +203,9 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         return (EzpxEditor.Load(new MemoryStream(file)), file);
     }
 
-    private TemplateEditorDto ToDto(PrintTemplate template, EzpxTemplate parsed, byte[] file)
+    private TemplateEditorDto ToDto(PrintTemplate template, EzpxEditor editor, byte[] file)
     {
+        var parsed = editor.Template;
         var dpi = parsed.Setup.Dpi;
 
         var shapes = parsed.Label.Shapes.Select((s, index) =>
@@ -235,6 +256,10 @@ public class PrintTemplateEditorAppService : SyncAppService, IPrintTemplateEdito
         {
             TemplateId = template.Id,
             Name = template.Name,
+            PrinterModel = parsed.PrinterModel,
+            EmbeddedLan = editor.EmbeddedLan is { } lan ? new(lan.IPv4, lan.Port) : null,
+            PrinterSettings = EzpxPrinterSettings.TemplateValues(parsed.Setup),
+            FileHash = template.Sha256,
             WidthMm = parsed.Setup.LabelWidth,
             HeightMm = parsed.Setup.MediaLengthToMm(parsed.Setup.LabelLength),
             DotsPerMm = parsed.Setup.DotsPerMm,

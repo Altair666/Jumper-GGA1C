@@ -36,6 +36,11 @@ public class TemplateEditorDto
 {
     public int TemplateId { get; set; }
 
+    public string PrinterModel { get; set; } = "";
+    public TemplateLanDto? EmbeddedLan { get; set; }
+    public Dictionary<string, double> PrinterSettings { get; set; } = new();
+    public string FileHash { get; set; } = "";
+
     public string Name { get; set; } = "";
 
     /// <summary>Ширина наклейки в миллиметрах (как хранится в шаблоне).</summary>
@@ -217,6 +222,8 @@ public class TemplateEditorShapeDto
     public float FontHeightPoints { get; set; } = 1f;
 }
 
+public sealed record TemplateLanDto(string IPv4, int Port);
+
 public class TemplateEditorChangesDto
 {
     public int TemplateId { get; set; }
@@ -225,6 +232,11 @@ public class TemplateEditorChangesDto
 
     /// <summary>Правка настроек страницы; null — не менять.</summary>
     public TemplateSetupChangeDto? Setup { get; set; }
+
+    public Dictionary<string, double> PrinterChanges { get; set; } = new();
+    public string? BindPrinterModelId { get; set; }
+    public string? ExpectedFileHash { get; set; }
+    public bool PageOnly { get; set; }
 }
 
 public class TemplateEditorShapeChangeDto

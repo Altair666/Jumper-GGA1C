@@ -25,12 +25,12 @@ else
     {
         <div class="sync-settings-backdrop" role="presentation" style="position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);isolation:isolate;">
             <section class="sync-settings-window" role="dialog" aria-modal="true" aria-labelledby="sync-settings-title" @onclick:stopPropagation="true">
-                <header class="sync-native-titlebar"><span id="sync-settings-title">Настройка страницы</span><button type="button" class="sync-native-close" @onclick="CancelSettings">×</button></header>
+                <header class="sync-native-titlebar"><span id="sync-settings-title">Настройка страницы</span><button type="button" class="sync-native-close" disabled="@_savingSetup" @onclick="CancelSettings">×</button></header>
                 <nav class="sync-native-tabs" aria-label="Разделы настроек">
                     <button class="@(SettingsTab == 0 ? "active" : "")" @onclick="@(() => SettingsTab = 0)">Размер носителя</button>
                     <button class="@(SettingsTab == 1 ? "active" : "")" @onclick="@(() => SettingsTab = 1)">Размещение</button>
                     <button class="@(SettingsTab == 2 ? "active" : "")" @onclick="@(() => SettingsTab = 2)">Тип бумаги</button>
-                    <button class="@(SettingsTab == 3 ? "active" : "")" @onclick="@(() => SettingsTab = 3)">Печать</button>
+                    <button class="@(SettingsTab == 3 ? "active" : "")" @onclick="@(() => SettingsTab = 3)"><img src="images/golabel-page/printer-setup.png" alt="" />Настройки принтера</button>
                 </nav>
 
                 <div class="sync-native-body">
@@ -139,27 +139,29 @@ else
                             </div>
                         </div>
                     }
-                    else
-                    {
-                        <div class="sync-native-left">
-                            <fieldset>
-                                <legend>Настройки печати</legend>
-                                @if (Profile is not null)
-                                {
-                                    <div class="sync-native-measure">
-                                        <PrinterLengthInput Id="setup-non-printable-length" Field="NonPrintableField" Unit="Unit"
-                                                            DotsPerMm="EditorPrinter.DotsPerMm" Millimetres="CanvasNonPrintableMm"
-                                                            SavedMillimetres="SavedNonPrintableMm" UpdateWhileTyping="true"
-                                                            Disabled="@_savingProfile" MillimetresChanged="SetNonPrintableDraft" />
-                                    </div>
-                                }
-                                else
-                                {
-                                    <span>Профиль принтера недоступен.</span>
-                                }
-                            </fieldset>
-                        </div>
-                    }
+                    <div class="sync-native-left sync-printer-tab" hidden="@(SettingsTab != 3)">
+                            @if (string.IsNullOrWhiteSpace(Model.PrinterModel))
+                            {
+                                <label class="sync-printer-model" for="setup-printer-model">Принтер
+                                    <select id="setup-printer-model" disabled="@_switchingPrinter" value="@_selectedPrinterId" @onchange="@(e => SelectPrinterAsync(e.Value as string))">
+                                        <option value="">Выберите модель</option>
+                                        @foreach (var printer in PrinterCatalog.Printers)
+                                        {
+                                            <option value="@printer.Id">@printer.Caption</option>
+                                        }
+                                    </select>
+                                </label>
+                            }
+                            @if (ActivePrinterId == PrinterCatalog.Zx430i)
+                            {
+                                <Zx430iSettingsPanel Profile="Profile" ProfileChanged="UpdateProfile" Unit="Unit" Disabled="@_savingSetup"
+                                                     TemplateValues="Model.PrinterSettings" TemplateChanges="_printerChanges" TemplateErrors="_printerErrors" />
+                            }
+                            else if (!string.IsNullOrWhiteSpace(Model.PrinterModel) || _selectedPrinterId == PrinterCatalog.CabEos)
+                            {
+                                <p>Настройки пока не реализованы</p>
+                            }
+                    </div>
                     <div class="sync-native-preview">
                         <div class="sync-native-preset-row">
                             <label>Стандарт формы этикетки
@@ -231,8 +233,8 @@ else
                 <footer class="sync-native-footer">
                     @UnitCycleButton()
                     <span></span>
-                    <button type="button" @onclick="CancelSettings" disabled="@_savingProfile">Отмена</button>
-                    <button type="button" class="primary" @onclick="ApplySetup" disabled="@_savingProfile">ОК</button>
+                    <button type="button" @onclick="CancelSettings" disabled="@_savingSetup">Отмена</button>
+                    <button type="button" class="primary" @onclick="ApplySetup" disabled="@_savingSetup">ОК</button>
                 </footer>
             </section>
         </div>
@@ -406,9 +408,10 @@ else
     </MudExpansionPanels>
 }
 
-@if (Profile is { } printerProfile)
+@if (ActivePrinterId == PrinterCatalog.Zx430i && Profile is { } printerProfile && Model is { } template)
 {
     <LegacyPrinterLengthDialog Profile="printerProfile" />
+    <PrinterConnectionImport @key="template.TemplateId" Profile="printerProfile" EmbeddedLan="template.EmbeddedLan" ProfileChanged="UpdateProfile" />
 }
 
 @code {
@@ -442,7 +445,7 @@ else
         {
             Model = await EditorService.OpenAsync(Id);
             SetupEdits = ToSetupEdits(Model.Setup);
-            await TrackProfileAsync(EditorPrinter.Id);
+            if (ActivePrinterId == PrinterCatalog.Zx430i) await TrackProfileAsync(PrinterCatalog.Zx430i);
         }
         catch (Exception ex)
         {
@@ -458,10 +461,12 @@ else
 
     // Радиус по-прежнему локальная настройка вида конкретного шаблона.
     private sealed record CanvasOptions(double? RadiusMm = null);
-    private static readonly PrinterDefinition EditorPrinter = PrinterCatalog.Get(PrinterCatalog.Zx430i);
-    private static readonly PrinterFieldDefinition NonPrintableField = EditorPrinter.Field(PrinterCatalog.NonPrintableLength);
-    private double? _draftNonPrintableMm;
-    private bool _savingProfile;
+    private readonly Dictionary<string, double> _printerChanges = new();
+    private readonly Dictionary<string, string> _printerErrors = new();
+    private string? _selectedPrinterId;
+    private bool _switchingPrinter, _savingSetup;
+    private string? ActivePrinterId => string.IsNullOrWhiteSpace(Model?.PrinterModel) ? _selectedPrinterId
+        : PrinterCatalog.FromTemplateModel(Model.PrinterModel);
     private IJSObjectReference? _profileStorageModule;
 
     private CanvasOptions SavedCanvasOptions { get; set; } = new();
@@ -474,8 +479,8 @@ else
     private double CanvasWidthMm => SettingsOpen ? SetupWidthMm : Model!.WidthMm;
     private double CanvasHeightMm => SettingsOpen ? SetupHeightMm : Model!.HeightMm;
     private int CanvasShape => SettingsOpen ? SetupEdits.Shape ?? 0 : Model!.Setup.Shape;
-    private double SavedNonPrintableMm => Profile?.Value(NonPrintableField.Id) ?? NonPrintableField.DefaultValue;
-    private double CanvasNonPrintableMm => (SettingsOpen ? _draftNonPrintableMm : null) ?? SavedNonPrintableMm;
+    private double CanvasNonPrintableMm => ActivePrinterId == PrinterCatalog.Zx430i
+        ? Profile?.Value(PrinterCatalog.NonPrintableLength) ?? 0 : 0;
 
     private static double RadiusMm(CanvasOptions options, double width, double height) =>
         Math.Clamp(options.RadiusMm ?? Math.Min(width, height) * .13, 0, Math.Min(width, height) / 2);
@@ -487,14 +492,19 @@ else
         set => DraftCanvasOptions = DraftCanvasOptions with { RadiusMm = Math.Max(0, SetupUnitToMm(value)) };
     }
 
-    private void SetNonPrintableDraft(double value) =>
-        _draftNonPrintableMm = value == SavedNonPrintableMm ? null : value;
-
-    protected override void ProfileReceived(PrinterProfile? previous, PrinterProfile profile)
+    private async Task SelectPrinterAsync(string? printerId)
     {
-        if (previous?.Value(NonPrintableField.Id) != profile.Value(NonPrintableField.Id))
-            _draftNonPrintableMm = null;
+        _selectedPrinterId = string.IsNullOrEmpty(printerId) ? null : printerId;
+        _printerChanges.Clear();
+        _printerErrors.Clear();
+        if (_selectedPrinterId != PrinterCatalog.Zx430i) return;
+        _switchingPrinter = true;
+        try { await TrackProfileAsync(PrinterCatalog.Zx430i); }
+        catch (Exception ex) { await Notify.Error(ex.Message); }
+        finally { _switchingPrinter = false; }
     }
+
+    private void UpdateProfile(PrinterProfile profile) => ReceiveProfile(profile);
 
     private bool SettingsOpen { get; set; }
 
@@ -656,10 +666,9 @@ else
         if (Model == null) return;
         SetupEdits = ToSetupEdits(Model.Setup);
         DraftCanvasOptions = SavedCanvasOptions;
-        _draftNonPrintableMm = null;
-        SetupEdits.WidthMm = LimitPageWidth(Model.Setup.WidthMm);
-        SetupMargins = new(Model.Setup.LeftMarginDots / SetupDotsPerMm, Model.Setup.RightMarginDots / SetupDotsPerMm,
-            Model.Setup.TopMarginDots / SetupDotsPerMm, Model.Setup.BottomMarginDots / SetupDotsPerMm);
+        _printerChanges.Clear();
+        _printerErrors.Clear();
+        SetupMargins = SavedMargins(Model.Setup);
     }
 
     private async Task SelectSetupPreset()
@@ -775,7 +784,7 @@ else
     private void CloseSetup()
     {
         SettingsOpen = false;
-        _draftNonPrintableMm = null;
+        _selectedPrinterId = null;
         SetupPresetsBusy = false;
         _setupOpenVersion++;
     }
@@ -830,50 +839,41 @@ else
 
     private async Task ApplySetup()
     {
-        if (Model == null || _savingProfile) return;
-        if (_draftNonPrintableMm is { } length && Profile is { } profile)
+        if (Model == null || _savingSetup) return;
+        if (_printerErrors.Count != 0)
         {
-            _savingProfile = true;
+            SettingsTab = 3;
+            await Notify.Error("Исправьте значения в настройках принтера.");
+            return;
+        }
+
+        var delta = ChangedPageSetup(Model.Setup);
+        if (delta is not null || _printerChanges.Count != 0 || _selectedPrinterId is not null)
+        {
+            _savingSetup = true;
             try
             {
-                ReceiveProfile(await Profiles.SaveAsync(profile.Definition.Id, profile.Revision,
-                    new Dictionary<string, double> { [NonPrintableField.Id] = length }));
+                var saved = await EditorService.SaveAsync(new TemplateEditorChangesDto
+                {
+                    TemplateId = Model.TemplateId,
+                    Setup = delta,
+                    PrinterChanges = new(_printerChanges),
+                    BindPrinterModelId = _selectedPrinterId,
+                    PageOnly = true,
+                    ExpectedFileHash = Model.FileHash,
+                });
+                // Only page setup was sent; leave unsaved object edits in this editor.
+                saved.Shapes = Model.Shapes;
+                Model = saved;
             }
             catch (Exception ex)
             {
                 await Notify.Error(ex.Message);
                 return;
             }
-            finally { _savingProfile = false; }
+            finally { _savingSetup = false; }
         }
 
-        var current = Model.Setup;
-        current.WidthMm = LimitPageWidth(SetupEdits.WidthMm ?? current.WidthMm);
-        current.HeightMm = Math.Max(1, SetupEdits.HeightMm ?? current.HeightMm);
-        current.GapMm = Math.Max(0, SetupEdits.GapMm ?? current.GapMm);
-        current.LeftMarginDots = MarginToDots(SetupMargins.Left);
-        current.RightMarginDots = MarginToDots(SetupMargins.Right);
-        current.TopMarginDots = MarginToDots(SetupMargins.Top);
-        current.BottomMarginDots = MarginToDots(SetupMargins.Bottom);
-        current.LabelMode = SetupEdits.LabelMode ?? current.LabelMode;
-        current.HorAcross = Math.Max(1, SetupEdits.HorAcross ?? current.HorAcross);
-        current.VerAcross = Math.Max(1, SetupEdits.VerAcross ?? current.VerAcross);
-        current.HorGapMm = Math.Max(0, SetupEdits.HorGapMm ?? current.HorGapMm);
-        current.VerGapMm = Math.Max(0, SetupEdits.VerGapMm ?? current.VerGapMm);
-        current.AcrossType = SetupEdits.AcrossType ?? current.AcrossType;
-        current.Shape = SetupEdits.Shape ?? current.Shape;
-        current.LabelType = SetupEdits.LabelType ?? current.LabelType;
-        current.FeedMm = Math.Max(0, SetupEdits.FeedMm ?? current.FeedMm);
-        current.BlackMarkMm = Math.Max(0, SetupEdits.BlackMarkMm ?? current.BlackMarkMm);
-        current.BlackMarkPositionMm = Math.Max(0, SetupEdits.BlackMarkPositionMm ?? current.BlackMarkPositionMm);
-        current.BlackMarkAfter = SetupEdits.BlackMarkAfter ?? current.BlackMarkAfter;
-        current.Speed = SetupEdits.Speed ?? current.Speed;
-        current.Darkness = SetupEdits.Darkness ?? current.Darkness;
-        current.Copies = Math.Max(1, SetupEdits.Copies ?? current.Copies);
-        current.DirectThermal = SetupEdits.DirectThermal ?? current.DirectThermal;
-        // Канва и заголовок используют эти свойства DTO, а Setup — источник сохранения.
-        Model.WidthMm = current.WidthMm;
-        Model.HeightMm = current.HeightMm;
         var canvasOptionsChanged = SavedCanvasOptions != DraftCanvasOptions;
         SavedCanvasOptions = DraftCanvasOptions;
         CloseSetup();
@@ -1171,7 +1171,7 @@ else
             {
                 TemplateId = Model.TemplateId,
                 Changes = CurrentShapes(),
-                Setup = SetupChanges(),
+                ExpectedFileHash = Model.FileHash,
             });
             SetupEdits = ToSetupEdits(Model.Setup);
             await Notify.Success("Правки сохранены новой версией файла.");
@@ -1224,32 +1224,44 @@ else
             Data = s.Data,
         }).ToList();
 
-    private TemplateSetupChangeDto SetupChanges() => new()
+    private PageSetupMargins SavedMargins(TemplateSetupDto setup) => new(
+        setup.LeftMarginDots / SetupDotsPerMm, setup.RightMarginDots / SetupDotsPerMm,
+        setup.TopMarginDots / SetupDotsPerMm, setup.BottomMarginDots / SetupDotsPerMm);
+
+    private TemplateSetupChangeDto? ChangedPageSetup(TemplateSetupDto original)
     {
-        WidthMm = Model!.Setup.WidthMm,
-        HeightMm = Model.Setup.HeightMm,
-        GapMm = Model.Setup.GapMm,
-        LeftMarginDots = Model.Setup.LeftMarginDots,
-        RightMarginDots = Model.Setup.RightMarginDots,
-        TopMarginDots = Model.Setup.TopMarginDots,
-        BottomMarginDots = Model.Setup.BottomMarginDots,
-        LabelMode = Model.Setup.LabelMode,
-        HorAcross = Model.Setup.HorAcross,
-        VerAcross = Model.Setup.VerAcross,
-        HorGapMm = Model.Setup.HorGapMm,
-        VerGapMm = Model.Setup.VerGapMm,
-        AcrossType = Model.Setup.AcrossType,
-        Shape = Model.Setup.Shape,
-        LabelType = Model.Setup.LabelType,
-        FeedMm = Model.Setup.FeedMm,
-        BlackMarkMm = Model.Setup.BlackMarkMm,
-        BlackMarkPositionMm = Model.Setup.BlackMarkPositionMm,
-        BlackMarkAfter = Model.Setup.BlackMarkAfter,
-        Speed = Model.Setup.Speed,
-        Darkness = Model.Setup.Darkness,
-        Copies = Model.Setup.Copies,
-        DirectThermal = Model.Setup.DirectThermal,
-    };
+        var margins = SavedMargins(original);
+        var changed = false;
+        T? Diff<T>(T? draft, T saved) where T : struct, IEquatable<T>
+        {
+            if (draft is not { } value || value.Equals(saved)) return null;
+            changed = true;
+            return value;
+        }
+        var delta = new TemplateSetupChangeDto
+        {
+            WidthMm = Diff(SetupEdits.WidthMm, original.WidthMm),
+            HeightMm = Diff(SetupEdits.HeightMm, original.HeightMm),
+            GapMm = Diff(SetupEdits.GapMm, original.GapMm),
+            LeftMarginDots = SetupMargins.Left == margins.Left ? null : Diff(MarginToDots(SetupMargins.Left), original.LeftMarginDots),
+            RightMarginDots = SetupMargins.Right == margins.Right ? null : Diff(MarginToDots(SetupMargins.Right), original.RightMarginDots),
+            TopMarginDots = SetupMargins.Top == margins.Top ? null : Diff(MarginToDots(SetupMargins.Top), original.TopMarginDots),
+            BottomMarginDots = SetupMargins.Bottom == margins.Bottom ? null : Diff(MarginToDots(SetupMargins.Bottom), original.BottomMarginDots),
+            LabelMode = Diff(SetupEdits.LabelMode, original.LabelMode),
+            HorAcross = Diff(SetupEdits.HorAcross, original.HorAcross),
+            VerAcross = Diff(SetupEdits.VerAcross, original.VerAcross),
+            HorGapMm = Diff(SetupEdits.HorGapMm, original.HorGapMm),
+            VerGapMm = Diff(SetupEdits.VerGapMm, original.VerGapMm),
+            AcrossType = Diff(SetupEdits.AcrossType, original.AcrossType),
+            Shape = Diff(SetupEdits.Shape, original.Shape),
+            LabelType = Diff(SetupEdits.LabelType, original.LabelType),
+            FeedMm = Diff(SetupEdits.FeedMm, original.FeedMm),
+            BlackMarkMm = Diff(SetupEdits.BlackMarkMm, original.BlackMarkMm),
+            BlackMarkPositionMm = Diff(SetupEdits.BlackMarkPositionMm, original.BlackMarkPositionMm),
+            BlackMarkAfter = Diff(SetupEdits.BlackMarkAfter, original.BlackMarkAfter),
+        };
+        return changed ? delta : null;
+    }
 
     private static TemplateSetupChangeDto ToSetupEdits(TemplateSetupDto s) => new()
     {
@@ -1272,9 +1284,5 @@ else
         BlackMarkMm = s.BlackMarkMm,
         BlackMarkPositionMm = s.BlackMarkPositionMm,
         BlackMarkAfter = s.BlackMarkAfter,
-        Speed = s.Speed,
-        Darkness = s.Darkness,
-        Copies = s.Copies,
-        DirectThermal = s.DirectThermal,
     };
 }

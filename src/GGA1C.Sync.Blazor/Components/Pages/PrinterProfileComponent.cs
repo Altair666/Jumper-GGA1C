@@ -41,13 +41,9 @@ public abstract class PrinterProfileComponent : SyncComponentBase
     {
         if (_disposed || profile.Definition.Id != _printerId || Profile?.Revision >= profile.Revision)
             return false;
-        var previous = Profile;
         Profile = profile;
-        ProfileReceived(previous, profile);
         return true;
     }
-
-    protected virtual void ProfileReceived(PrinterProfile? previous, PrinterProfile profile) { }
 
     private void OnProfileEvent(PrinterProfile profile) => _ = InvokeAsync(() =>
     {
